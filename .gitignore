@@ -226,3 +226,6 @@ data/*
 !data/samples/**
 .env.*
 !.env.example
+
+# The Studio's source folder named lib/ is code, not a Python build artefact
+!studio/src/lib/
