@@ -19,7 +19,7 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | Event Hubs namespace | `pitch-ledger-feed` (Basic) | Live feed; created 2026-10-09; recurring cost, delete after judging |
 | Event hub | `match-events` | One partition key per match |
 | Roles on the namespace | **Azure Event Hubs Data Sender** and **Data Receiver** → `pitch-ledger-dev` | Verified by a live `stream` + `listen` run (2026-10-09) |
-| Event store | Azure Data Explorer free cluster, one database | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`; service principal access not verified yet |
+| Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` is **Ingestor** and **Viewer** (verified 2026-10-09); no tables yet |
 
 Not provisioned yet: Cosmos DB, Service Bus, Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
 
@@ -187,6 +187,14 @@ ADX_DATABASE=<database>
 
 **Claude Code cloud sessions:** allow **`*.kusto.windows.net`** in the environment's network access (it covers the query and the `ingest-` hosts).
 
+### Verified (2026-10-09)
+
+From a cloud session, as `pitch-ledger-dev`: Entra ID token for the cluster, `print ok=1`, `.show principal roles` (Ingestor and Viewer on `matchdata`), `.show tables` (none yet); the query and `ingest-` hosts are both reachable.
+
+**Region:** the free cluster is in Australia East while Event Hubs and Foundry are in East US. That's fine for this project: dashboard queries run from your browser, and writes from East US cross regions with a small delay and negligible transfer cost (about 20 MB per match). Keep it unless a new free cluster can easily be created closer.
+
+**Tables are created by you, not the app.** The app stays least-privileged (Ingestor + Viewer can write rows and query but not create tables). The table script will be in the repo for you to run once in the query editor.
+
 ### 4. Tables, dashboard, verification
 
 Coming with the event-store adapter (Phase 4): the table definitions and dashboard tile queries are kept in the repo, and a command checks sign-in, permissions and a test write. The planned tables and dashboard tiles are in docs/architecture.md (Event store and dashboard).
@@ -237,6 +245,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
 - [x] Event Hubs: namespace `pitch-ledger-feed`, hub `match-events`, Data Sender and Data Receiver roles; verified with `listen` + `stream` (2026-10-09).
 - [ ] Event Hubs: delete the namespace after judging (Nov 20).
-- [ ] Add the feed settings (`PITCH_LEDGER_FEED`, `PITCH_LEDGER_EVENTHUB_NAMESPACE`, `PITCH_LEDGER_EVENTHUB_NAME`) and `ADX_CLUSTER_URI` / `ADX_DATABASE` to the cloud environment: they were missing from the 2026-10-09 session.
-- [ ] ADX: grant `pitch-ledger-dev` ingestor and viewer on the database (above); allow `*.kusto.windows.net` in the environment's network access.
+- [x] Feed settings and `ADX_CLUSTER_URI` / `ADX_DATABASE` in the cloud environment; `listen` + `stream` pass with them (1,341/1,341 messages, p50 2.3 s from the cloud session).
+- [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
+- [ ] ADX: run the table script (coming with the event-store adapter) in the free cluster's query editor.
 - [x] Fabric-only pieces replaced (2026-10-09): ADX free cluster (event store), ADX dashboard (control room), producer-console ops alerts. Fabric kept as a future upgrade.
