@@ -23,7 +23,7 @@ def format_utc(value: datetime) -> str:
 UtcTimestamp = Annotated[
     AwareDatetime,
     AfterValidator(lambda v: v.astimezone(UTC)),
-    PlainSerializer(format_utc, return_type=str),
+    PlainSerializer(format_utc, return_type=str, when_used="json"),
 ]
 """Timezone-aware timestamp, normalised to UTC and serialised with milliseconds."""
 
