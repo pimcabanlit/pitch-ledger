@@ -410,7 +410,7 @@ def cmd_listen(args: argparse.Namespace) -> int:
         seen += 1
         if seen % 1000 == 0:
             print(f"  {seen} messages")
-        if store is not None and meter is not None:
+        if store is not None and meter is not None and d.message.kind != "match":
             table = "Events" if d.message.kind == "event" else "Tracking"
             store.append(table, [d.message.row])
             meter.add(d.message.match_id, d.received_at, d.latency_ms)
@@ -514,6 +514,78 @@ def cmd_check_queue(args: argparse.Namespace) -> int:
     for check in checks:
         print(f"[{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
     return 0 if all(c.ok for c in checks) else 1
+
+
+def cmd_live(args: argparse.Namespace) -> int:
+    import asyncio
+    import json
+
+    from pitch_ledger.infra_adapters.cosmos import CosmosLedger
+    from pitch_ledger.infra_adapters.feeds import open_subscriber
+    from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings, open_queue
+    from pitch_ledger.infra_adapters.stores import open_store
+    from pitch_ledger.ledger import FileLedger, InMemoryLedger
+    from pitch_ledger.live.service import LiveOptions, LiveService
+
+    feed = _feed_settings(args)
+    overrides = {k: v for k, v in (("ledger", args.ledger), ("queue", args.queue)) if v}
+    services = LedgerQueueSettings(**overrides)
+    out = Path(args.out)
+    try:
+        subscriber = open_subscriber(feed, from_start=args.from_start)
+        trigger_queue = open_queue(services)
+    except ValueError as exc:
+        print(f"settings: {exc}", file=sys.stderr)
+        return 2
+    ledger: InMemoryLedger
+    if services.ledger == "cosmos":
+        if not services.cosmos_endpoint:
+            print("settings: cosmos ledger needs COSMOS_ENDPOINT", file=sys.stderr)
+            return 2
+        ledger = CosmosLedger.connect(
+            services.cosmos_endpoint,
+            services.cosmos_database,
+            services.cosmos_container,
+            services.key(),
+            fresh_all=args.fresh,  # a new live run replaces old documents per match
+        )
+    else:
+        ledger = FileLedger(out / "ledger", fresh=args.fresh)
+    store = open_store(_store_settings(args.store)) if args.store else None
+    only = tuple(x.strip() for x in args.only.split(",") if x.strip()) if args.only else None
+    options = LiveOptions(
+        approve=args.approve, inject_first_momentum=args.inject_error, provider=args.provider,
+        budget=args.budget, only=only, settle_s=args.settle, tick_s=args.tick, idle_s=args.idle,
+    )  # fmt: skip
+    print(
+        f"live: feed {feed.describe()}; queue {services.describe_queue()}; ledger "
+        f"{services.describe_ledger()}; store {args.store or 'off'}; out {out}"
+    )
+    service = LiveService(subscriber, trigger_queue, ledger, store, out, options)
+    try:
+        report = asyncio.run(service.run())
+    finally:
+        for part in (subscriber, trigger_queue, store, ledger):
+            close = getattr(part, "close", None)
+            if close is not None:
+                close()
+    summary = report.as_dict()
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "live.json").write_text(json.dumps(summary, indent=2, default=str) + "\n", "utf-8")
+    for match_id, counts in summary["matches"].items():
+        print(f"  {match_id}: {counts['events']} events, {counts['tracking']} tracking rows, "
+              f"{counts['triggers']} triggers")  # fmt: skip
+    for outcome in report.outcomes:
+        if outcome.insight_id:
+            insight = ledger.get_insight(outcome.insight_id)
+            headline = insight.headline if insight else ""
+            print(f"  {outcome.insight_id} {outcome.status:<7} {outcome.audit_status or '':<9} "
+                  f"{outcome.overlays:>2} overlays  {headline}")  # fmt: skip
+    u, w = summary["usage"], summary["trigger_to_outcome_s"]
+    print(f"processed {summary['processed']} triggers {summary['status']}; trigger to outcome "
+          f"p50 {w['p50']} s, max {w['max']} s; model calls {u.get('calls', 0)}; "
+          f"failures {len(summary['failures'])}")  # fmt: skip
+    return 0 if not summary["failures"] else 1
 
 
 def cmd_api(args: argparse.Namespace) -> int:
@@ -635,6 +707,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     ckq = sub.add_parser("check-queue", help="check Service Bus settings, sign-in and a probe")
     ckq.set_defaults(func=cmd_check_queue)
+
+    lv = sub.add_parser("live", help="live service: feed -> engine -> queue -> agents -> ledger")
+    lv.add_argument("--feed", choices=feeds, help="feed adapter (default: settings)")
+    lv.add_argument("--queue", choices=["memory", "servicebus"], help="trigger queue")
+    lv.add_argument("--ledger", choices=["file", "cosmos"], help="ledger (default: settings)")
+    lv.add_argument("--store", choices=["file", "adx"], help="also write the event store")
+    lv.add_argument("--approve", action="store_true", help="approve as producer_demo")
+    lv.add_argument("--inject-error", action="store_true", help="plant an error (first momentum)")
+    lv.add_argument("--provider", choices=["offline", "foundry"], help="model provider")
+    lv.add_argument("--budget", type=int, help="model call budget for paid providers")
+    lv.add_argument("--only", help="comma-separated insight types or rule IDs to process")
+    lv.add_argument("--out", default="data/live", help="landing folder (default data/live)")
+    lv.add_argument("--fresh", action="store_true", help="replace earlier ledger records")
+    lv.add_argument("--settle", type=float, default=60.0, help="match seconds before emitting")
+    lv.add_argument("--tick", type=float, default=5.0, help="seconds between detector runs")
+    lv.add_argument("--idle", type=float, default=30.0, help="stop after this many idle seconds")
+    lv.add_argument("--from-start", action="store_true", help="read retained feed messages too")
+    lv.set_defaults(func=cmd_live)
 
     api = sub.add_parser("api", help="serve the /api/v1 API (Uvicorn)")
     api.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")

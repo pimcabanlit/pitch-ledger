@@ -143,6 +143,24 @@ def test_service_bus_queue_retries_dead_letters_and_skips_stale_messages() -> No
     assert [m.dead_letter_reason for m in bus.dlq] == ["stale", "MaxDeliveryCountExceeded"]
 
 
+def test_a_trigger_is_marked_ours_before_it_is_sent() -> None:
+    """A receiver thread can get the message before send_messages returns."""
+    bus = FakeBus()
+    queue = ServiceBusTriggerQueue(bus, bus, bus, max_wait_s=0)
+    seen_at_send: list[bool] = []
+    original = bus.send_messages
+
+    def send_and_receive_at_once(message: Any) -> None:
+        original(message)
+        seen_at_send.append(message.message_id in queue._sent)  # what a racing receiver sees
+
+    bus.send_messages = send_and_receive_at_once  # type: ignore[method-assign]
+    queue.send(_trigger(1))
+    assert seen_at_send == [True]
+    delivery = queue.receive()
+    assert delivery is not None and bus.dlq == []
+
+
 def test_defaults_are_local_and_cloud_adapters_need_settings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

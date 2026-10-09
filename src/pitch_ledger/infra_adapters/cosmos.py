@@ -52,11 +52,14 @@ class CosmosLedger(InMemoryLedger):
         container: Container,
         fresh_matches: tuple[str, ...] = (),
         on_close: Callable[[], None] | None = None,
+        fresh_all: bool = False,
     ) -> None:
-        """``fresh_matches`` are emptied the first time they are touched (a new replay)."""
+        """``fresh_matches`` (or every match, with ``fresh_all``) are emptied the first time
+        they are touched (a new replay or live run)."""
         super().__init__()
         self._container = container
         self._fresh = set(fresh_matches)
+        self._fresh_all = fresh_all
         self._loaded: set[str] = set()
         self._on_close = on_close
         self.writes = 0
@@ -69,6 +72,7 @@ class CosmosLedger(InMemoryLedger):
         container: str,
         key: str | None = None,
         fresh_matches: tuple[str, ...] = (),
+        fresh_all: bool = False,
     ) -> "CosmosLedger":
         from azure.cosmos import CosmosClient
 
@@ -85,7 +89,7 @@ class CosmosLedger(InMemoryLedger):
             if key is None:
                 credential.close()
 
-        return cls(proxy, fresh_matches, close)
+        return cls(proxy, fresh_matches, close, fresh_all)
 
     def _docs(self, match_id: str) -> list[dict[str, Any]]:
         return list(
@@ -101,7 +105,7 @@ class CosmosLedger(InMemoryLedger):
             return
         self._loaded.add(match_id)
         docs = self._docs(match_id)
-        if match_id in self._fresh:
+        if match_id in self._fresh or self._fresh_all:
             for doc in docs:
                 self._container.delete_item(doc["id"], partition_key=match_id)
             return

@@ -2,7 +2,8 @@
 
 ``stream_match`` sends each second of match time as one batch (about 23 rows: 22 tracking
 samples plus that second's events), waiting between batches so the feed runs at
-``speed`` x real time. Breaks between periods are skipped. ``listen`` writes received rows
+``speed`` x real time; when publishing falls behind, overdue seconds go out together.
+Breaks between periods are skipped. ``listen`` writes received rows
 to ``<out>/<match_id>/events.jsonl`` and ``tracking.jsonl`` and reports feed latency
 (send to receive, one machine's clock when both run together).
 """
@@ -15,10 +16,14 @@ from pathlib import Path
 from typing import IO, Any
 
 from pitch_ledger.feed.port import Delivered, FeedKind, FeedMessage, FeedPublisher, FeedSubscriber
-from pitch_ledger.matchlab.io import EVENTS_JSONL, TRACKING_JSONL, read_match
+from pitch_ledger.matchlab.io import EVENTS_JSONL, MATCH_FILE, TRACKING_JSONL, read_match
 
 PERIOD_MS = 45 * 60_000
-FILES: dict[FeedKind, str] = {"event": EVENTS_JSONL, "tracking": TRACKING_JSONL}
+FILES: dict[FeedKind, str] = {
+    "event": EVENTS_JSONL,
+    "tracking": TRACKING_JSONL,
+    "match": MATCH_FILE,
+}
 
 
 def match_minute(row: dict[str, Any]) -> float:
@@ -85,16 +90,27 @@ def stream_match(
         [r for r in files.events if keep(r)], [r for r in files.tracking if keep(r)]
     )
     report = StreamReport(files.match.match_id)
+    reference = json.loads((match_dir / MATCH_FILE).read_text("utf-8"))
+    publisher.publish([FeedMessage("match", reference)])  # reference rows first
     if not seconds:
         return report
     t0, first = clock(), seconds[0][0]
-    for second, batch in seconds:
-        due = t0 + (second - first) / speed
-        wait = due - clock()
+
+    def due(i: int) -> float:
+        return t0 + (seconds[i][0] - first) / speed
+
+    i = 0
+    while i < len(seconds):
+        wait = due(i) - clock()
         if wait > 0:
             sleep(wait)
         else:
             report.max_behind_s = max(report.max_behind_s, -wait)
+        batch = list(seconds[i][1])
+        i += 1
+        while i < len(seconds) and due(i) <= clock():  # behind: send what is overdue together
+            batch += seconds[i][1]
+            i += 1
         publisher.publish(batch)
         report.batches += 1
         report.events += sum(m.kind == "event" for m in batch)
@@ -124,7 +140,7 @@ def latency_summary(values_ms: list[float]) -> dict[str, float | int | None]:
 class ListenReport:
     out_dir: Path
     received: dict[str, int] = field(default_factory=dict)
-    latency_ms: dict[FeedKind, list[float]] = field(
+    latency_ms: dict[str, list[float]] = field(
         default_factory=lambda: {"event": [], "tracking": []}
     )
     full_time: bool = False
@@ -158,6 +174,12 @@ def listen(
         for delivered in subscriber.messages(idle_timeout_s):
             m = delivered.message
             key = (m.match_id, m.kind)
+            if m.kind == "match":  # reference rows: write match.json whole
+                (out_dir / m.match_id).mkdir(parents=True, exist_ok=True)
+                text = json.dumps(m.row, indent=2, ensure_ascii=False) + "\n"
+                (out_dir / m.match_id / MATCH_FILE).write_text(text, "utf-8")
+                report.received[f"{m.match_id}/match"] = 1
+                continue
             if key not in handles:
                 (out_dir / m.match_id).mkdir(parents=True, exist_ok=True)
                 path = out_dir / m.match_id / FILES[m.kind]

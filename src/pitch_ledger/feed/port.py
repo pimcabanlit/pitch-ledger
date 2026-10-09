@@ -7,14 +7,16 @@ endpoints, which speak the same protocol, so switching is a settings change.
 
 Each message body is one feed row exactly as in ``events.jsonl`` / ``tracking.jsonl``
 (docs/event-schema.md: same schema for live and batch). Transport details travel beside
-the body: the row kind, and the wall-clock send time used to measure feed latency.
+the body: the row kind, and the wall-clock send time used to measure feed latency. A match starts
+with one ``match`` message carrying the reference rows (``match.json``: match, teams,
+players), so a consumer needs no shared files.
 """
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, get_args
 
-FeedKind = Literal["event", "tracking"]
+FeedKind = Literal["event", "tracking", "match"]
 FEED_KINDS: tuple[str, ...] = get_args(FeedKind)
 
 
@@ -28,6 +30,8 @@ class FeedMessage:
 
     @property
     def match_id(self) -> str:
+        if self.kind == "match":  # reference message: the match.json content
+            return str(self.row["match"]["match_id"])
         return str(self.row["match_id"])
 
 

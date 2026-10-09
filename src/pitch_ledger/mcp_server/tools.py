@@ -28,6 +28,25 @@ class StatsTools:
     def __init__(self, match_dir: Path | str) -> None:
         self.match_dir = Path(match_dir)
 
+    @classmethod
+    def snapshot(
+        cls,
+        match_dir: Path | str,
+        files: Any,
+        events: list[Event],
+        tracking: list[TrackingSample],
+        triggers: list[Trigger],
+    ) -> "StatsTools":
+        """Tools over data already in memory (the live service's view of a match so far)."""
+        tools = cls(match_dir)
+        tools.__dict__.update(
+            _files=files,
+            events=events,
+            tracking=tracking,
+            triggers={t.trigger_id: t for t in triggers},
+        )
+        return tools
+
     @cached_property
     def _files(self) -> Any:
         return read_match(self.match_dir)

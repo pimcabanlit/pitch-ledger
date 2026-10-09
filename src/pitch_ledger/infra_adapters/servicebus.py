@@ -109,8 +109,14 @@ class ServiceBusTriggerQueue:
             content_type="application/json",
             subject=trigger.match_id,
         )
-        self._sender.send_messages(message)
+        # Mark it ours before sending: a receiver on another thread can get the message
+        # before send_messages returns, and must not mistake it for a stale one.
         self._sent.add(trigger.trigger_id)
+        try:
+            self._sender.send_messages(message)
+        except Exception:
+            self._sent.discard(trigger.trigger_id)
+            raise
 
     def receive(self) -> Delivery | None:
         while True:
