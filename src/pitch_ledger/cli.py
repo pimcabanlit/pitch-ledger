@@ -22,6 +22,7 @@ from pitch_ledger.validation.realism import RealismCheck
 
 if TYPE_CHECKING:
     from pitch_ledger.infra_adapters.feeds import FeedSettings
+    from pitch_ledger.infra_adapters.stores import StoreSettings
 
 IMPORTANT = {"momentum_shift", "key_moment", "player_form", "recap"}
 """Insight types ``detect`` lists by default (``--all`` lists every trigger)."""
@@ -370,12 +371,28 @@ def cmd_listen(args: argparse.Namespace) -> int:
         print(f"not connected yet: {error}", file=sys.stderr)
     print(f"listening on {settings.describe()}; stops at full time or after {args.idle:g} s idle")
     seen = 0
+    store, meter = None, None
+    if args.store:
+        import time
 
-    def progress(_d: Delivered) -> None:
+        from pitch_ledger.eventstore.rows import FeedHealthMeter
+        from pitch_ledger.infra_adapters.stores import open_store
+
+        store_settings = _store_settings(args.store)
+        store, meter = open_store(store_settings), FeedHealthMeter()
+        print(f"  also writing rows and feed health to {store_settings.describe()}")
+
+    def progress(d: Delivered) -> None:
         nonlocal seen
         seen += 1
         if seen % 1000 == 0:
             print(f"  {seen} messages")
+        if store is not None and meter is not None:
+            table = "Events" if d.message.kind == "event" else "Tracking"
+            store.append(table, [d.message.row])
+            meter.add(d.message.match_id, d.received_at, d.latency_ms)
+            if finished := meter.take(before=time.time()):
+                store.append("FeedHealth", finished)
 
     out = Path(args.out)
     try:
@@ -384,6 +401,9 @@ def cmd_listen(args: argparse.Namespace) -> int:
         )
     finally:
         subscriber.close()
+        if store is not None and meter is not None:
+            store.append("FeedHealth", meter.take())
+            store.close()
     summary = report.as_dict()
     out.mkdir(parents=True, exist_ok=True)
     (out / "listen.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
@@ -402,6 +422,51 @@ def cmd_listen(args: argparse.Namespace) -> int:
     ending = "full time reached" if report.full_time else "stopped"
     print(f"{ending}; stats -> {out / 'listen.json'}")
     return 0
+
+
+def _store_settings(store: str | None) -> "StoreSettings":
+    from pitch_ledger.infra_adapters.stores import StoreSettings
+
+    return StoreSettings(store=store) if store else StoreSettings()
+
+
+def cmd_store_schema(args: argparse.Namespace) -> int:
+    from pitch_ledger.eventstore import create_script
+
+    print(create_script(), end="")
+    return 0
+
+
+def cmd_store(args: argparse.Namespace) -> int:
+    from pitch_ledger.eventstore.rows import export_match
+    from pitch_ledger.infra_adapters.stores import open_store
+
+    settings = _store_settings(args.store)
+    print(f"writing {args.match_dir} -> {settings.describe()}")
+    try:
+        store = open_store(settings)
+    except ValueError as exc:
+        print(f"store settings: {exc}", file=sys.stderr)
+        return 2
+    try:
+        counts = export_match(Path(args.match_dir), store, with_tracking=not args.no_tracking)
+    except Exception as exc:  # provider or network error: report it plainly
+        print(f"store failed: {type(exc).__name__}: {str(exc)[:300]}", file=sys.stderr)
+        return 1
+    finally:
+        store.close()
+    print("  " + ", ".join(f"{table} {n}" for table, n in counts.items()))
+    return 0
+
+
+def cmd_check_store(args: argparse.Namespace) -> int:
+    from pitch_ledger.infra_adapters.adx import check_store
+
+    settings = _store_settings(None)
+    checks = check_store(settings.adx_cluster_uri, settings.adx_database)
+    for check in checks:
+        print(f"[{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+    return 0 if all(c.ok for c in checks) else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -492,7 +557,20 @@ def build_parser() -> argparse.ArgumentParser:
     ls.add_argument("--from-start", action="store_true", help="read retained messages too")
     ls.add_argument("--keep-going", action="store_true", help="do not stop at full time")
     ls.add_argument("--feed", choices=feeds, help="feed adapter (default: settings, file)")
+    ls.add_argument("--store", choices=["file", "adx"], help="also write rows and feed health")
     ls.set_defaults(func=cmd_listen)
+
+    sch = sub.add_parser("store-schema", help="print the KQL script that creates the tables")
+    sch.set_defaults(func=cmd_store_schema)
+
+    sto = sub.add_parser("store", help="write a match to the event store (file or ADX)")
+    sto.add_argument("match_dir")
+    sto.add_argument("--store", choices=["file", "adx"], help="adapter (default: settings, file)")
+    sto.add_argument("--no-tracking", action="store_true", help="skip tracking rows")
+    sto.set_defaults(func=cmd_store)
+
+    cks = sub.add_parser("check-store", help="check ADX settings, sign-in, roles, tables, a write")
+    cks.set_defaults(func=cmd_check_store)
     return parser
 
 

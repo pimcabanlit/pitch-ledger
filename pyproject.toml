@@ -16,6 +16,8 @@ dependencies = [
     "mcp>=1.24,<2",
     "azure-eventhub>=5.15.1",
     "websocket-client>=1.9.2",
+    "azure-kusto-data>=6.0.4",
+    "azure-kusto-ingest>=6.0.4",
 ]
 
 [project.scripts]

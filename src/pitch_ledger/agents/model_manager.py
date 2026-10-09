@@ -26,6 +26,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pitch_ledger.agents.contracts import CopyText, PingRequest
 from pitch_ledger.agents.offline import OfflineChatClient
+from pitch_ledger.core.checks import Check, short_error
 
 Role = Literal["explainer", "auditor", "narrator", "personalizer", "translator"]
 Tier = Literal["strong", "small"]
@@ -212,16 +213,7 @@ CREDENTIAL_VARS = ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET")
 PING_INSTRUCTIONS = 'Reply with JSON only: {"text": "<reply_with>"}.'
 
 
-@dataclass(frozen=True)
-class Check:
-    name: str
-    ok: bool
-    detail: str
-
-
-def _short(exc: BaseException) -> str:
-    line = str(exc).strip().splitlines()[0] if str(exc).strip() else ""
-    return f"{type(exc).__name__}: {line}"[:300]
+_short = short_error
 
 
 def check_settings() -> tuple[list[Check], ModelSettings | None]:

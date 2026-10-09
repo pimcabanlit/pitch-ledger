@@ -1,4 +1,4 @@
-"""Tests never reach a paid model or a cloud feed, whatever the environment or ``.env`` says."""
+"""Tests never reach a paid model or a cloud feed or store, whatever the environment says."""
 
 from collections.abc import Iterator
 
@@ -11,4 +11,5 @@ def _offline_models() -> Iterator[None]:
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("PITCH_LEDGER_MODEL_PROVIDER", "offline")
         patch.setenv("PITCH_LEDGER_FEED", "file")
+        patch.setenv("PITCH_LEDGER_STORE", "file")
         yield
