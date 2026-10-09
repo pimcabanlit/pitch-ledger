@@ -38,3 +38,5 @@ class Insight(BaseModel):
     approved_by: str | None = None
     created_by_agent: str
     model_version: str
+    trigger_id: str | None = None
+    """The detected moment this insight explains (links the ledger to the detector)."""

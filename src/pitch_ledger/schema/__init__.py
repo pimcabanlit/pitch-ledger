@@ -1,5 +1,6 @@
 """Pydantic models and enums for every table and output object in docs/event-schema.md."""
 
+from pitch_ledger.schema.audit import AuditRecord
 from pitch_ledger.schema.details import (
     CardDetails,
     DuelDetails,
@@ -22,6 +23,7 @@ from pitch_ledger.schema.tracking import TrackingSample
 from pitch_ledger.schema.trigger import Trigger
 
 __all__ = [
+    "AuditRecord",
     "CardDetails",
     "DuelDetails",
     "Effect",

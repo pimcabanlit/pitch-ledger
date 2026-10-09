@@ -1,0 +1,43 @@
+"""In-memory ledger (tests, and the base of the local file ledger)."""
+
+from collections import Counter
+
+from pitch_ledger.ledger.repository import IdKind
+from pitch_ledger.schema import AuditRecord, Insight, Overlay, Trigger
+
+
+class InMemoryLedger:
+    def __init__(self) -> None:
+        self._counters: Counter[tuple[str, str]] = Counter()
+        self.triggers: dict[str, Trigger] = {}
+        self._insights: dict[str, Insight] = {}
+        self._audits: list[AuditRecord] = []
+        self._overlays: dict[str, Overlay] = {}
+
+    def next_id(self, match_id: str, kind: IdKind) -> str:
+        self._counters[(match_id, kind)] += 1
+        return f"{match_id}-{kind}{self._counters[(match_id, kind)]:04d}"
+
+    def save_trigger(self, trigger: Trigger) -> None:
+        self.triggers[trigger.trigger_id] = trigger
+
+    def put_insight(self, insight: Insight) -> None:
+        self._insights[insight.insight_id] = insight
+
+    def get_insight(self, insight_id: str) -> Insight | None:
+        return self._insights.get(insight_id)
+
+    def insights(self, match_id: str | None = None) -> list[Insight]:
+        return [i for i in self._insights.values() if match_id in (None, i.match_id)]
+
+    def add_audit(self, record: AuditRecord) -> None:
+        self._audits.append(record)
+
+    def audits(self, insight_id: str | None = None) -> list[AuditRecord]:
+        return [a for a in self._audits if insight_id in (None, a.insight_id)]
+
+    def put_overlay(self, overlay: Overlay) -> None:
+        self._overlays[overlay.overlay_id] = overlay
+
+    def overlays(self, insight_id: str | None = None) -> list[Overlay]:
+        return [o for o in self._overlays.values() if insight_id in (None, o.insight_id)]

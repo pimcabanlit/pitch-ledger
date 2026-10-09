@@ -1,0 +1,31 @@
+"""The insight ledger: triggers, insights, audit trail and overlays for each match.
+
+``Ledger`` is the interface; ``InMemoryLedger`` backs tests and ``FileLedger`` local
+replays. The Cosmos DB adapter (Phase 4) implements the same interface.
+"""
+
+from typing import Literal, Protocol
+
+from pitch_ledger.schema import AuditRecord, Insight, Overlay, Trigger
+
+IdKind = Literal["I", "O", "A"]
+
+
+class Ledger(Protocol):
+    def next_id(self, match_id: str, kind: IdKind) -> str: ...
+
+    def save_trigger(self, trigger: Trigger) -> None: ...
+
+    def put_insight(self, insight: Insight) -> None: ...
+
+    def get_insight(self, insight_id: str) -> Insight | None: ...
+
+    def insights(self, match_id: str | None = None) -> list[Insight]: ...
+
+    def add_audit(self, record: AuditRecord) -> None: ...
+
+    def audits(self, insight_id: str | None = None) -> list[AuditRecord]: ...
+
+    def put_overlay(self, overlay: Overlay) -> None: ...
+
+    def overlays(self, insight_id: str | None = None) -> list[Overlay]: ...
