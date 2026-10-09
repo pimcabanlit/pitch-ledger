@@ -78,6 +78,7 @@ pitch-ledger/
     validation/              row, sequence, match and insight rules
     matchlab/                roster, generator, scenarios, tracking, replay CLI
     feed/                    live feed interfaces, file and in-memory adapters, stream and listen
+    eventstore/              event-store tables, row builders, file adapter (ADX adapter in infra_adapters)
     engine/                  derived metrics, rolling windows, control/chaos, detector
     mcp_server/              read-only stats tools
     agents/                  model_manager, explainer, auditor, narrator, personalizer, translator, orchestrator, overlay builder
@@ -87,7 +88,7 @@ pitch-ledger/
   studio/                    Next.js app
   tests/                     mirrors src/
   data/                      generated outputs (gitignored except small samples/)
-  infra/                     Bicep for Azure resources
+  infra/                     Bicep for Azure resources; adx/ table script and dashboard tile queries
   .github/workflows/         CI and deploy
 ```
 
@@ -111,6 +112,9 @@ uv run pitch-ledger evaluate              # scorecard -> data/scorecard.json; ex
 uv run pitch-ledger check-models          # model settings, Entra ID sign-in, one tiny call per deployment; exit 1 on a FAIL
 uv run pitch-ledger listen                # read the live feed into data/live/<match>/, report latency (--feed, --idle, --from-start)
 uv run pitch-ledger stream data/M0002 --speed 10   # publish a match to the live feed at 10x pace (--start-min, --minutes, --feed)
+uv run pitch-ledger store-schema > infra/adx/tables.kql   # KQL script for the event-store tables (keep the file in sync)
+uv run pitch-ledger store data/M0002     # write a match to the event store: data/store/*.jsonl, or ADX with --store adx
+uv run pitch-ledger check-store           # ADX settings, sign-in, roles, tables, one test write; exit 1 on a FAIL
 ```
 
 Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.

@@ -316,6 +316,21 @@ A planted error (`inject_error`, actor `test`) is recorded as such, so the trail
 | context | object | windows used, onset minute, detector, opponent |
 | auto_approve | boolean | true for speed alerts |
 
+## Event store tables (Azure Data Explorer, or local JSONL)
+
+The analytical copy for KQL queries and the control-room dashboard; Cosmos DB stays the ledger's system of record. Column names and KQL types are defined once in `src/pitch_ledger/eventstore/tables.py` (script: `infra/adx/tables.kql`). Numbers come from code; `minute` is the match minute (period 2 clock 15:00 is minute 60).
+
+| Table | One row per | Written by |
+| --- | --- | --- |
+| `Events` | feed event, every column of the event table (`details`, `related_event_ids` as dynamic) | `store`, `listen --store` |
+| `Tracking` | tracking sample, as the tracking table | `store`, `listen --store` |
+| `TeamState` | team per whole minute of play: the engine's rolling 5-minute window (possession share, possessions, passes, pass accuracy, passes per possession, turnovers, own-half turnovers, PPDA, tempo, control) | `store` (live engine later) |
+| `Triggers` | detector trigger: rule, subject, metrics, evidence event IDs | `store` |
+| `InsightStatus` | insight status change: audit status, status (`aired`, `pending`, `blocked`), approver, model version | `store` (orchestrator later) |
+| `OpsAlerts` | ops alert: kind, severity, message, references, raised time, acknowledgement | orchestrator and engine (Phase 4) |
+| `FeedHealth` | match per wall-clock minute: messages received, p50 / p95 / max send-to-receive latency | `listen --store` |
+| `StoreCheck` | `check-store` test write | `check-store` |
+
 ## Validation rules
 
 Run at ingest before any agent sees an event. **Reject** stops the row and logs it; **flag** passes it with a warning.

@@ -197,7 +197,10 @@ From a cloud session, as `pitch-ledger-dev`: Entra ID token for the cluster, `pr
 
 ### 4. Tables, dashboard, verification
 
-Coming with the event-store adapter (Phase 4): the table definitions and dashboard tile queries are kept in the repo, and a command checks sign-in, permissions and a test write. The planned tables and dashboard tiles are in docs/architecture.md (Event store and dashboard).
+1. **Create the tables (you, once):** open the free cluster's query editor on `matchdata`, paste the whole of `infra/adx/tables.kql` (or the output of `uv run pitch-ledger store-schema`) and run it. It creates every table, its JSON mapping, streaming ingestion and a 10-second batching fallback. Re-running is safe. The result lists each command; a failed line (for example if the free cluster refuses a policy) shows its error.
+2. **Check:** `uv run pitch-ledger check-store` reports settings, sign-in, roles, tables, and one test write read back.
+3. **Load a match:** `uv run pitch-ledger store data/M0002 --store adx` (events, tracking, engine snapshots, triggers, insight status). Live: `uv run pitch-ledger listen --store adx` also writes rows and feed health.
+4. **Dashboard:** Azure Data Explorer web UI → Dashboards → New dashboard → data source: the free cluster, database `matchdata` → parameter `_match_id` → one tile per query in `infra/adx/dashboard.kql`.
 
 ## Lessons learned (first live run, 2026-10-09)
 
@@ -247,5 +250,5 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [ ] Event Hubs: delete the namespace after judging (Nov 20).
 - [x] Feed settings and `ADX_CLUSTER_URI` / `ADX_DATABASE` in the cloud environment; `listen` + `stream` pass with them (1,341/1,341 messages, p50 2.3 s from the cloud session).
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
-- [ ] ADX: run the table script (coming with the event-store adapter) in the free cluster's query editor.
+- [ ] ADX: run `infra/adx/tables.kql` in the free cluster's query editor, then `check-store`; build the dashboard from `infra/adx/dashboard.kql`.
 - [x] Fabric-only pieces replaced (2026-10-09): ADX free cluster (event store), ADX dashboard (control room), producer-console ops alerts. Fabric kept as a future upgrade.
