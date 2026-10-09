@@ -22,6 +22,7 @@ Target prize category: **Best Enterprise Solution** (plus Grand Prize). Strong m
 - `docs/event-schema.md` — data contract: events, tracking, derived-metric formulas, insight and overlay objects, validation rules, realism targets, planted scenarios. **Code must follow it.** If code and doc disagree, raise it; update the doc in the same change if the change is agreed.
 - `docs/architecture.md` — final architecture, components, agents, enterprise controls, cost plan.
 - `docs/build-plan.md` — phases, order of work, definition of done.
+- `docs/azure-setup.md` — Azure provisioning log (Foundry, service principal, roles), settings, verification and lessons learned.
 
 ## Non-negotiables
 
