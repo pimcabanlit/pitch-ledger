@@ -26,6 +26,9 @@ dev = [
     "mypy>=1.13",
     "types-pyyaml>=6.0",
 ]
+spike = [
+    "azure-eventhub>=5.15.1",
+]
 
 [build-system]
 requires = ["hatchling"]
