@@ -312,6 +312,21 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-messaging-webpubsubservice"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "isodate" },
+    { name = "pyjwt" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5e/fe/7cdcf8f52286db04ae8d4ae72fb7039e126441f46347191c801ff0befe25/azure_messaging_webpubsubservice-1.3.0.tar.gz", hash = "sha256:6f2e4d2728669a78ea83a910817c958102691c156801526e02d0a4e09d7e19ab", size = 79228, upload-time = "2025-07-08T05:59:06.603Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f0/81/056515b728c361d3022b47a7ef50cce0a6da8b63c7132816218fa7eff75a/azure_messaging_webpubsubservice-1.3.0-py3-none-any.whl", hash = "sha256:eed02cdcf8fd948b3014e271b11b66e5acc775c09e2f95a41ae0b6038b10ede3", size = 78220, upload-time = "2025-07-08T05:59:07.913Z" },
+]
+
+[[package]]
 name = "azure-servicebus"
 version = "7.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -933,6 +948,7 @@ dependencies = [
     { name = "azure-identity" },
     { name = "azure-kusto-data" },
     { name = "azure-kusto-ingest" },
+    { name = "azure-messaging-webpubsubservice" },
     { name = "azure-servicebus" },
     { name = "fastapi" },
     { name = "mcp" },
@@ -962,6 +978,7 @@ requires-dist = [
     { name = "azure-identity", specifier = ">=1.25" },
     { name = "azure-kusto-data", specifier = ">=6.0.4" },
     { name = "azure-kusto-ingest", specifier = ">=6.0.4" },
+    { name = "azure-messaging-webpubsubservice", specifier = ">=1.3.0" },
     { name = "azure-servicebus", specifier = ">=7.15.0" },
     { name = "fastapi", specifier = ">=0.143.0" },
     { name = "mcp", specifier = ">=1.24,<2" },

@@ -18,6 +18,7 @@ from pitch_ledger.api.repository import MatchRepository
 from pitch_ledger.api.settings import ApiSettings
 from pitch_ledger.cli import main
 from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
+from pitch_ledger.push import NullNotifier, RecordingNotifier
 
 TENANT, AUDIENCE = "00000000-0000-0000-0000-00000000000a", "api://pitch-ledger"
 
@@ -43,8 +44,30 @@ def _repo(data_dir: Path) -> MatchRepository:
     return MatchRepository(data_dir, LedgerQueueSettings(_env_file=None, ledger="file"))  # type: ignore[call-arg]
 
 
-def _client(data_dir: Path, verifier: EntraVerifier | None = None, **kw: Any) -> TestClient:
-    return TestClient(create_app(_settings(data_dir, **kw), _repo(data_dir), verifier))
+def _client(
+    data_dir: Path, verifier: EntraVerifier | None = None, notifier: Any = None, **kw: Any
+) -> TestClient:
+    app = create_app(
+        _settings(data_dir, **kw), _repo(data_dir), verifier, notifier or NullNotifier()
+    )
+    return TestClient(app)
+
+
+def test_realtime_negotiate_and_decision_signals(data_dir: Path) -> None:
+    assert _client(data_dir).get("/api/v1/realtime/negotiate?match_id=M0002").json() == {
+        "url": None, "group": "fans"}  # push off: the Studio polls  # fmt: skip
+    push = RecordingNotifier()
+    client = _client(data_dir, notifier=push)
+    fan = client.get("/api/v1/realtime/negotiate", params={"match_id": "M0002"}).json()
+    assert fan["url"].endswith("fans.M0002")
+    assert client.get("/api/v1/realtime/negotiate", params={"match_id": "M9"}).status_code == 422
+    closed = _client(data_dir, notifier=push, api_auth="entra", api_tenant_id=None)
+    assert closed.get("/api/v1/realtime/negotiate/producer?match_id=M0002").status_code == 503
+    [view] = client.get("/api/v1/matches/M0002/insights").json()
+    insight_id = view["insight"]["insight_id"]
+    client.post(f"/api/v1/insights/{insight_id}/decision", json={"approve": True})
+    assert [(g, m["event"]) for g, m in push.sent] == [
+        ("producers.M0002", "insight_changed"), ("fans.M0002", "overlays_changed")]  # fmt: skip
 
 
 def test_public_endpoints(data_dir: Path) -> None:

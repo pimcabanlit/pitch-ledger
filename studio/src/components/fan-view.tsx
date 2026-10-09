@@ -1,12 +1,13 @@
 "use client";
 
 import { Radio } from "lucide-react";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { api, LANGUAGES, MODES, type MatchDetail, type Mode, type Overlay } from "@/lib/api";
+import { useRealtime } from "@/lib/realtime";
 import { matchMinute, minuteLabel } from "@/lib/utils";
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -16,7 +17,8 @@ const MODE_LABELS: Record<Mode, string> = {
   player_focus: "Player focus",
   single_metric: "Single metric",
 };
-const POLL_MS = 5000;
+const POLL_MS = 5000; // without push
+const PUSH_POLL_MS = 30000; // safety net while push is connected
 
 export function FanView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -31,20 +33,20 @@ export function FanView({ params }: { params: Promise<{ id: string }> }) {
     api.match(id).then(setMatch, (e: Error) => setError(e.message));
   }, [id]);
 
+  const load = useCallback(
+    () =>
+      api.overlays(id, mode, language).then(setOverlays, (e: Error) => setError(e.message)),
+    [id, mode, language],
+  );
+  const pushed = useRealtime(id, false, (signal) => {
+    if (signal.event === "overlays_changed") load();
+  });
+
   useEffect(() => {
-    let live = true;
-    const load = () =>
-      api.overlays(id, mode, language).then(
-        (rows) => live && setOverlays(rows),
-        (e: Error) => live && setError(e.message),
-      );
     load();
-    const timer = setInterval(load, POLL_MS); // live push (Web PubSub) replaces polling later
-    return () => {
-      live = false;
-      clearInterval(timer);
-    };
-  }, [id, mode, language]);
+    const timer = setInterval(load, pushed ? PUSH_POLL_MS : POLL_MS);
+    return () => clearInterval(timer);
+  }, [load, pushed]);
 
   const shown = useMemo(
     () =>
@@ -105,7 +107,8 @@ export function FanView({ params }: { params: Promise<{ id: string }> }) {
           </Select>
         </label>
         <span className="ml-auto flex items-center gap-1 text-xs text-emerald-700">
-          <Radio className="h-3.5 w-3.5" aria-hidden /> updates every {POLL_MS / 1000} s
+          <Radio className="h-3.5 w-3.5" aria-hidden />
+          {pushed ? "live" : `updates every ${POLL_MS / 1000} s`}
         </span>
       </div>
 

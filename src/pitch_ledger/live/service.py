@@ -39,6 +39,7 @@ from pitch_ledger.live.engine import LiveMatch
 from pitch_ledger.matchlab.io import EVENTS_JSONL, MATCH_FILE, TRACKING_JSONL, TRIGGERS_JSONL
 from pitch_ledger.mcp_server.client import LocalStats
 from pitch_ledger.mcp_server.tools import StatsTools
+from pitch_ledger.push import Notifier, NullNotifier
 from pitch_ledger.schema.enums import InsightType
 
 log = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ class LiveService:
         out_dir: Path,
         options: LiveOptions | None = None,
         clock: Callable[[], float] = time.monotonic,
+        notifier: Notifier | None = None,
     ) -> None:
         self.subscriber, self.queue, self.ledger, self.store = (
             subscriber,
@@ -102,6 +104,7 @@ class LiveService:
         self.matches: dict[str, LiveMatch] = {}
         self.report = LiveReport()
         self.meter = FeedHealthMeter()
+        self.notifier: Notifier = notifier or NullNotifier()
         self._inbox: queue.Queue[Delivered | None] = queue.Queue()
         self._ingest_done = asyncio.Event()
         self._emitted_at: dict[str, float] = {}
@@ -261,6 +264,11 @@ class LiveService:
             if started is not None:
                 self.report.trigger_to_outcome_s[outcome.trigger_id] = self.clock() - started
             insight = self.ledger.get_insight(outcome.insight_id or "")
+            if insight is not None:
+                signal = {"insight_id": insight.insight_id, "status": outcome.status}
+                self.notifier.notify(insight.match_id, "producers", "insight_changed", signal)
+                if outcome.status == "aired":
+                    self.notifier.notify(insight.match_id, "fans", "overlays_changed", signal)
             if insight is not None and self.store is not None:
                 self.store.append(
                     "InsightStatus", [insight_status_row(insight, datetime.now(UTC).timestamp())]

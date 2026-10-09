@@ -85,6 +85,11 @@ class Me(BaseModel):
     auth: str
 
 
+class Realtime(BaseModel):
+    url: str | None  # None: push is off, poll instead
+    group: str
+
+
 class Health(BaseModel):
     status: Literal["ok"]
     ledger: str
