@@ -88,7 +88,7 @@ Data contract for the Pitch Ledger pipeline. Every stage reads from one event ta
 | event_type | enum | no | pass | See event types |
 | outcome | enum | yes | complete | Allowed values depend on type |
 | start_x, start_y | number | yes | 40.2, 30.1 | Where the event started (m) |
-| end_x, end_y | number | yes | 71.8, 45.0 | Where the ball or player ended (m) |
+| end_x, end_y | number | yes | 71.8, 45.0 | Where the ball or player ended (m). For a pass: the intended target (where it was received, or aimed if not completed); the next event shows where an incomplete pass was cut out or left the pitch |
 | body_part | enum | yes | right_foot | `right_foot`, `left_foot`, `head`, `other` |
 | duration_ms | integer | yes | 1200 | Event length; for passes and shots, ball travel time |
 
