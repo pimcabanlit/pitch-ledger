@@ -200,7 +200,36 @@ From a cloud session, as `pitch-ledger-dev`: Entra ID token for the cluster, `pr
 1. **Create the tables (you, once):** open the free cluster's query editor on `matchdata`, paste the whole of `infra/adx/tables.kql` (or the output of `uv run pitch-ledger store-schema`) and run it. It creates every table, its JSON mapping, streaming ingestion and a 10-second batching fallback. Re-running is safe. The result lists each command; a failed line (for example if the free cluster refuses a policy) shows its error.
 2. **Check:** `uv run pitch-ledger check-store` (verified 2026-10-09: all PASS, test write readable after 3.5 s, so streaming ingestion works on the free cluster) reports settings, sign-in, roles, tables, and one test write read back.
 3. **Load a match:** `uv run pitch-ledger store data/M0002 --store adx` (events, tracking, engine snapshots, triggers, insight status). Live: `uv run pitch-ledger listen --store adx` also writes rows and feed health.
-4. **Dashboard:** Azure Data Explorer web UI → Dashboards → New dashboard → data source: the free cluster, database `matchdata` → parameter `_match_id` → one tile per query in `infra/adx/dashboard.kql`.
+4. **Dashboard:** see the next section.
+
+### Dashboard (control room), step by step
+
+Menu names drift a little between versions of the web UI; when it differs, look for the same idea nearby.
+
+1. **Open** <https://dataexplorer.azure.com> and sign in with the account that owns the free cluster.
+2. **New dashboard:** left menu **Dashboards** → **+ New dashboard** → name it `Pitch Ledger control room` → Create.
+3. **Data source:** top bar **Data sources** (under the ⋯ or Manage menu) → **+ New data source** → Cluster URI: the value of `ADX_CLUSTER_URI` → **Connect** → Database: `matchdata` → Data source name: `matchdata` → **Create** / Apply → close the pane.
+4. **Match picker (parameter):** top bar **Parameters** → **+ New parameter**:
+   - Label `Match`, Parameter type **Single selection**, Variable name **`_match_id`** (exactly), Data type **string**.
+   - Source **Query** → Data source `matchdata` → query `Events | distinct match_id | order by match_id asc` → Run → Value column `match_id`.
+   - Default value **M0002** → **Done** → close. (A default *Time range* parameter may exist; our tiles don't use it, so it can stay or be removed.)
+5. **Add each tile** from `infra/adx/dashboard.kql` (8 tiles): **+ Add** → **Add tile** → data source `matchdata` → paste the query (the lines under one `// Tile` heading) → **Run** → **+ Add visual** → set the visual below → name the tile → **Apply changes**.
+
+   | Tile | Visual | Settings |
+   | --- | --- | --- |
+   | 1. Score and clock | Table | — |
+   | 2. Control score over time | **Line chart** | X: `minute`, Y: `control`, Series: `team_id` |
+   | 3. Momentum shifts and key moments | Table | — |
+   | 4. Latest window per team | Table | — |
+   | 5. Insight pipeline | **Pie chart** | Category: `status`, Numeric: `insights` |
+   | 6. Insights | Table | — |
+   | 7. Feed health | **Time chart** | X: `window_start`, Y: `p50_ms`, `p95_ms` (pick match M0099 to see data) |
+   | 8. Ops alerts | Table | Empty until ops alerts are built |
+
+6. **Arrange:** drag tile edges to resize; put tiles 1, 2 and 3 on top.
+7. **Auto refresh** (for live matches): ⋯ / Manage → **Auto refresh** → on, every 30 s (or the shortest offered).
+8. **Save** (top bar). Switch matches with the **Match** picker; M0002 is the planted late collapse.
+
 
 ## Lessons learned (first live run, 2026-10-09)
 

@@ -2,8 +2,9 @@
 // Create the dashboard in the Azure Data Explorer web UI (Dashboards -> New dashboard),
 // add the free cluster and database `matchdata` as the data source, add a parameter
 // `_match_id` (single selection, query: Events | distinct match_id), then one tile per
-// query below. Tiles only filter, order and chart rows the engine wrote; they never
-// compute football metrics, so the dashboard shows the same numbers as the studio.
+// query below. Tiles only filter, order, round and chart rows the engine wrote; they
+// never compute football metrics, so the dashboard shows the same numbers as the studio.
+// Step-by-step: docs/azure-setup.md (Event store, Dashboard).
 
 // Tile 1. Score and clock (stat or table)
 Events
@@ -11,10 +12,10 @@ Events
 | top 1 by seq_no desc
 | project minute = round(iff(period == 2, 45.0, 0.0) + clock_ms / 60000.0, 1), score_home, score_away
 
-// Tile 2. Control score per team over time (time chart: x = minute, y = control, series = team_id)
+// Tile 2. Control score per team over time (line chart: x = minute, y = control, series = team_id)
 TeamState
 | where match_id == _match_id
-| project minute, team_id, control
+| project minute, team_id, control = round(control)
 | order by minute asc
 
 // Tile 3. Momentum shifts and key moments (table)
@@ -27,7 +28,9 @@ Triggers
 TeamState
 | where match_id == _match_id
 | summarize arg_max(minute, *) by team_id
-| project team_id, minute, possession_share, pass_accuracy, turnovers, own_half_turnovers, ppda, tempo, control
+| project team_id, minute, possession_pct = round(100 * possession_share, 1),
+    pass_accuracy_pct = round(100 * pass_accuracy, 1), turnovers, own_half_turnovers,
+    ppda = round(ppda, 1), tempo = round(tempo, 1), control = round(control)
 
 // Tile 5. Insight pipeline (pie or column: status counts, latest status per insight)
 InsightStatus
@@ -42,7 +45,7 @@ InsightStatus
 | project minute, insight_type, team_id, headline, audit_status, status, approved_by
 | order by minute desc
 
-// Tile 7. Feed health per minute (time chart: messages and latency)
+// Tile 7. Feed health per minute (time chart: x = window_start, y = p50_ms and p95_ms)
 FeedHealth
 | where match_id == _match_id
 | project window_start, messages, p50_ms, p95_ms, max_ms
