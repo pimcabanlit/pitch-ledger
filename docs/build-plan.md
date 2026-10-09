@@ -14,7 +14,9 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 | Storage | Eventhouse for events; Cosmos DB for the ledger |
 | Repo | Public, MIT license, personal GitHub account |
 | Pass end point | A pass row stores its intended target as end_x/end_y, so difficulty recomputes exactly from the row; the next event shows where an incomplete pass was cut out or left the pitch |
-| Scenario pairings (home vs away) | none: T01 vs T02, seed 4211 (baseline); late_collapse: T01 vs T02; high_press_switch: T06 vs T02; red_card, hot_streak and the extra baseline still to choose |
+| Scenario pairings and seeds (home vs away) | M0001 none T01 vs T02 (4211); M0002 late_collapse T01 vs T02 (4212); M0003 high_press_switch T06 vs T02 (4213); M0004 red_card T03 vs T04 (4213); M0005 hot_streak T05 vs T06 (4212); M0006 none T02 vs T01 (4212). Selection rule in `scenarios/matches.yaml` |
+| Momentum detection | Evidence accumulation (CUSUM) on pass outcomes vs the difficulty model, pressured passes and possession endings, not the 5-minute 20-point rule (which fired ~11 times per baseline match); control score kept for explanation |
+| Planted effect size | Dramatic effects, 15-minute detection limit (37–40 of 40 seeds detected per scenario; momentum false alerts in 1 of 80 baseline matches) |
 
 ## Phases
 

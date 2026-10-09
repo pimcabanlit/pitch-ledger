@@ -97,12 +97,15 @@ uv run pytest                            # tests
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                              # strict type check of src/pitch_ledger
 uv run pitch-ledger generate --scenario none --seed 4211 --out data/M0001
-uv run pitch-ledger generate --seed 7 --home T03 --away T05 --out data/M0002   # other clubs (T01-T06)
+uv run pitch-ledger generate --scenario late_collapse --seed 4212 --out data/M0002   # planted scenario
+uv run pitch-ledger generate --seed 7 --home T03 --away T05 --out data/M0009   # other clubs (T01-T06)
+uv run pitch-ledger generate-all --out data   # the six demo matches in scenarios/matches.yaml
 uv run pitch-ledger validate data/M0001  # every rule; exit 1 on any reject (--no-realism, --no-tracking)
 uv run pitch-ledger realism data/M0001   # compare against realism bands (--strict: exit 1 if out)
+uv run pitch-ledger detect data/M0002    # triggers.jsonl + scenario check; exit 1 on a miss or false alert (--all)
 ```
 
-Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string). Scenarios other than `none` arrive in Phase 2.
+Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.
 
 ## Definition of done for any change
 

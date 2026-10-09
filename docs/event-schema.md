@@ -198,16 +198,36 @@ d = distance to goal centre (m); θ = angle in radians between the lines to each
 
 **Team and match state** (per team, rolling 5-minute windows)
 
+Windows are `(start, end]` in one period, evaluated as the stream arrives; a window reads only events up to its end, so live and batch results are identical.
+
 | Metric | Definition |
 | --- | --- |
-| Possession share (%) | In-play time in possession ÷ total in-play time |
+| Possession share (%) | In-play time in possession ÷ total in-play time. Play is live from a restart (kick-off, set-piece pass, penalty or direct free kick) until a stoppage (out of play, foul, offside, goal, period end); live time between two events belongs to the earlier event's possession team |
 | Passes per possession | Completed passes ÷ possessions |
-| Turnovers | Possessions lost by incomplete pass, miscontrol, dispossession or lost tackle |
-| PPDA | Opponent passes in their own 60% of the pitch ÷ our tackles, interceptions and fouls there (lower = harder pressing) |
+| Turnovers | Possessions lost by incomplete pass (including out of play and offside), miscontrol, dispossession, failed dribble or lost tackle/interception; attributed to the causing event, located in the losing team's frame, counted once the opponent has the ball |
+| PPDA | Opponent passes in their own 60% of the pitch (x < 63 in their frame) ÷ our tackles, interceptions and fouls there (lower = harder pressing) |
 | Tempo | Passes per minute of own possession |
-| Control score (0–100) | Weighted average of normalised possession share, passes per possession, pass accuracy, inverse own-half turnovers |
-| Chaos level (0–100) | Normalised possession changes per minute, share of events under pressure, duels per minute |
-| Momentum shift | A team's control score moves 20+ points between consecutive windows and holds for 2 windows |
+| Control score (0–100) | Weighted average of normalised possession share, passes per possession, pass accuracy, inverse own-half turnovers (table below) |
+| Chaos level (0–100) | Mean of normalised possession changes per minute (0–3), share of on-ball events under pressure (0–50%), duels per minute (0–2) |
+| Momentum shift | Detected from accumulated evidence, not from window-to-window control changes (below) |
+
+Passes and pass accuracy exclude throw-ins. Control score components, each mapped linearly onto 0–100 and clipped:
+
+| Component | 0 at | 100 at | Weight |
+| --- | --- | --- | --- |
+| Possession share | 20% | 80% | 0.40 |
+| Completed passes per possession | 0 | 8 | 0.20 |
+| Pass accuracy | 55% | 95% | 0.20 |
+| Own-half turnovers | 6 | 0 | 0.20 |
+
+**Momentum shift (decided in Phase 2).** A 5-minute window holds only 6–8 possessions per team, so control swings 40–60 points by chance; a "20 points between consecutive windows, held for 2 windows" rule fired about 11 times per baseline match. Instead, each team's play is read as evidence, and a one-sided cumulative sum of log-likelihood ratios (CUSUM) fires when it reaches a threshold:
+
+| Detector | Evidence items | Alternative hypothesis |
+| --- | --- | --- |
+| build_up | each pass; each possession ending | completion probability 0.30 below the pass-difficulty model; possession losses 0.12 more likely in own half and 0.05 more elsewhere than the team's own running rates |
+| pressing | each pass's `under_pressure`; each possession ending | pressured passes 0.25 above the team's running rate; same possession endings |
+
+Fire at a score of 10; onset is when the score last left zero. At most one alert per team per half; scores reset at each period start. The insight still quotes the control score before (10 minutes before onset) and after (onset to alert). Measured over 40 seeds per scenario: planted changes detected within 15 minutes in 37–40 of 40; false momentum alerts in 1 of 80 baseline matches.
 
 **Player physical** (from tracking): distance covered (km), high-speed running (m), sprints (entries into > 25.2 km/h), top speed (km/h).
 
@@ -263,6 +283,21 @@ d = distance to goal centre (m); θ = angle in radians between the lines to each
 }
 ```
 
+**trigger** (written by the Moment detector, consumed by the agents)
+
+| Field | Type | Example |
+| --- | --- | --- |
+| trigger_id | string | M0002-T0040 |
+| match_id | string | M0002 |
+| period, clock_ms | integer | 2, 1434000 (when the detector fired) |
+| insight_type | enum | as for insight |
+| rule_id | string | `momentum_shift`, `goal`, `sending_off`, `sending_off_impact`, `penalty_awarded`, `player_form`, `pass_milestone`, `brace`, `hat_trick`, `distance_milestone`, `shot_speed`, `top_speed`, `pass_quality`, `half_time_recap`, `full_time_recap` |
+| subject | object | {team_id: T02} |
+| metrics | object | {control_before: 49, control_after: 6, pass_accuracy_after: 47.4} — code-computed, rounded as displayed |
+| evidence_event_ids | list | the events the metrics are computed from (empty for tracking-only triggers) |
+| context | object | windows used, onset minute, detector, opponent |
+| auto_approve | boolean | true for speed alerts |
+
 ## Validation rules
 
 Run at ingest before any agent sees an event. **Reject** stops the row and logs it; **flag** passes it with a warning.
@@ -307,20 +342,22 @@ A scripted change injected at a known minute; each doubles as a test (the engine
 | --- | --- |
 | scenario_id | late_collapse |
 | description | Away side tires and loses control after 60' |
-| trigger | {period: 2, minute: 60} — `minute` is the match minute (60' = period 2 clock 15:00) |
+| trigger | {period: 2, minute: 60} — `minute` is the match minute (60' = period 2 clock 15:00); optional `duration_min` ends it early |
 | team_id or player_id | T02 |
-| effects | {pass_success: {op: add, value: −0.08}, turnover_rate: {op: mul, value: 1.6}, top_speed: {op: mul, value: 0.92}} |
-| expected_detection | {insight_type: momentum_shift, team_id: T02, within_min: 6} |
+| effects | {pass_success: {op: add, value: −0.40}, turnover_rate: {op: mul, value: 3.0}, top_speed: {op: mul, value: 0.92}} |
+| expected_detection | {insight_type: momentum_shift, team_id: T02, within_min: 15} |
+
+Effects (`add` or `mul`, checked on load): team effects `pass_success`, `turnover_rate`, `top_speed`, `press_rate`, `press_win`, `block_depth` (metres up the pitch), `shot_rate`, `send_off` (straight reds); player effects `shot_rate`, `shot_quality`, `involvement`. Effects are deliberately dramatic so detection is reliable within 15 minutes (decided in Phase 2).
 
 | scenario_id | Planted | Engine should say |
 | --- | --- | --- |
-| late_collapse | Away pass success drops, turnovers and fatigue rise from 60' | Control flipped; turnovers and running data as evidence |
-| high_press_switch | Home switches mid block → high press at 30' | Pressing jumped (PPDA falls), forcing build-up errors |
-| red_card | Away player sent off at 55' | Shape and possession changed after the red card |
-| hot_streak | One forward's shot volume and quality rise for 15 minutes | Player-form insight; milestones for player-focus mode |
+| late_collapse | Away pass success drops, turnovers and fatigue rise from 60' | Control flipped; turnovers and running data as evidence (momentum_shift, away team) |
+| high_press_switch | Home switches mid block → high press at 30' | Pressing jumped (PPDA falls), forcing build-up errors (momentum_shift, away team) |
+| red_card | Away player sent off at 55' | Shape and possession changed after the red card (key_moment, away team) |
+| hot_streak | One forward's shot volume and quality rise for 15 minutes | Player-form insight; milestones for player-focus mode (player_form, the forward) |
 | none | Baseline, no change | Control case: no false momentum alerts |
 
-Decided: generate 6 matches (one per scenario plus one extra baseline).
+Decided: generate 6 matches (one per scenario plus one extra baseline), listed in `scenarios/matches.yaml` with pairings and seeds; every detection limit is 15 minutes.
 
 ## Worked example
 
