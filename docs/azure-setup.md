@@ -19,9 +19,11 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | Event Hubs namespace | `pitch-ledger-feed` (Basic) | Live feed; created 2026-10-09; recurring cost, delete after judging |
 | Event hub | `match-events` | One partition key per match |
 | Roles on the namespace | **Azure Event Hubs Data Sender** and **Data Receiver** → `pitch-ledger-dev` | Verified by a live `stream` + `listen` run (2026-10-09) |
+| Ledger | Cosmos DB for NoSQL `pitch-ledger-cosmos` (free tier, throughput capped), database `pitchledger`, container `ledger` (`/match_id`) | Built-in Data Contributor (data plane) → `pitch-ledger-dev`; `check-ledger` passes (2026-10-09) |
+| Trigger queue | Service Bus `pitch-ledger-bus` (Basic), queue `triggers` (max delivery 3, lock 5 min) | Data Sender and Data Receiver → `pitch-ledger-dev`; `check-queue` passes (2026-10-09) |
 | Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` is **Ingestor** and **Viewer**; tables created from `infra/adx/tables.kql`; `check-store` passes (2026-10-09) |
 
-Not provisioned yet: Cosmos DB and Service Bus (steps below; adapters built and tested with fakes), Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
+Not provisioned yet: Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
 
 Not available: **Microsoft Fabric**. The free trial isn't offered to this account (2026-10-09). The live feed uses Azure Event Hubs, the event store is the Azure Data Explorer free cluster with an ADX dashboard, and ops alerts live in the producer console. Fabric is a documented future upgrade (docs/architecture.md).
 
@@ -306,6 +308,10 @@ PITCH_LEDGER_SERVICEBUS_NAMESPACE=pitch-ledger-bus.servicebus.windows.net
 
 The queue name defaults to `triggers` (`PITCH_LEDGER_SERVICEBUS_QUEUE`). `*.servicebus.windows.net` is already allowed for Event Hubs. Then `uv run pitch-ledger check-queue` sends, receives and completes one probe trigger (match `M9999`, reserved for checks).
 
+### Verified (2026-10-09)
+
+`check-ledger` and `check-queue` pass. A full replay of M0002 through both (offline models, 63 s end to end) matched the local run exactly, and a separate process read the whole ledger back from Cosmos DB, including the momentum insight's audit trail (draft, planted error, Auditor block, revision, pass).
+
 ### Use them
 
 `uv run pitch-ledger replay data/M0002 --approve --inject-error --ledger cosmos --queue servicebus` runs the agents with the ledger in Cosmos DB and the triggers through Service Bus (the flags override the settings).
@@ -349,8 +355,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 
 ## Follow-ups
 
-- [ ] Cosmos DB: create the free-tier account, database `pitchledger`, container `ledger`, data-plane role; `check-ledger`.
-- [ ] Service Bus: create the Basic namespace and queue `triggers`, Data Sender and Data Receiver roles; `check-queue`.
+- [x] Cosmos DB and Service Bus created; `check-ledger` (write, read, delete in 1.2 s) and `check-queue` (send, receive, complete in 4.4 s) pass; full M0002 replay with `--ledger cosmos --queue servicebus` (offline models): 56 triggers through the queue, no dead letters, 18 insights aired, 270 overlays, planted error caught; read back from Cosmos in a new process (56 triggers, 18 insights, 70 audits, 270 overlays) (2026-10-09).
 
 - [ ] Remove the Azure AI Administrator role from `pitch-ledger-dev` (least privilege).
 - [ ] Put a calendar reminder a week before the client secret expires.
