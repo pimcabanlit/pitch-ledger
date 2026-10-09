@@ -26,11 +26,11 @@ class StyleParams:
 
 
 STYLES: dict[StyleProfile, StyleParams] = {
-    StyleProfile.POSSESSION: StyleParams(2.13, 0.25, 0.04, 0.27, 0.8, 0.013, 0.2, 0.1, 0.85),
+    StyleProfile.POSSESSION: StyleParams(2.13, 0.25, 0.04, 0.27, 0.9, 0.013, 0.2, 0.1, 0.85),
     StyleProfile.HIGH_PRESS: StyleParams(1.86, 0.4, 0.08, 0.38, 1.0, 0.015, 0.2, 0.25, 0.6),
-    StyleProfile.COUNTER: StyleParams(1.95, 0.55, 0.12, 0.24, 1.05, 0.018, 0.24, 0.55, 0.4),
-    StyleProfile.LOW_BLOCK: StyleParams(2.29, 0.45, 0.14, 0.19, 0.9, 0.013, 0.2, 0.4, 0.35),
-    StyleProfile.DIRECT: StyleParams(1.86, 0.55, 0.2, 0.26, 1.1, 0.013, 0.18, 0.3, 0.2),
+    StyleProfile.COUNTER: StyleParams(1.95, 0.55, 0.12, 0.24, 0.85, 0.018, 0.24, 0.55, 0.4),
+    StyleProfile.LOW_BLOCK: StyleParams(2.29, 0.45, 0.14, 0.19, 1.05, 0.013, 0.2, 0.4, 0.35),
+    StyleProfile.DIRECT: StyleParams(1.86, 0.55, 0.2, 0.26, 0.9, 0.013, 0.18, 0.3, 0.2),
 }
 
 

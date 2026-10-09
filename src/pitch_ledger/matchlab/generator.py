@@ -493,7 +493,7 @@ class _Simulator:
             foul_p = 0.012 if in_attacking_box(c.x, c.y) else 0.04
             if roll < foul_p:
                 return self.foul(opp, presser, c, pressure)
-            if roll < foul_p + 0.05 * turnover:
+            if roll < foul_p + 0.056 * turnover:
                 result = self.tackle(opp, presser, c, pressure, won_p=0.62)
                 if isinstance(result, _Carrier) and result.team == team:
                     c, last = result, result.last
