@@ -346,6 +346,8 @@ Each problem below blocked the first live run. Read the error, find the matching
 | 9 | Event Hubs latency of several seconds, arriving in bursts | The WebSocket path through the cloud session's proxy releases received data in bursts; each send is a ~0.27 s round trip | Treat sandbox numbers as an upper bound; measure from Container Apps or a laptop (plain AMQP) |
 | 10 | `listen` took minutes to exit after the last message | The SDK's `close()` blocked on the stalled link | `close()` now gives up after 10 s (daemon thread) |
 | 11 | New settings (feed, ADX) were saved but missing in the next session | The values didn't reach this session's environment (same pattern as lesson 1) | After editing, start a new session and check the variable *names* are present before testing; make sure you edit the environment this session uses |
+| 12 | `stream` to Event Hubs fails with *"The request was terminated because the entity is being throttled"* (50002) | Basic with 1 throughput unit accepts about 1,000 messages a second; 60x replay is about 1,380 | Replay at 40x or less (25x is comfortable), or add throughput units (cost) |
+| 13 | `studio/src/lib/` missing in CI ("Cannot find module '@/lib/api'") | The Python `.gitignore` rule `lib/` also matched the Studio's source folder, so it was never committed | An exception `!studio/src/lib/`; check a fresh clone when adding folders with common names |
 
 How to read the error codes:
 
@@ -381,5 +383,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
 - [x] ADX tables created; `check-store` passes (streaming write readable after 3.5 s); M0002 loaded (`store --store adx`, 129,781 rows in 23 s); live `listen --store adx` verified with test match M0099 (1,343 rows, feed health).
 - [ ] ADX: build the dashboard from `infra/adx/dashboard.kql`.
-- [ ] ADX (optional): clear the test match before the demo: `.delete table Events records <| Events | where match_id == 'M0099'` (same for Tracking and FeedHealth), run as database admin.
+- [ ] ADX (optional): clear the test matches before the demo, as database admin: `.delete table Events records <| Events | where match_id in ('M0099', 'M0012')`, and the same for Tracking, TeamState, Triggers, InsightStatus and FeedHealth. The event store only appends, so a rerun of a live match adds a second copy.
+- [ ] Service Bus: 16 triggers of test match M0012 sit in the `triggers` dead-letter queue from a run before the send/receive race fix (reason `stale`); harmless (later runs ignore them), clear them in the portal (Service Bus Explorer, dead-letter, receive) if you like.
+- [x] Live service verified on Azure (2026-10-09): M0012 streamed at 25x through Event Hubs; 56 triggers via Service Bus, 18 insights aired, momentum insight corrected, ledger in Cosmos DB (56 triggers, 18 insights, 70 audits, 270 overlays), rows in ADX; trigger to outcome p50 3.9 s, max 17 s (offline models).
 - [x] Fabric-only pieces replaced (2026-10-09): ADX free cluster (event store), ADX dashboard (control room), producer-console ops alerts. Fabric kept as a future upgrade.

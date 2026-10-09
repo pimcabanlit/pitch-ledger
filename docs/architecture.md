@@ -87,11 +87,21 @@ Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed l
 ## Live feed
 
 - **Interface:** `pitch_ledger.feed` defines `FeedPublisher` and `FeedSubscriber`. Adapters: a JSONL file (two local processes), in-memory (tests) and Azure Event Hubs (`infra_adapters/eventhubs.py`). `PITCH_LEDGER_FEED` picks one; domain code never imports the Event Hubs SDK.
-- **Messages:** the body is the feed row exactly as in `events.jsonl` / `tracking.jsonl`; properties carry the row kind and the send time (for latency). The partition key is the match ID, so each match's rows arrive in order.
+- **Messages:** the body is the feed row exactly as in `events.jsonl` / `tracking.jsonl`; properties carry the row kind and the send time (for latency). The partition key is the match ID, so each match's rows arrive in order. A match opens with one `match` message carrying its reference rows (teams, players).
 - **Sign-in:** Microsoft Entra ID (managed identity in Azure, the service principal locally), roles *Azure Event Hubs Data Sender* (Match Lab) and *Data Receiver* (engine). A SAS connection string also works.
 - **Transport:** plain AMQP inside Azure; AMQP over WebSockets (port 443) behind a proxy (`PITCH_LEDGER_EVENTHUB_TRANSPORT`, default `auto`).
 - **Measured (2026-10-09, from a Claude Code cloud session through its proxy, WebSockets):** no messages lost in any of five runs (up to 2,695 messages each); send-to-receive p50 2.5–3.3 s, p95 4.6–7.3 s. A single send takes about 0.27 s; delivery arrives in bursts on this path (best case 0.6 s). This is a pessimistic bound, not the Azure number: re-measure from Container Apps (same region, plain AMQP) in Phase 4.
-- **Commands:** `pitch-ledger stream <match_dir>` publishes at match pace; `pitch-ledger listen` lands the rows and reports send-to-receive latency.
+- **Commands:** `pitch-ledger stream <match_dir>` publishes at match pace (overdue seconds are sent together when publishing falls behind); `pitch-ledger listen` lands the rows and reports send-to-receive latency.
+- **Throughput:** Event Hubs Basic with 1 throughput unit accepts about 1,000 messages a second; a match is about 23 a second at real time, so replays stay at or below about 40x (60x was throttled).
+
+## Live service (`pitch-ledger live`)
+
+One process, two concurrent loops (`pitch_ledger.live`):
+
+1. **Ingest:** reads the feed, keeps each match in memory and lands it under `data/live/<match>/` (a match directory the stats tools read), writes raw rows, minute snapshots and feed health to the event store, and every few seconds re-runs the detector over everything received. A trigger is emitted once the feed is 60 match-seconds past it (first-half triggers at the start of the second half; everything at full time) and numbered in match order, so a live run gives exactly the batch triggers (checked on all planted matches). Triggers go to the queue, `triggers.jsonl` and the store.
+2. **Worker:** takes triggers off the queue and runs the orchestrator over a snapshot of the match so far; insights, audits and overlays go to the ledger, insight status to the store. `--approve` approves as the demo producer; otherwise insights wait for the producer console.
+
+The feed, queue, ledger and store are the same interfaces as everywhere else (Event Hubs, Service Bus, Cosmos DB, ADX in Azure; files and memory locally).
 
 ## Event store and dashboard (Azure Data Explorer)
 

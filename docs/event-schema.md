@@ -12,7 +12,7 @@ Data contract for the Pitch Ledger pipeline. Every stage reads from one event ta
 
 - **Raw facts only in the event table.** Anything computable (pass length, ball speed, xG, indices) is derived in code, so every number on screen traces back to rows.
 - **Every row has a stable ID.** Insights cite event IDs as evidence; the Auditor checks them.
-- **Same schema for live and batch.** The live feed sends rows as JSON lines; analytics reads the same fields as a table. On the feed (Azure Event Hubs, or a Fabric Eventstream custom endpoint), each message body is one row unchanged; the message properties carry `kind` (`event` or `tracking`) and `sent_at` (Unix seconds, for latency), and the partition key is `match_id` so a match's rows stay in order.
+- **Same schema for live and batch.** The live feed sends rows as JSON lines; analytics reads the same fields as a table. On the feed (Azure Event Hubs, or a Fabric Eventstream custom endpoint), each message body is one row unchanged; the message properties carry `kind` (`event` or `tracking`) and `sent_at` (Unix seconds, for latency), and the partition key is `match_id` so a match's rows stay in order. Each match starts with one `kind = match` message whose body is the match's reference rows (the content of `match.json`: match, teams, players), so a consumer needs no shared files.
 - **Reproducible generation.** Each match records its generator version and random seed.
 - **Structure only, no copied data.** These formats inspire the layout; no real or provider match data is used or calibrated against.
 
