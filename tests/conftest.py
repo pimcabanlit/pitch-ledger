@@ -1,4 +1,4 @@
-"""Tests never reach a paid model, whatever the local environment or ``.env`` says."""
+"""Tests never reach a paid model or a cloud feed, whatever the environment or ``.env`` says."""
 
 from collections.abc import Iterator
 
@@ -10,4 +10,5 @@ def _offline_models() -> Iterator[None]:
     """Session-wide, so module- and session-scoped fixtures are covered too."""
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("PITCH_LEDGER_MODEL_PROVIDER", "offline")
+        patch.setenv("PITCH_LEDGER_FEED", "file")
         yield

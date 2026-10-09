@@ -1,4 +1,4 @@
-"""``pitch-ledger`` command line: generate, validate, detect, replay and evaluate."""
+"""``pitch-ledger`` command line: generate, validate, detect, replay, evaluate and the live feed."""
 
 import argparse
 import re
@@ -6,6 +6,7 @@ import sys
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pitch_ledger.engine import match_minute
 from pitch_ledger.engine.detector import detect
@@ -18,6 +19,9 @@ from pitch_ledger.schema import Event, TrackingSample, Trigger
 from pitch_ledger.schema.enums import ScenarioId
 from pitch_ledger.validation import RULES, measure, validate_match
 from pitch_ledger.validation.realism import RealismCheck
+
+if TYPE_CHECKING:
+    from pitch_ledger.infra_adapters.feeds import FeedSettings
 
 IMPORTANT = {"momentum_shift", "key_moment", "player_form", "recap"}
 """Insight types ``detect`` lists by default (``--all`` lists every trigger)."""
@@ -310,6 +314,96 @@ def cmd_check_models(args: argparse.Namespace) -> int:
     return 0 if all(c.ok for c in checks) else 1
 
 
+def _feed_settings(args: argparse.Namespace) -> "FeedSettings":
+    from pitch_ledger.infra_adapters.feeds import FeedSettings
+
+    return FeedSettings(feed=args.feed) if args.feed else FeedSettings()
+
+
+def cmd_stream(args: argparse.Namespace) -> int:
+    from pitch_ledger.feed import stream_match
+    from pitch_ledger.infra_adapters.feeds import open_publisher
+
+    settings = _feed_settings(args)
+    print(f"streaming {args.match_dir} -> {settings.describe()} at {args.speed}x match pace")
+    try:
+        publisher = open_publisher(settings)
+    except ValueError as exc:
+        print(f"feed settings: {exc}", file=sys.stderr)
+        return 2
+    try:
+        report = stream_match(
+            Path(args.match_dir),
+            publisher,
+            speed=args.speed,
+            start_min=args.start_min,
+            minutes=args.minutes,
+            with_tracking=not args.no_tracking,
+        )
+    except Exception as exc:  # provider or network error: report it plainly
+        print(f"stream failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        publisher.close()
+    print(
+        f"{report.match_id}: {report.events} events, {report.tracking} tracking rows in "
+        f"{report.batches} batches, {report.wall_s:.1f} s (max behind {report.max_behind_s:.1f} s)"
+    )
+    return 0
+
+
+def cmd_listen(args: argparse.Namespace) -> int:
+    import json
+
+    from pitch_ledger.feed import Delivered, listen
+    from pitch_ledger.infra_adapters.feeds import open_subscriber
+
+    settings = _feed_settings(args)
+    try:
+        subscriber = open_subscriber(settings, from_start=args.from_start)
+    except ValueError as exc:
+        print(f"feed settings: {exc}", file=sys.stderr)
+        return 2
+    ready = getattr(subscriber, "ready", None)
+    if ready is not None and not ready.wait(60):
+        error = getattr(subscriber, "last_error", None) or "no partition opened within 60 s"
+        print(f"not connected yet: {error}", file=sys.stderr)
+    print(f"listening on {settings.describe()}; stops at full time or after {args.idle:g} s idle")
+    seen = 0
+
+    def progress(_d: Delivered) -> None:
+        nonlocal seen
+        seen += 1
+        if seen % 1000 == 0:
+            print(f"  {seen} messages")
+
+    out = Path(args.out)
+    try:
+        report = listen(
+            subscriber, out, args.idle, stop_at_full_time=not args.keep_going, on_message=progress
+        )
+    finally:
+        subscriber.close()
+    summary = report.as_dict()
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "listen.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    for label, count in report.received.items():
+        print(f"  {label}: {count} rows -> {out / label.split('/')[0]}")
+    for kind, lat in summary["latency"].items():
+        if lat["count"]:
+            print(
+                f"  latency {kind}: p50 {lat['p50_ms']} ms, p95 {lat['p95_ms']} ms, "
+                f"p99 {lat['p99_ms']} ms, max {lat['max_ms']} ms"
+            )
+    if not report.received:
+        error = getattr(subscriber, "last_error", None)
+        print("no messages received" + (f"; last error: {error}" if error else ""))
+        return 1
+    ending = "full time reached" if report.full_time else "stopped"
+    print(f"{ending}; stats -> {out / 'listen.json'}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pitch-ledger", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -381,6 +475,24 @@ def build_parser() -> argparse.ArgumentParser:
         "check-models", help="check model settings, Entra ID sign-in and each deployment"
     )
     chk.set_defaults(func=cmd_check_models)
+
+    feeds = ["file", "eventhubs"]
+    st = sub.add_parser("stream", help="publish a match to the live feed at match pace")
+    st.add_argument("match_dir")
+    st.add_argument("--speed", type=float, default=1.0, help="x real time (default 1)")
+    st.add_argument("--start-min", type=float, default=0.0, help="first match minute")
+    st.add_argument("--minutes", type=float, help="how many match minutes (default: to the end)")
+    st.add_argument("--no-tracking", action="store_true", help="events only")
+    st.add_argument("--feed", choices=feeds, help="feed adapter (default: settings, file)")
+    st.set_defaults(func=cmd_stream)
+
+    ls = sub.add_parser("listen", help="read the live feed, land rows, report feed latency")
+    ls.add_argument("--out", default="data/live", help="landing folder (default data/live)")
+    ls.add_argument("--idle", type=float, default=30.0, help="stop after this many idle seconds")
+    ls.add_argument("--from-start", action="store_true", help="read retained messages too")
+    ls.add_argument("--keep-going", action="store_true", help="do not stop at full time")
+    ls.add_argument("--feed", choices=feeds, help="feed adapter (default: settings, file)")
+    ls.set_defaults(func=cmd_listen)
     return parser
 
 
