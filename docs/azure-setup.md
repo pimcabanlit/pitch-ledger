@@ -21,7 +21,7 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | Roles on the namespace | **Azure Event Hubs Data Sender** and **Data Receiver** → `pitch-ledger-dev` | Verified by a live `stream` + `listen` run (2026-10-09) |
 | Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` is **Ingestor** and **Viewer**; tables created from `infra/adx/tables.kql`; `check-store` passes (2026-10-09) |
 
-Not provisioned yet: Cosmos DB, Service Bus, Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
+Not provisioned yet: Cosmos DB and Service Bus (steps below; adapters built and tested with fakes), Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
 
 Not available: **Microsoft Fabric**. The free trial isn't offered to this account (2026-10-09). The live feed uses Azure Event Hubs, the event store is the Azure Data Explorer free cluster with an ADX dashboard, and ops alerts live in the producer console. Fabric is a documented future upgrade (docs/architecture.md).
 
@@ -231,6 +231,85 @@ Menu names drift a little between versions of the web UI; when it differs, look 
 8. **Save** (top bar). Switch matches with the **Match** picker; M0002 is the planted late collapse.
 
 
+## Ledger: Azure Cosmos DB (free tier)
+
+The insight ledger's system of record. **Cost:** the free tier covers 1,000 RU/s and 25 GB; one free-tier account per subscription, chosen when the account is created. With "Limit total account throughput" ticked, the account cannot exceed the free amount, so there is no surprise bill.
+
+### 1. Create the account
+
+1. Azure portal → **Create a resource** → search **Azure Cosmos DB** → Create → **Azure Cosmos DB for NoSQL** → Create.
+2. Resource group: the Pitch Ledger one. Account name: `pitch-ledger-cosmos` (globally unique; add a suffix if taken). Location: **East US**.
+3. Capacity mode: **Provisioned throughput**. **Apply Free Tier Discount: Apply**. **Limit total account throughput: ticked**.
+4. Leave the other tabs at their defaults → Review + create → Create (takes a few minutes).
+
+### 2. Database and container
+
+In the account → **Data Explorer** → **New Container**:
+
+- Database id: **Create new** → `pitchledger`, tick **Share throughput across containers**, Database throughput **Manual**, **400** RU/s.
+- Container id: `ledger`. Partition key: `/match_id`.
+- OK.
+
+### 3. Let the app read and write (data-plane role)
+
+Cosmos DB's data roles are not in the portal's Access control (IAM) blade; assign it with the Azure CLI in **Cloud Shell**:
+
+1. Portal top bar → **Cloud Shell** icon (`>_`) → **Bash**. If asked about storage, choose **No storage account required** (no cost).
+2. Run, with your resource group name:
+
+```
+az cosmosdb sql role assignment create \
+  --account-name pitch-ledger-cosmos \
+  --resource-group <resource-group> \
+  --scope "/" \
+  --principal-id 93bdbd00-4663-4267-b536-a94dc7b55680 \
+  --role-definition-id 00000000-0000-0000-0000-000000000002
+```
+
+- `--principal-id` is the **object ID of the `pitch-ledger-dev` service principal** (Entra ID → Enterprise applications → `pitch-ledger-dev` → Object ID). It is not the client ID, and not the object ID shown under App registrations.
+- `00000000-0000-0000-0000-000000000002` is the built-in **Cosmos DB Built-in Data Contributor** role (read and write items).
+
+### 4. Settings and check
+
+```
+PITCH_LEDGER_LEDGER=cosmos
+COSMOS_ENDPOINT=https://pitch-ledger-cosmos.documents.azure.com:443/
+```
+
+The endpoint is on the account's Overview page (URI). Cloud sessions: allow **`*.documents.azure.com`** in the environment's network access. Then `uv run pitch-ledger check-ledger` writes, reads and deletes one test document.
+
+## Trigger queue: Azure Service Bus (Basic)
+
+Carries triggers from the detector to the orchestrator, with retries and dead-lettering. **Cost:** Basic has no monthly base fee; it bills per operation (about $0.05 per million, from memory; check the pricing page). A replayed match is a few hundred operations.
+
+### 1. Create the namespace and queue
+
+1. Azure portal → **Create a resource** → **Service Bus** → Create.
+2. Resource group: the Pitch Ledger one. Namespace name: `pitch-ledger-bus` (globally unique). Location: **East US**. Pricing tier: **Basic**. Review + create → Create.
+3. In the namespace → **+ Queue**: Name `triggers`, **Max delivery count `3`**, **Lock duration 5 minutes**, leave the rest → Create.
+
+### 2. Roles for the app
+
+On the **namespace** → Access control (IAM) → Add role assignment → member `pitch-ledger-dev`:
+
+- **Azure Service Bus Data Sender**
+- **Azure Service Bus Data Receiver**
+
+As with Event Hubs, Owner or Contributor alone does not allow sending or receiving. Allow 5–10 minutes.
+
+### 3. Settings and check
+
+```
+PITCH_LEDGER_QUEUE=servicebus
+PITCH_LEDGER_SERVICEBUS_NAMESPACE=pitch-ledger-bus.servicebus.windows.net
+```
+
+The queue name defaults to `triggers` (`PITCH_LEDGER_SERVICEBUS_QUEUE`). `*.servicebus.windows.net` is already allowed for Event Hubs. Then `uv run pitch-ledger check-queue` sends, receives and completes one probe trigger (match `M9999`, reserved for checks).
+
+### Use them
+
+`uv run pitch-ledger replay data/M0002 --approve --inject-error --ledger cosmos --queue servicebus` runs the agents with the ledger in Cosmos DB and the triggers through Service Bus (the flags override the settings).
+
 ## Lessons learned (first live run, 2026-10-09)
 
 Each problem below blocked the first live run. Read the error, find the matching row, apply the fix.
@@ -269,6 +348,9 @@ Pay per token on a Standard or Global Standard deployment, with no hourly charge
 Calls rejected with 401 or 403 never reach the model and are not billed.
 
 ## Follow-ups
+
+- [ ] Cosmos DB: create the free-tier account, database `pitchledger`, container `ledger`, data-plane role; `check-ledger`.
+- [ ] Service Bus: create the Basic namespace and queue `triggers`, Data Sender and Data Receiver roles; `check-queue`.
 
 - [ ] Remove the Azure AI Administrator role from `pitch-ledger-dev` (least privilege).
 - [ ] Put a calendar reminder a week before the client secret expires.

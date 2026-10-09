@@ -65,7 +65,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 
 ### Phase 4 — Studio app and deployment (Oct 20–23)
 
-1. Cosmos DB ledger and Service Bus queue adapters (same interfaces as the Phase 3 in-memory ones), provisioned with the Bicep below (Event Hubs namespace already created by hand); the engine reads the feed through the feed adapter.
+1. Cosmos DB ledger and Service Bus queue adapters (same interfaces as the Phase 3 in-memory ones; built 2026-10-09, `replay --ledger cosmos --queue servicebus`), resources created by hand first and then captured in the Bicep below; the engine reads the feed through the feed adapter.
 2. Event-store adapter for the Azure Data Explorer free cluster (tables in the architecture doc; local-file fallback), written to by the engine and orchestrator.
 3. FastAPI `/api/v1`: matches, insights, overlays, approvals, viewer preferences.
 4. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors).

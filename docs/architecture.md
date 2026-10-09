@@ -74,11 +74,11 @@ Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed l
 | Control-room dashboard | ADX dashboard | Producer and analyst control room: match state, momentum, triggers, feed health, insight pipeline | (b), (d) | Core |
 | Ops alerts | Studio producer console (ledger + Web PubSub) | Feed gaps and lag, validation rejects, blocked insights, dead letters, model fallbacks; producer acknowledges | Ops | Core |
 | Stats and Momentum Engine + Moment detector | Container Apps (Python) | Deterministic metrics and triggers | (b), (c) | Core |
-| Service Bus queue | Service Bus | Trigger queue; retries, dead letter | (c) | Core |
+| Service Bus queue | Service Bus (Basic) | Trigger queue `triggers`; max 3 deliveries, then dead letter; adapter `infra_adapters/servicebus.py` | (c) | Core |
 | Stats MCP server | Container Apps | Read-only stats tools for agents | (b), (c) | Core |
 | Match orchestrator | Container Apps + Microsoft Agent Framework | Five agents + Overlay builder | (c), (d), (e) | Core |
 | Microsoft Foundry | Foundry | Models, content safety, evaluations, tracing | (c), (e) | Core |
-| Insight ledger | Cosmos DB (free tier) | System of record: insights, evidence, audits, approvals, overlays, ops alerts, viewer profiles | (c), (d) | Core |
+| Insight ledger | Cosmos DB (free tier) | System of record: insights, evidence, audits, approvals, overlays, ops alerts, viewer profiles. One container `ledger`, partition key `/match_id`; write-through adapter `infra_adapters/cosmos.py` | (c), (d) | Core |
 | Web PubSub | Web PubSub (Free tier) | Live overlay and ops-alert push | (d) | Core |
 | Studio app | Container Apps (web) | Producer console (approvals, ops alerts) + fan view with mode, club, player, metric, language | (d), (e) | Core |
 | Match history (medallion) | Fabric Lakehouse | Bronze/Silver/Gold history | (b) | Stretch (needs Fabric) |
@@ -165,7 +165,8 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 | Azure Data Explorer | Free cluster: no Azure cost, no SLA |
 | Fabric | Future upgrade (trial not available) |
 | Container Apps | Consumption plan free grant; scale to zero |
-| Cosmos DB | Lifetime free tier (1000 RU/s, 25 GB) |
+| Cosmos DB | Lifetime free tier (1000 RU/s, 25 GB), account throughput capped at the free amount |
+| Service Bus | Basic tier: no base fee, about $0.05 per million operations (check the pricing page); a match is a few hundred operations |
 | Web PubSub | Free tier (20 connections, 20k messages/day) |
 | Container images | GitHub Container Registry (free for public images) instead of Azure Container Registry |
 | Models | Main cost; token caps, small model for rewrites, develop locally first |

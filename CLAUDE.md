@@ -115,6 +115,9 @@ uv run pitch-ledger stream data/M0002 --speed 10   # publish a match to the live
 uv run pitch-ledger store-schema > infra/adx/tables.kql   # KQL script for the event-store tables (keep the file in sync)
 uv run pitch-ledger store data/M0002     # write a match to the event store: data/store/*.jsonl, or ADX with --store adx
 uv run pitch-ledger check-store           # ADX settings, sign-in, roles, tables, one test write; exit 1 on a FAIL
+uv run pitch-ledger check-ledger          # Cosmos DB settings, sign-in, one document written, read, deleted
+uv run pitch-ledger check-queue           # Service Bus settings, sign-in, one probe trigger sent and received
+uv run pitch-ledger replay data/M0002 --approve --ledger cosmos --queue servicebus   # cloud ledger and queue
 ```
 
 Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.
