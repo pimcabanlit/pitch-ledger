@@ -1,22 +1,16 @@
 # Architecture
 
-Azure Event Hubs carries the live match feed, Container Apps runs the Python engine and the agents, and Microsoft Foundry supplies models and guardrails. The feed sits behind an adapter, so Fabric Eventstream can take over later without code changes (see Live feed). Every insight is audited before it reaches a screen.
+Azure Event Hubs carries the live match feed, Azure Data Explorer (free cluster) stores events and engine metrics for KQL queries and the control-room dashboard, Container Apps runs the Python engine and the agents, and Microsoft Foundry supplies models and guardrails. Every insight is audited before it reaches a screen. The feed and the event store sit behind adapters, so Microsoft Fabric Real-Time Intelligence can take over later as an upgrade (see Future upgrade: Microsoft Fabric).
 
 ```mermaid
 flowchart TB
     feed["Match Lab feed<br/>(Container Apps job)"]
     hub["Event Hubs<br/>live feed, one partition key per match"]
 
-    subgraph fabric["Microsoft Fabric · Real-Time Intelligence (deferred: trial not available)"]
-        es["Eventstream<br/>ingest and route"]
-        eh["Eventhouse<br/>raw events, KQL"]
-        lh["Lakehouse<br/>medallion history (stretch)"]
-        act["Activator<br/>ops alerts"]
-        dash["RTI dashboard<br/>control room"]
-        es --> eh
-        eh -.-> lh
-        eh --> act
-        eh --> dash
+    subgraph adx["Azure Data Explorer · free cluster"]
+        store["Event store (KQL)<br/>raw events, engine metrics,<br/>triggers, ops alerts"]
+        dash["ADX dashboard<br/>control room"]
+        store --> dash
     end
 
     subgraph aca["Azure Container Apps"]
@@ -24,18 +18,20 @@ flowchart TB
         detector["Moment detector<br/>fires triggers with evidence"]
         mcp["Stats MCP server<br/>read-only stats tools"]
         orch["Match orchestrator<br/>Agent Framework: Explainer ⇄ Auditor,<br/>Narrator, Personalizer, Translator"]
-        studio["Studio app<br/>producer console (Entra) + fan view"]
+        studio["Studio app<br/>producer console (Entra) with ops alerts,<br/>fan view"]
     end
 
     sb["Service Bus<br/>trigger queue, retries, dead letter"]
     foundry["Microsoft Foundry<br/>models, content safety,<br/>evaluations, tracing"]
-    ledger["Insight ledger<br/>Cosmos DB, audit trail"]
-    pubsub["Web PubSub<br/>live overlay push"]
+    ledger["Insight ledger<br/>Cosmos DB, audit trail, ops alerts"]
+    pubsub["Web PubSub<br/>overlays and ops alerts push"]
     viewers["Producer and fans<br/>any mode, any language"]
+    fabric["Microsoft Fabric RTI<br/>(future upgrade)"]
 
     feed --> hub
     hub --> engine
-    hub -.-> es
+    hub -.-> fabric
+    engine --> store
     engine --> detector
     engine --> mcp
     detector --> sb
@@ -43,10 +39,12 @@ flowchart TB
     mcp <--> orch
     orch --> foundry
     orch --> ledger
+    orch --> store
+    engine -- ops alerts --> ledger
     ledger --> pubsub
     pubsub --> studio
     studio --> viewers
-    studio -- approvals --> orch
+    studio -- approvals, acknowledgements --> orch
 ```
 
 Across every service: Microsoft Entra ID (managed identities, producer sign-in), Key Vault, Application Insights / Log Analytics, GitHub Actions, Cost Management budget alerts.
@@ -54,15 +52,17 @@ Across every service: Microsoft Entra ID (managed identities, producer sign-in),
 ## How one moment flows
 
 1. **Generate.** The Match Lab replays a synthetic match and sends events and 1 Hz tracking samples to the live feed (Azure Event Hubs), one batch per second of match time.
-2. **Ingest.** The Stats and Momentum Engine reads the feed through the feed adapter (live processing). Validation rules reject or flag bad rows. Event storage and KQL queries in the Fabric Eventhouse are deferred while Fabric is unavailable.
-3. **Compute.** The engine updates team and player state in rolling 5-minute windows: possession, turnovers, PPDA, control and chaos scores, speeds and distances.
+2. **Ingest.** The Stats and Momentum Engine reads the feed through the feed adapter. Validation rules reject or flag bad rows; rejects raise an ops alert. The engine appends the raw rows to the event store in Azure Data Explorer.
+3. **Compute.** The engine updates team and player state in rolling 5-minute windows: possession, turnovers, PPDA, control and chaos scores, speeds and distances. It writes these snapshots to the event store, so the dashboard shows the same numbers the agents use.
 4. **Detect.** The Moment detector sees, for example, the away side's control score fall 20+ points and hold, then puts a trigger with evidence event IDs on the Service Bus queue.
 5. **Explain.** The orchestrator picks up the trigger. The Explainer pulls numbers through the Stats MCP server and drafts an insight (headline, explanation, metrics, evidence).
-6. **Audit.** The Auditor recomputes every number through the same tools. A mismatch goes back to the Explainer, at most twice; then approve or block. The decision is written to the ledger.
+6. **Audit.** The Auditor recomputes every number through the same tools. A mismatch goes back to the Explainer, at most twice; then approve or block. The decision is written to the ledger; a block raises an ops alert.
 7. **Approve.** The producer approves in the Studio app (low-risk types such as speed alerts can auto-approve).
 8. **Personalize and translate.** Personalizer writes analyst, casual, club, player and single-metric versions concurrently; Translator renders each language concurrently, numbers checked unchanged.
 9. **Deliver.** The Overlay builder sets template, timing and priority; overlays are saved to the ledger and pushed through Web PubSub.
 10. **Recap.** At half-time and full-time the orchestrator hands off to the Narrator; recaps go through the same audit.
+
+Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed lag, validation rejects, blocked insights, dead-lettered triggers, model fallbacks) as they happen, and the **ADX dashboard** gives producers and analysts the control-room view of the match and the pipeline.
 
 ## Components
 
@@ -70,30 +70,50 @@ Across every service: Microsoft Entra ID (managed identities, producer sign-in),
 | --- | --- | --- | --- | --- |
 | Match Lab | Container Apps job (Python) | Synthetic matches + planted scenarios; live replay | (a) ingest, (v) data | Core |
 | Live feed | Azure Event Hubs (Basic) | Carry events and tracking from the Match Lab to the engine | (a) | Core |
-| Eventstream | Fabric RTI | Ingest and route events and tracking; reads the Event Hub or replaces it via its custom endpoint | (a) | Deferred (Fabric trial not available) |
-| Eventhouse | Fabric RTI (KQL DB) | Raw events; time-window queries; eval checks | (a), (b) | Deferred (needs Fabric) |
-| RTI dashboard | Fabric | Producer and analyst control room | (b), (d) | Deferred (needs Fabric) |
-| Activator | Fabric | Ops alerts: feed gaps, validation rejects, blocked insights | Ops | Deferred (needs Fabric) |
-| Lakehouse (Bronze/Silver/Gold) | Fabric OneLake | Match history | (b) | Stretch |
+| Event store | Azure Data Explorer free cluster (KQL database) | Raw events and tracking, engine metric snapshots, triggers, insight status, ops alerts; time-window queries; eval checks | (a), (b) | Core |
+| Control-room dashboard | ADX dashboard | Producer and analyst control room: match state, momentum, triggers, feed health, insight pipeline | (b), (d) | Core |
+| Ops alerts | Studio producer console (ledger + Web PubSub) | Feed gaps and lag, validation rejects, blocked insights, dead letters, model fallbacks; producer acknowledges | Ops | Core |
 | Stats and Momentum Engine + Moment detector | Container Apps (Python) | Deterministic metrics and triggers | (b), (c) | Core |
 | Service Bus queue | Service Bus | Trigger queue; retries, dead letter | (c) | Core |
 | Stats MCP server | Container Apps | Read-only stats tools for agents | (b), (c) | Core |
 | Match orchestrator | Container Apps + Microsoft Agent Framework | Five agents + Overlay builder | (c), (d), (e) | Core |
 | Microsoft Foundry | Foundry | Models, content safety, evaluations, tracing | (c), (e) | Core |
-| Insight ledger | Cosmos DB (free tier) | Insights, evidence, audits, approvals, overlays, viewer profiles | (c), (d) | Core |
-| Web PubSub | Web PubSub (Free tier) | Live overlay push | (d) | Core |
-| Studio app | Container Apps (web) | Producer console + fan view with mode, club, player, metric, language | (d), (e) | Core |
-| Fabric data agent | Fabric + Foundry | "Ask the match" for analysts | (e) | Stretch |
+| Insight ledger | Cosmos DB (free tier) | System of record: insights, evidence, audits, approvals, overlays, ops alerts, viewer profiles | (c), (d) | Core |
+| Web PubSub | Web PubSub (Free tier) | Live overlay and ops-alert push | (d) | Core |
+| Studio app | Container Apps (web) | Producer console (approvals, ops alerts) + fan view with mode, club, player, metric, language | (d), (e) | Core |
+| Match history (medallion) | Fabric Lakehouse | Bronze/Silver/Gold history | (b) | Stretch (needs Fabric) |
+| "Ask the match" | Fabric data agent + Foundry | Natural-language questions for analysts | (e) | Stretch (needs Fabric) |
 
 ## Live feed
 
 - **Interface:** `pitch_ledger.feed` defines `FeedPublisher` and `FeedSubscriber`. Adapters: a JSONL file (two local processes), in-memory (tests) and Azure Event Hubs (`infra_adapters/eventhubs.py`). `PITCH_LEDGER_FEED` picks one; domain code never imports the Event Hubs SDK.
 - **Messages:** the body is the feed row exactly as in `events.jsonl` / `tracking.jsonl`; properties carry the row kind and the send time (for latency). The partition key is the match ID, so each match's rows arrive in order.
 - **Sign-in:** Microsoft Entra ID (managed identity in Azure, the service principal locally), roles *Azure Event Hubs Data Sender* (Match Lab) and *Data Receiver* (engine). A SAS connection string also works.
-- **Switching to Fabric later, without code changes:**
-  1. Keep Event Hubs and add the hub as an **Eventstream source**, routing on to the Eventhouse and the RTI dashboard. Nothing changes in our code or settings. (Give Eventstream its own consumer group, which needs the Standard tier.)
-  2. Or replace the hub: create an Eventstream **custom endpoint** and set `PITCH_LEDGER_EVENTHUB_CONNECTION` to its connection string. Custom endpoints speak the Event Hubs protocol, so the same adapter is used.
+- **Transport:** plain AMQP inside Azure; AMQP over WebSockets (port 443) behind a proxy (`PITCH_LEDGER_EVENTHUB_TRANSPORT`, default `auto`).
+- **Measured (2026-10-09, from a Claude Code cloud session through its proxy, WebSockets):** no messages lost in any of five runs (up to 2,695 messages each); send-to-receive p50 2.5–3.3 s, p95 4.6–7.3 s. A single send takes about 0.27 s; delivery arrives in bursts on this path (best case 0.6 s). This is a pessimistic bound, not the Azure number: re-measure from Container Apps (same region, plain AMQP) in Phase 4.
 - **Commands:** `pitch-ledger stream <match_dir>` publishes at match pace; `pitch-ledger listen` lands the rows and reports send-to-receive latency.
+
+## Event store and dashboard (Azure Data Explorer)
+
+- **Free cluster:** an Azure Data Explorer free cluster (no Azure cost, no SLA) with one database. `ADX_CLUSTER_URI` and `ADX_DATABASE` locate it. It speaks KQL, the same language and engine as a Fabric Eventhouse.
+- **Writers, not a second source of truth:** the engine appends raw rows and its metric snapshots; the orchestrator appends trigger and insight status rows and ops alerts. Cosmos DB stays the system of record for the ledger; ADX is the analytical copy for queries and the dashboard. Writes go through an event-store adapter (`infra_adapters/`), batched every few seconds; domain code never imports the Kusto SDK.
+- **Tables (planned):** `Events` and `Tracking` (feed rows, schema doc columns), `TeamState` (engine snapshots per team and window), `Triggers`, `InsightStatus`, `OpsAlerts`, `FeedHealth` (latency and gaps per minute).
+- **Same numbers everywhere:** dashboard tiles show engine-computed values from `TeamState` and `Triggers`; KQL only filters, counts and charts them (and computes feed-health timings). The dashboard never derives its own football metrics, so the studio, the ledger and the dashboard agree.
+- **ADX dashboard (control room):** match clock and score, control score per team over time with momentum triggers marked, possession and pressing by window, feed latency and gaps, insight pipeline (drafted, blocked, approved, aired), latest ops alerts. Built in the Azure Data Explorer web UI against the free cluster; the tile queries are kept in the repo.
+- **Local-first:** without ADX settings, the event-store adapter writes the same tables as local files, so everything still runs offline.
+
+## Ops alerts (producer console)
+
+| Alert | Raised by | Initial rule |
+| --- | --- | --- |
+| Feed gap | Engine | No feed message for 10 s during play |
+| Feed lag | Engine | p95 send-to-receive latency above 5 s over a minute |
+| Validation reject | Engine (validation rules) | Any rejected row; flags summarized per minute |
+| Insight blocked | Orchestrator (Auditor) | Auditor blocks a draft after the last round |
+| Trigger dead-lettered | Trigger queue | A trigger exceeds its delivery attempts |
+| Model fallback | Model manager | A template fallback was used or the call budget is spent |
+
+Each alert is a record in the ledger (match, kind, severity, message, evidence references, raised time, acknowledged by), pushed through Web PubSub to an ops panel in the producer console, where the producer acknowledges it. Alerts are also appended to the `OpsAlerts` table for the dashboard and logged to Application Insights. Out-of-hours notification (Azure Monitor alert rules on the logs) is production path.
 
 ## Agents and orchestration
 
@@ -105,32 +125,45 @@ Across every service: Microsoft Entra ID (managed identities, producer sign-in),
 | Personalizer | Analyst, casual, club, player and single-metric versions | Small, fast | Concurrent fan-out per mode |
 | Translator | Every version into each language, numbers unchanged | Small, fast | Concurrent fan-out per language |
 
-Failure handling: a model error retries once, then falls back to a plain template overlay built from code-computed numbers; a blocked insight never airs and is logged; Service Bus dead-letters a trigger that keeps failing.
+Failure handling: a model error retries once, then falls back to a plain template overlay built from code-computed numbers; a blocked insight never airs and is logged; Service Bus dead-letters a trigger that keeps failing. Each of these raises an ops alert.
 
 ## Enterprise controls (built)
 
 - **No numbers from the model.** Every figure comes from code via read-only MCP tools; the Auditor recomputes before air.
 - **Evidence on every insight**, stored in the Cosmos DB ledger with continuous backup.
-- **Human in the loop:** Entra ID sign-in; only the producer role approves or blocks.
+- **Human in the loop:** Entra ID sign-in; only the producer role approves or blocks, and acknowledges ops alerts.
 - **Managed identities, no keys**; Key Vault only for secrets that cannot use Entra ID.
 - **Content safety** policies on every model deployment, as code.
 - **Agents, prompts and infrastructure as code**, deployed by GitHub Actions; model versions pinned.
-- **Data validation** at ingest.
+- **Data validation** at ingest; rejects raise ops alerts.
 - **Evaluations:** planted scenarios as a test suite (detection rate, false alerts, factual accuracy), tracked in Foundry.
-- **Observability:** Application Insights, Log Analytics, Foundry tracing from event to overlay.
-- **Cost controls:** token caps per agent, small model for rewrites, budget alerts, scale-to-zero, Event Hubs on the Basic tier and created only for the live-demo window.
+- **Observability:** Application Insights, Log Analytics, Foundry tracing from event to overlay; ADX dashboard for match and pipeline health; ops alerts in the producer console.
+- **Cost controls:** token caps per agent, small model for rewrites, budget alerts, scale-to-zero, Azure Data Explorer free cluster, Event Hubs on the Basic tier.
+
+## Future upgrade: Microsoft Fabric
+
+Fabric Real-Time Intelligence was the original plan; its trial is not available to this account (2026-10-09). Every piece used today has a direct Fabric counterpart, and the adapters keep the move small:
+
+| Today | Fabric counterpart | How to move |
+| --- | --- | --- |
+| Event Hubs (live feed) | Eventstream | Add the Event Hub as an Eventstream source (no code or setting change; Eventstream needs its own consumer group, so Event Hubs Standard), or replace the hub with an Eventstream custom endpoint by setting `PITCH_LEDGER_EVENTHUB_CONNECTION` (same adapter, Event Hubs protocol) |
+| ADX free cluster (event store) | Eventhouse (KQL database) | Same KQL engine: create the same tables and mappings, point the event-store adapter at the Eventhouse query URI; queries move unchanged |
+| ADX dashboard | Real-Time Dashboard | Same KQL tile queries; recreate the tiles against the Eventhouse |
+| Producer-console ops alerts | Activator | Add Activator rules on the `OpsAlerts` table for email or Teams notifications; the producer console stays the primary view |
+| (none) | Lakehouse, Fabric data agent | Stretch goals once Fabric is available |
 
 ## Production path (documented, not built)
 
-Private endpoints and a virtual network; Application Gateway with WAF and DDoS Protection; Azure Firewall for agent egress; zone-redundant and data-zone model deployments; API Management in front of models; Defender for AI services; Purview over Fabric data; separate dev, test and production Foundry resources.
+Private endpoints and a virtual network; Application Gateway with WAF and DDoS Protection; Azure Firewall for agent egress; zone-redundant and data-zone model deployments; API Management in front of models; Defender for AI services; a full Azure Data Explorer cluster or Fabric Eventhouse with an SLA instead of the free cluster; Azure Monitor alert rules for out-of-hours ops alerts; Purview over the data estate; separate dev, test and production Foundry resources.
 
 ## Cost plan (no hackathon credits provided)
 
 | Item | Approach |
 | --- | --- |
 | Azure subscription | Personal Azure free account ($200 credit, 30 days) in the personal Default Directory; upgrade to pay-as-you-go before credit expires so the demo stays live until judging ends (Nov 20) |
-| Fabric | Not available (trial not offered to this account); Fabric components deferred |
-| Event Hubs | Basic tier, 1 throughput unit: about $11/month plus about $0.03 per million events (check the pricing page). Recurring and not free: create it when Phase 4 deployment starts, delete it after judging (Nov 20) |
+| Event Hubs | Basic tier, 1 throughput unit: about $11/month plus about $0.03 per million events (check the pricing page). Created 2026-10-09 (`pitch-ledger-feed`); recurring, delete it after judging (Nov 20) |
+| Azure Data Explorer | Free cluster: no Azure cost, no SLA |
+| Fabric | Future upgrade (trial not available) |
 | Container Apps | Consumption plan free grant; scale to zero |
 | Cosmos DB | Lifetime free tier (1000 RU/s, 25 GB) |
 | Web PubSub | Free tier (20 connections, 20k messages/day) |
@@ -142,8 +175,10 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 
 ## Open items
 
-- [x] Live feed (2026-10-09): Fabric trial not available, so the live feed uses Azure Event Hubs behind the feed adapter. Measure the hop with `stream` + `listen` once the namespace exists.
-- [ ] Fabric-dependent pieces (Eventhouse storage and KQL, RTI dashboard, Activator alerts): decide whether to replace them with other Azure services or leave them out.
+- [x] Live feed (2026-10-09): Fabric trial not available, so the live feed uses Azure Event Hubs behind the feed adapter. First live measurement done from a cloud session (see Live feed); re-measure from Container Apps.
+- [x] Fabric-dependent pieces (2026-10-09): Eventhouse → Azure Data Explorer free cluster, RTI dashboard → ADX dashboard, Activator → ops alerts in the producer console. Fabric kept as a future upgrade.
+- [ ] ADX: confirm the free cluster accepts the service principal as a database ingestor and viewer, and the ingestion delay (set the tables' batching policy to a few seconds, or use streaming ingestion if the free cluster offers it).
+- [ ] Add the ops-alert record (and the ADX table columns) to `docs/event-schema.md` when they are built.
 - [ ] Hosted agents: if time allows, test the orchestrator as a Foundry hosted agent.
 - [ ] Confirm agent-capable models available in the chosen region (one stronger, one small).
 - [x] Fabric sign-up: the trial is not available for this account (2026-10-09).

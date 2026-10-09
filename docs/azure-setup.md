@@ -16,10 +16,14 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | App registration / service principal | `pitch-ledger-dev` | Signs in with a client secret from local runs and Claude Code cloud sessions |
 | Role on the Foundry resource | **Foundry User** → `pitch-ledger-dev` | Lets it call the models (data plane) |
 | Extra role (to remove) | Azure AI Administrator → `pitch-ledger-dev` | Control plane only; not needed for calling models. Remove it for least privilege |
+| Event Hubs namespace | `pitch-ledger-feed` (Basic) | Live feed; created 2026-10-09; recurring cost, delete after judging |
+| Event hub | `match-events` | One partition key per match |
+| Roles on the namespace | **Azure Event Hubs Data Sender** and **Data Receiver** → `pitch-ledger-dev` | Verified by a live `stream` + `listen` run (2026-10-09) |
+| Event store | Azure Data Explorer free cluster, one database | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`; service principal access not verified yet |
 
-Not provisioned yet: Event Hubs (live feed, steps below, waiting on the cost go-ahead), Cosmos DB, Service Bus, Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
+Not provisioned yet: Cosmos DB, Service Bus, Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
 
-Not available: **Microsoft Fabric**. The free trial isn't offered to this account (2026-10-09), so the live feed uses Azure Event Hubs, and Eventhouse, the RTI dashboard and Activator are deferred.
+Not available: **Microsoft Fabric**. The free trial isn't offered to this account (2026-10-09). The live feed uses Azure Event Hubs, the event store is the Azure Data Explorer free cluster with an ADX dashboard, and ops alerts live in the producer console. Fabric is a documented future upgrade (docs/architecture.md).
 
 ## Provisioning steps (Foundry + service principal)
 
@@ -86,7 +90,7 @@ Then run a capped live replay:
 uv run pitch-ledger replay data/M0002 --approve --inject-error --provider foundry --only momentum_shift --budget 25
 ```
 
-## Live feed: Azure Event Hubs (not provisioned yet)
+## Live feed: Azure Event Hubs (provisioned 2026-10-09)
 
 **Cost first:** Event Hubs has no free tier. The Basic tier with 1 throughput unit costs about **$11/month**, plus about $0.03 per million events (from memory; check the Azure pricing page for East US before creating it). It doesn't scale to zero, so create it when you need the live feed and delete it after judging (Nov 20). One full match is about 130,000 messages, a fraction of a cent in event charges.
 
@@ -95,13 +99,13 @@ Why Basic is enough: one sender (Match Lab), one reader (engine), one consumer g
 ### 1. Create the namespace and the hub
 
 1. Azure portal → **Create a resource → Event Hubs → Create**.
-2. Resource group: the Pitch Ledger one. Namespace name: e.g. `pitchledger-feed` (must be globally unique). Region: **East US** (same as Foundry). Pricing tier: **Basic**. Throughput units: **1**.
+2. Resource group: the Pitch Ledger one. Namespace name: `pitch-ledger-feed` (must be globally unique). Region: **East US** (same as Foundry). Pricing tier: **Basic**. Throughput units: **1**.
 3. Review + create.
-4. In the namespace: **+ Event Hub**. Name: `match-feed`. Partition count: **2** (one match uses one partition; more partitions don't help here). Retention: 1 day (Basic).
+4. In the namespace: **+ Event Hub**. Name: `match-events`. Partition count: **2** (one match uses one partition; more partitions don't help here). Retention: 1 day (Basic).
 
 ### 2. Roles for the app (Entra ID, no keys)
 
-On the **namespace** (or just the `match-feed` hub) → Access control (IAM) → Add role assignment, members = `pitch-ledger-dev`:
+On the **namespace** (or just the `match-events` hub) → Access control (IAM) → Add role assignment, members = `pitch-ledger-dev`:
 
 - **Azure Event Hubs Data Sender**: lets it publish (Match Lab, `stream`).
 - **Azure Event Hubs Data Receiver**: lets it read (engine, `listen`).
@@ -112,13 +116,13 @@ These are data-plane roles, like Foundry User for the models. A management role 
 
 ```
 PITCH_LEDGER_FEED=eventhubs
-PITCH_LEDGER_EVENTHUB_NAMESPACE=pitchledger-feed.servicebus.windows.net
-PITCH_LEDGER_EVENTHUB_NAME=match-feed
+PITCH_LEDGER_EVENTHUB_NAMESPACE=pitch-ledger-feed.servicebus.windows.net
+PITCH_LEDGER_EVENTHUB_NAME=match-events
 ```
 
 Sign-in reuses `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET`, or a managed identity in Container Apps. A SAS connection string (`PITCH_LEDGER_EVENTHUB_CONNECTION`, from the namespace's Shared access policies) also works. It's a secret, so keep it in the environment settings only.
 
-**Claude Code cloud sessions:** the environment's network access must allow **`*.servicebus.windows.net`**. Add it under Allowed domains if the network level is limited. The adapter uses AMQP over WebSockets on port 443, so it goes through the session proxy.
+**Claude Code cloud sessions:** the environment's network access must allow **`*.servicebus.windows.net`**. Add it under Allowed domains if the network level is limited. Behind the session proxy the adapter uses AMQP over WebSockets on port 443 automatically; elsewhere it uses plain AMQP (port 5671). `PITCH_LEDGER_EVENTHUB_TRANSPORT=websockets` forces 443 if a firewall blocks 5671.
 
 ### 4. Verify
 
@@ -136,12 +140,56 @@ uv run pitch-ledger stream data/M0002 --start-min 60 --minutes 2 --speed 10
 
 `listen` prints rows received and send-to-receive latency (p50/p95/p99), and writes `data/live/listen.json`.
 
+### Measured (2026-10-09, from a Claude Code cloud session)
+
+| Run | Messages | Lost | p50 | p95 | Max |
+| --- | --- | --- | --- | --- | --- |
+| 1 match minute at 1x (23 msg/s) | 1,341 | 0 | 3.3 s | 7.3 s | 9.3 s |
+| 30 s at 1x | 680 | 0 | 2.6 s | 6.3 s | 9.3 s |
+| 2 match minutes at 10x | 2,695 | 0 | 2.5 s | 4.6 s | 8.2 s |
+
+- A send takes about 0.27 s (round trip through the session proxy). Messages then arrive in **bursts** every few seconds rather than one by one; the best single delivery was 0.6 s. Pinning the reader to each partition made the bursts bigger, so it is the WebSocket path through the proxy, not the SDK's load balancer.
+- At 10x the publisher could only send about 3.7 batches a second (one round trip each), so it fell 25 s behind. Real-time pace (1 batch a second) keeps up.
+- These are **pessimistic** numbers for this sandbox. Re-measure from Container Apps (same region, plain AMQP), or from your laptop with the same two commands.
+
 ### Switching to Fabric Eventstream later
 
 No code changes either way (see docs/architecture.md, Live feed):
 
 - **Keep the hub, add Fabric on top:** in an Eventstream, add this Event Hub as a source and route it to an Eventhouse. Give Eventstream its own consumer group, which needs Standard.
 - **Replace the hub:** create an Eventstream custom endpoint source and set `PITCH_LEDGER_EVENTHUB_CONNECTION` to its connection string (Event Hub protocol, SAS). Remove the namespace settings.
+
+## Event store: Azure Data Explorer free cluster
+
+The free cluster costs nothing and has no SLA. It runs the same KQL engine as a Fabric Eventhouse, so tables and queries can move to Fabric later unchanged.
+
+### 1. Cluster and database
+
+1. Go to **dataexplorer.azure.com/freecluster** and sign in. Create the free cluster and a database (done 2026-10-09).
+2. Copy the **cluster URI** (`https://<cluster>.<region>.kusto.windows.net`) and the database name.
+
+### 2. Let the app read and write (run in the free cluster's query editor)
+
+```
+.add database ['<database>'] ingestors ('aadapp=<application-client-id>;<tenant-id>') 'pitch-ledger-dev'
+.add database ['<database>'] viewers ('aadapp=<application-client-id>;<tenant-id>') 'pitch-ledger-dev'
+```
+
+- *Ingestors* can write rows (engine, orchestrator); *viewers* can query (dashboard tiles run as you, the signed-in user).
+- Use the app's Application (client) ID and the Directory (tenant) ID from Entra ID → App registrations → `pitch-ledger-dev`. If the free cluster refuses an app principal, note the error; the fallback is ingesting as your own user from your laptop.
+
+### 3. Settings
+
+```
+ADX_CLUSTER_URI=https://<cluster>.<region>.kusto.windows.net
+ADX_DATABASE=<database>
+```
+
+**Claude Code cloud sessions:** allow **`*.kusto.windows.net`** in the environment's network access (it covers the query and the `ingest-` hosts).
+
+### 4. Tables, dashboard, verification
+
+Coming with the event-store adapter (Phase 4): the table definitions and dashboard tile queries are kept in the repo, and a command checks sign-in, permissions and a test write. The planned tables and dashboard tiles are in docs/architecture.md (Event store and dashboard).
 
 ## Lessons learned (first live run, 2026-10-09)
 
@@ -156,6 +204,10 @@ Each problem below blocked the first live run. Read the error, find the matching
 | 5 | Can't find "Azure AI User" in the role list | Renamed to **Foundry User** | Search "foundry" |
 | 6 | The momentum insight came out as templates in a `--budget 60` run | Calls are spent in match order, about 15 per insight (Explainer 1, Auditor 1, Personalizer 5, Translator 8). Earlier goals used the budget before the 68.9' momentum insight | For the demo, use `--only momentum_shift` (about 18 calls), or raise the budget |
 | 7 | A replay meant to be offline made Foundry calls | Once `PITCH_LEDGER_MODEL_PROVIDER=foundry` is set, `replay` defaults to Foundry | Always pass `--provider offline` or `--provider foundry` explicitly |
+| 8 | `listen` against Event Hubs: `ImportError('Please install websocket-client library to use sync websocket transport.')`, retried every ~30 s | The SDK needs an extra package for AMQP over WebSockets; tests with fake clients didn't catch it | Added `websocket-client` as a dependency, plus a test that checks it is installed |
+| 9 | Event Hubs latency of several seconds, arriving in bursts | The WebSocket path through the cloud session's proxy releases received data in bursts; each send is a ~0.27 s round trip | Treat sandbox numbers as an upper bound; measure from Container Apps or a laptop (plain AMQP) |
+| 10 | `listen` took minutes to exit after the last message | The SDK's `close()` blocked on the stalled link | `close()` now gives up after 10 s (daemon thread) |
+| 11 | New settings (feed, ADX) were saved but missing in the next session | The values didn't reach this session's environment (same pattern as lesson 1) | After editing, start a new session and check the variable *names* are present before testing; make sure you edit the environment this session uses |
 
 How to read the error codes:
 
@@ -183,5 +235,8 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [ ] Confirm a budget alert exists on the subscription.
 - [ ] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User. Turn off key auth on the Foundry resource. Put all resources in Bicep under `infra/`.
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
-- [ ] Event Hubs: create the namespace and hub (above) once the ~$11/month cost is approved; assign Data Sender and Data Receiver; verify with `listen` + `stream`; delete after judging.
-- [ ] Decide what replaces the Fabric-only pieces (event storage and KQL, control-room dashboard, ops alerts), or leave them out.
+- [x] Event Hubs: namespace `pitch-ledger-feed`, hub `match-events`, Data Sender and Data Receiver roles; verified with `listen` + `stream` (2026-10-09).
+- [ ] Event Hubs: delete the namespace after judging (Nov 20).
+- [ ] Add the feed settings (`PITCH_LEDGER_FEED`, `PITCH_LEDGER_EVENTHUB_NAMESPACE`, `PITCH_LEDGER_EVENTHUB_NAME`) and `ADX_CLUSTER_URI` / `ADX_DATABASE` to the cloud environment: they were missing from the 2026-10-09 session.
+- [ ] ADX: grant `pitch-ledger-dev` ingestor and viewer on the database (above); allow `*.kusto.windows.net` in the environment's network access.
+- [x] Fabric-only pieces replaced (2026-10-09): ADX free cluster (event store), ADX dashboard (control room), producer-console ops alerts. Fabric kept as a future upgrade.

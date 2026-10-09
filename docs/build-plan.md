@@ -11,7 +11,8 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 | Matches to generate | 6: one per planted scenario (late_collapse, high_press_switch, red_card, hot_streak, none) + one extra baseline |
 | Demo languages | English, Spanish, Filipino |
 | Names | One fictional league, clubs and players, generated once and kept fixed (committed as a roster file) |
-| Storage | Cosmos DB for the ledger; event storage was the Eventhouse (Fabric, deferred), replacement open |
+| Storage | Cosmos DB for the ledger (system of record); Azure Data Explorer free cluster as the event store (raw events, engine metrics, triggers, ops alerts) for KQL and the dashboard |
+| Control room and ops alerts | ADX dashboard for the control room; ops alerts (feed gaps and lag, validation rejects, blocked insights, dead letters, model fallbacks) in the producer console. Fabric (Eventhouse, RTI dashboard, Activator) is a documented future upgrade |
 | Live feed | Azure Event Hubs (Basic) behind the feed adapter (`PITCH_LEDGER_FEED=eventhubs`), because the Fabric trial is not available. Fabric Eventstream can take over later through its custom endpoint (settings only) or by reading the hub |
 | Repo | Public, MIT license, personal GitHub account |
 | Pass end point | A pass row stores its intended target as end_x/end_y, so difficulty recomputes exactly from the row; the next event shows where an incomplete pass was cut out or left the pitch |
@@ -46,7 +47,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 3. `engine/detector.py`: triggers with evidence event IDs.
 4. Scenario tests: each scenario is detected within its time limit; the baseline produces no false momentum alerts.
 5. **Azure setup in parallel:** personal subscription, budget alerts, resource group, Foundry project with two model deployments (confirm region availability).
-6. ~~**Latency spike:** Fabric trial, Eventstream → local Python consumer; time the hop.~~ Resolved 2026-10-09: the Fabric trial is not available, so the live feed is Azure Event Hubs. The feed adapter and `stream` / `listen` are built; measure the hop once the namespace exists.
+6. ~~**Latency spike:** Fabric trial, Eventstream → local Python consumer; time the hop.~~ Resolved 2026-10-09: the Fabric trial is not available, so the live feed is Azure Event Hubs. Measured from a cloud session through its proxy: no loss, p50 2.5–3.3 s, p95 4.6–7.3 s (pessimistic; re-measure from Container Apps).
 
 **Done when:** all 5 scenarios pass detection tests locally.
 
@@ -64,13 +65,14 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 
 ### Phase 4 — Studio app and deployment (Oct 20–23)
 
-1. Cosmos DB ledger and Service Bus queue adapters (same interfaces as the Phase 3 in-memory ones) and the Event Hubs namespace for the live feed, provisioned with the Bicep below; the engine reads the feed through the feed adapter.
-2. FastAPI `/api/v1`: matches, insights, overlays, approvals, viewer preferences.
-3. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors).
-4. Web PubSub live push.
-5. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps.
-6. ~~RTI dashboard (control room) and Activator ops alerts in Fabric.~~ Deferred: needs Fabric, which is not available. Decide a replacement or leave out.
-7. Managed identities, key auth disabled, content-safety policies, Application Insights and Foundry tracing.
+1. Cosmos DB ledger and Service Bus queue adapters (same interfaces as the Phase 3 in-memory ones), provisioned with the Bicep below (Event Hubs namespace already created by hand); the engine reads the feed through the feed adapter.
+2. Event-store adapter for the Azure Data Explorer free cluster (tables in the architecture doc; local-file fallback), written to by the engine and orchestrator.
+3. FastAPI `/api/v1`: matches, insights, overlays, approvals, viewer preferences.
+4. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors).
+5. Web PubSub live push.
+6. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps.
+7. ADX dashboard (control room) over the event store, tile queries kept in the repo; ops-alert records raised by the engine, orchestrator, queue and model manager, shown and acknowledged in the producer console.
+8. Managed identities, key auth disabled, content-safety policies, Application Insights and Foundry tracing.
 
 **Done when:** the public link replays a match end to end in Azure.
 

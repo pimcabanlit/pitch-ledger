@@ -1,5 +1,5 @@
 # pitch-ledger
-Audited, personalized match intelligence: a multi-agent engine on Azure that turns synthetic football events into real-time insights, narratives and recaps. Built with Microsoft Foundry, Agent Framework, Azure Event Hubs and Container Apps.
+Audited, personalized match intelligence: a multi-agent engine on Azure that turns synthetic football events into real-time insights, narratives and recaps. Built with Microsoft Foundry, Agent Framework, Azure Event Hubs, Azure Data Explorer and Container Apps.
 
 All data is synthetic and every club, player, venue and competition is fictional.
 

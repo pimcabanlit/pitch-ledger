@@ -47,7 +47,7 @@ Defaults follow my personal stack, with challenge-driven overrides marked **(ove
 | Agents | **(override)** Microsoft Agent Framework (Python), code-first orchestration |
 | Models | **(override)** Microsoft Foundry deployments: one stronger model (Explainer, Auditor, Narrator), one small fast model (Personalizer, Translator). Model names live in one config place only |
 | Tools for agents | **(override)** MCP server exposing read-only stats tools |
-| Live data | **(override)** Azure Event Hubs for the live feed, behind the feed adapter (Fabric trial not available; Fabric Eventstream can take over later through its custom endpoint, settings only). Eventhouse, RTI dashboard and Activator deferred |
+| Live data | **(override)** Azure Event Hubs for the live feed (feed adapter); Azure Data Explorer free cluster as the event store with an ADX dashboard for the control room; ops alerts in the producer console. Fabric RTI (Eventstream, Eventhouse, Real-Time Dashboard, Activator) is a future upgrade: the trial is not available |
 | Queue | **(override)** Azure Service Bus (trigger queue, retries, dead letter) |
 | Store | **(override)** Azure Cosmos DB (free tier) as the insight ledger, not Postgres |
 | Push | **(override)** Azure Web PubSub (Free tier) |
@@ -60,7 +60,7 @@ Architecture rules:
 - Organize code **by domain** (matchlab, engine, ledger, agents), not by technical type.
 - `core → domain → infrastructure`; inner layers never import outer ones.
 - **All model calls go through one model-manager module** (`agents/model_manager.py`). Nothing else imports a provider SDK.
-- **Every external service gets an adapter** in an infrastructure module (Eventstream/Event Hubs, Service Bus, Cosmos DB, Web PubSub). Domain code never imports a vendor SDK.
+- **Every external service gets an adapter** in an infrastructure module (Event Hubs/Eventstream, Azure Data Explorer, Service Bus, Cosmos DB, Web PubSub). Domain code never imports a vendor SDK.
 - **Local-first:** every service must run locally with file-based replay and in-memory or emulator adapters, no cloud needed. Cloud adapters are swapped in by config.
 
 ## Repo layout (target)
@@ -83,7 +83,7 @@ pitch-ledger/
     agents/                  model_manager, explainer, auditor, narrator, personalizer, translator, orchestrator, overlay builder
     ledger/                  insight ledger repository (Cosmos + in-memory)
     api/                     FastAPI app (/api/v1)
-    infra_adapters/          event hubs (also Fabric Eventstream endpoints), service bus, cosmos, web pubsub
+    infra_adapters/          event hubs (also Fabric Eventstream endpoints), azure data explorer, service bus, cosmos, web pubsub
   studio/                    Next.js app
   tests/                     mirrors src/
   data/                      generated outputs (gitignored except small samples/)
