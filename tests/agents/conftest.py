@@ -11,7 +11,7 @@ from pitch_ledger.engine.detector import detect
 from pitch_ledger.matchlab.build import build_match
 from pitch_ledger.matchlab.generator import MatchSpec, SimulatedMatch
 from pitch_ledger.matchlab.scenarios import load_manifest
-from pitch_ledger.schema import Trigger
+from pitch_ledger.schema import TrackingSample, Trigger
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class Case:
     sim: SimulatedMatch
     trigger: Trigger
     facts: Facts
+    tracking: list[TrackingSample]
 
 
 def _cases() -> list[Case]:
@@ -33,7 +34,7 @@ def _cases() -> list[Case]:
             if copy.supported(copy.copy_key(t)):
                 facts = build_facts(t, sim.teams, sim.players, sim.match.home_team_id,
                                     sim.match.away_team_id, by_id)  # fmt: skip
-                out.append(Case(sim, t, facts))
+                out.append(Case(sim, t, facts, tracking))
     return out
 
 
