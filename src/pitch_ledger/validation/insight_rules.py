@@ -6,7 +6,7 @@ it to the stats engine, which recomputes each metric from the evidence events.
 """
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 
 from pitch_ledger.schema import Insight
 from pitch_ledger.validation.results import ValidationResult, violation
@@ -16,9 +16,24 @@ Recompute = Callable[[Insight], Mapping[str, float]]
 _NUMBER = re.compile(r"(?<![\w.])\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\w])|(?<![\w.,])\d+(?:\.\d+)?")
 
 
-def extract_numbers(text: str) -> list[str]:
-    """Numbers as written in ``text`` (thousands separators kept). IDs like T02 are skipped."""
+DECIMAL_COMMA_LANGUAGES = frozenset({"es"})
+"""Languages that write decimals with a comma (6,2); copy in them uses no thousands separator."""
+
+
+def extract_numbers(text: str, language: str = "en") -> list[str]:
+    """Numbers as written in ``text`` (thousands separators kept). IDs like T02 are skipped.
+
+    For decimal-comma languages, "6,2" is read as 6.2.
+    """
+    if language.split("-")[0] in DECIMAL_COMMA_LANGUAGES:
+        text = re.sub(r"(\d),(\d)", r"\1.\2", text)
     return _NUMBER.findall(text)
+
+
+def unsupported_numbers(text: str, values: Iterable[float], language: str = "en") -> list[str]:
+    """Numbers in ``text`` that match none of ``values`` at their written precision."""
+    allowed = list(values)
+    return [w for w in extract_numbers(text, language) if not any(_matches(w, v) for v in allowed)]
 
 
 def _decimals(written: str) -> int:
@@ -33,10 +48,9 @@ def _matches(written: str, value: float) -> bool:
 def check_insight(insight: Insight, recompute: Recompute | None = None) -> list[ValidationResult]:
     """Return INS-01 results (empty when the insight may air)."""
     out = []
-    values = list(insight.metrics.values())
-    for written in extract_numbers(f"{insight.headline}\n{insight.explanation}"):
-        if not any(_matches(written, v) for v in values):
-            out.append(violation("INS-01", None, f"{insight.insight_id}: {written} not in metrics"))
+    text = f"{insight.headline}\n{insight.explanation}"
+    for written in unsupported_numbers(text, insight.metrics.values()):
+        out.append(violation("INS-01", None, f"{insight.insight_id}: {written} not in metrics"))
     if recompute is not None:
         fresh = recompute(insight)
         for name, stated in insight.metrics.items():

@@ -178,6 +178,8 @@ class Detector:
             "turnovers_after": after.turnovers,
             "own_half_turnovers_after": after.own_half_turnovers,
             "minutes_since_onset": round((now - onset) / MIN, 1),
+            "onset_minute": _minute(p, onset),
+            "minute": _minute(p, now),
             "evidence_score": round(alert.score, 1),
         }
         if opp_before.ppda is not None:
