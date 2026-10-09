@@ -115,6 +115,23 @@ Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed l
 
 Each alert is a record in the ledger (match, kind, severity, message, evidence references, raised time, acknowledged by), pushed through Web PubSub to an ops panel in the producer console, where the producer acknowledges it. Alerts are also appended to the `OpsAlerts` table for the dashboard and logged to Application Insights. Out-of-hours notification (Azure Monitor alert rules on the logs) is production path.
 
+## API (`/api/v1`)
+
+FastAPI (`pitch_ledger.api`, `pitch-ledger api`); OpenAPI docs at `/api/v1/docs`. Reads the same ledger as the orchestrator (local files or Cosmos DB) and the match files.
+
+| Endpoint | Who | Returns |
+| --- | --- | --- |
+| `GET /api/v1/health` | anyone | status, ledger, match count |
+| `GET /api/v1/matches`, `GET /api/v1/matches/{id}` | anyone | teams, kickoff, venue; players' display names, score, last minute |
+| `GET /api/v1/matches/{id}/overlays?mode=&language=` | anyone (fan view) | overlays of **aired** insights only, in match order |
+| `GET /api/v1/me` | producer | the signed-in producer |
+| `GET /api/v1/matches/{id}/insights?status=` | producer | every insight with status (aired, pending, blocked) |
+| `GET /api/v1/insights/{id}` | producer | insight, audit trail, cited evidence events, overlays |
+| `POST /api/v1/insights/{id}/decision` | producer | approve or block; approval runs the Personalizer and Translator |
+
+- **Producer sign-in:** a Microsoft Entra ID access token for the API app registration with the `Producer` app role. The producer's identity (recorded as `approved_by`) comes from the verified token, never from the request. If the API's Entra settings are missing, producer endpoints refuse (fail closed); `PITCH_LEDGER_API_AUTH=dev` is a local-only stand-in.
+- **Controls:** request bodies reject unknown fields; IDs are pattern-checked before they reach a file path; CORS is limited to the Studio's origin; decisions are rate-limited per producer (they cost model calls); responses are dedicated schemas (fans never see ratings, audits or pending insights).
+
 ## Agents and orchestration
 
 | Agent | Job | Model tier | Pattern |

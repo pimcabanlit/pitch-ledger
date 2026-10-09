@@ -316,6 +316,19 @@ The queue name defaults to `triggers` (`PITCH_LEDGER_SERVICEBUS_QUEUE`). `*.serv
 
 `uv run pitch-ledger replay data/M0002 --approve --inject-error --ledger cosmos --queue servicebus` runs the agents with the ledger in Cosmos DB and the triggers through Service Bus (the flags override the settings).
 
+## API sign-in for producers (needed with the Studio app)
+
+Not set up yet; do this when the Studio producer console is built. Until then run the API with `PITCH_LEDGER_API_AUTH=dev` on your own machine only.
+
+1. Entra ID → **App registrations** → **New registration** → name `pitch-ledger-api`, single tenant → Register. Note its **Application (client) ID**.
+2. **Expose an API** → Application ID URI → Add (accept `api://<client-id>`) → **Add a scope** `access_as_producer` (admins and users can consent).
+3. **App roles** → **Create app role**: display name `Producer`, allowed member types **Users/Groups**, value **`Producer`**.
+4. **Manifest** → set `"requestedAccessTokenVersion": 2` (under `api`) → Save. The API checks v2 tokens: issuer `https://login.microsoftonline.com/<tenant>/v2.0`, audience = the client ID.
+5. Entra ID → **Enterprise applications** → `pitch-ledger-api` → **Users and groups** → **Add user/group** → yourself, role **Producer**.
+6. Settings: `PITCH_LEDGER_API_AUTH=entra`, `PITCH_LEDGER_API_AUDIENCE=<client ID>` (the tenant comes from `AZURE_TENANT_ID`).
+
+The Studio app gets its own app registration (a single-page app) that requests the `access_as_producer` scope; that comes with the Studio.
+
 ## Lessons learned (first live run, 2026-10-09)
 
 Each problem below blocked the first live run. Read the error, find the matching row, apply the fix.
