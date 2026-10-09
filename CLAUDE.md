@@ -95,6 +95,7 @@ pitch-ledger/
 uv sync                                  # install
 uv run pytest                            # tests
 uv run ruff check . && uv run ruff format --check .
+uv run mypy                              # strict type check of src/pitch_ledger
 uv run pitch-ledger generate --scenario none --seed 4211 --out data/M0001
 uv run pitch-ledger validate data/M0001
 uv run pitch-ledger realism data/M0001   # compare against realism bands

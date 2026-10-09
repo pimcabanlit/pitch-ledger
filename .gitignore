@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Pitch Ledger
+# Generated match data; small committed samples live in data/samples/
+data/*
+!data/samples/
+!data/samples/**
+.env.*
+!.env.example
