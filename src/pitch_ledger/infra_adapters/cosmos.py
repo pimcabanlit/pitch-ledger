@@ -125,6 +125,10 @@ class CosmosLedger(InMemoryLedger):
                 key = (match_id, id_kind)
                 self._counters[key] = max(self._counters[key], number)
 
+    def load(self, match_id: str) -> None:
+        """Read a match's documents now (they also load on the first write or new ID)."""
+        self._touch(match_id)
+
     def _write(self, match_id: str, doc: dict[str, Any]) -> None:
         self._container.upsert_item(doc)
         self.writes += 1

@@ -516,6 +516,15 @@ def cmd_check_queue(args: argparse.Namespace) -> int:
     return 0 if all(c.ok for c in checks) else 1
 
 
+def cmd_api(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from pitch_ledger.api.app import create_app
+
+    uvicorn.run(create_app(), host=args.host, port=args.port)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pitch-ledger", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -626,6 +635,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     ckq = sub.add_parser("check-queue", help="check Service Bus settings, sign-in and a probe")
     ckq.set_defaults(func=cmd_check_queue)
+
+    api = sub.add_parser("api", help="serve the /api/v1 API (Uvicorn)")
+    api.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")
+    api.add_argument("--port", type=int, default=8000, help="port (default 8000)")
+    api.set_defaults(func=cmd_api)
     return parser
 
 

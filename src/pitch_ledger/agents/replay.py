@@ -20,6 +20,7 @@ from pitch_ledger.agents.model_manager import ModelManager, ModelSettings
 from pitch_ledger.agents.orchestrator import (
     MatchContext,
     Orchestrator,
+    Outcome,
     ReplayReport,
     clock_order,
     first_momentum,
@@ -140,3 +141,35 @@ async def replay_match(
         (ledger_dir / RUN_FILE).write_text(json.dumps(summary, indent=2) + "\n", "utf-8")
         run.ledger_dir = ledger_dir
     return run
+
+
+async def decide_insight(
+    match_dir: Path,
+    ledger: InMemoryLedger,
+    insight_id: str,
+    producer: str,
+    approve: bool,
+    reason: str | None = None,
+    provider: Literal["offline", "foundry"] | None = None,
+    stats: Literal["mcp", "local"] = "local",
+) -> Outcome:
+    """A producer's decision on a pending insight (the Studio console): approve runs the
+    Personalizer and Translator and stores the overlays; block records the block. An insight
+    that is already decided is left as it is. The ledger is flushed if it is a file ledger."""
+    files = read_match(match_dir, with_tracking=False)
+    events = [Event.model_validate(e) for e in files.events]
+    context = MatchContext(files.match, files.teams, files.players, {e.event_id: e for e in events})
+    async with AsyncExitStack() as stack:
+        models = await stack.enter_async_context(
+            ModelManager(_settings(ReplayOptions(provider=provider)))
+        )
+        gateway: LocalStats | McpStats
+        if stats == "mcp":
+            gateway = await stack.enter_async_context(McpStats(match_dir))
+        else:
+            gateway = LocalStats(StatsTools(match_dir))
+        svc = Services(files.match.match_id, models, Auditor(models, gateway), ledger)
+        outcome = await Orchestrator(svc, context).decide(insight_id, producer, approve, reason)
+    if isinstance(ledger, FileLedger):
+        ledger.flush()
+    return outcome
