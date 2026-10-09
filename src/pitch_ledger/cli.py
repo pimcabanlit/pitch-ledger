@@ -1,4 +1,4 @@
-"""``pitch-ledger`` command line: generate, validate, detect and replay matches."""
+"""``pitch-ledger`` command line: generate, validate, detect, replay and evaluate."""
 
 import argparse
 import re
@@ -249,6 +249,56 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 1 if summary["dead_letters"] else 0
 
 
+def cmd_evaluate(args: argparse.Namespace) -> int:
+    import json
+
+    from pitch_ledger.scorecard import build_scorecard
+
+    entries = load_manifest()
+    if args.match:
+        entries = [e for e in entries if e.match_id in set(args.match)]
+        if not entries:
+            print(f"no demo match among {', '.join(args.match)}", file=sys.stderr)
+            return 2
+    card = build_scorecard(entries, args.sweep, args.provider)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(card, indent=2) + "\n", "utf-8")
+    d, a, p, c, o, u = (
+        card[k] for k in ("detection", "accuracy", "planted", "coverage", "outcomes", "usage")
+    )
+    print(f"scorecard for {', '.join(card['matches'])} ({u['model_version']})")
+    print(
+        f"  detection: {d['detection_rate']} of planted scenarios in time (mean latency "
+        f"{d['latency_min']['mean']} min); false alerts {d['false_alerts']}; seed sweep "
+        f"{d['sweep_detection_rate']} detected, {d['sweep_false_alert_rate']} with false alerts"
+    )
+    print(
+        f"  accuracy: {a['accurate_insights']}/{a['aired_insights']} aired insights recompute "
+        f"exactly ({a['overlays_checked']} overlays checked)"
+    )
+    print(
+        f"  planted errors: {p['caught']}/{p['planted']} caught; wrong numbers passed "
+        f"{p['wrong_numbers_passed']}; final {p['final_status']}"
+    )
+    print(
+        f"  coverage: {c['complete_mode_language_sets']}/{c['insights_with_overlays']} insights "
+        f"in every mode and language; template fallbacks {c['template_fallbacks']}"
+    )
+    print(
+        f"  outcomes: {o['audit_status']}; first-pass approval {o['first_pass_approval']}; "
+        f"processing p50 {o['processing_s']['p50']} s"
+    )
+    print(
+        f"  model calls {u.get('calls', 0)} ({u.get('failures', 0)} failed; tokens in "
+        f"{u.get('input_tokens', 0)}, out {u.get('output_tokens', 0)})"
+    )
+    for name, ok in card["gates"].items():
+        print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
+    print(f"scorecard -> {out}")
+    return 0 if card["passed"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pitch-ledger", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -308,6 +358,13 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--only", help="comma-separated insight types or rule IDs to process")
     rep.add_argument("--budget", type=int, help="model call budget for paid providers")
     rep.set_defaults(func=cmd_replay)
+
+    ev = sub.add_parser("evaluate", help="scorecard: detection, accuracy, planted errors, coverage")
+    ev.add_argument("--out", default="data/scorecard.json", help="JSON output path")
+    ev.add_argument("--sweep", type=int, default=5, help="seeds per demo match in the sweep")
+    ev.add_argument("--provider", choices=["offline", "foundry"], help="model provider")
+    ev.add_argument("--match", action="append", help="limit to these demo match IDs")
+    ev.set_defaults(func=cmd_evaluate)
     return parser
 
 

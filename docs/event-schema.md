@@ -247,10 +247,28 @@ Fire at a score of 10; onset is when the score last left zero. At most one alert
 | metrics | object | {own_half_turnovers: 4, window_min: 6, control_before: 64, control_after: 31, ppda: 6.2} — every number used in the text |
 | evidence_event_ids | list | [M0001-E000598, …] |
 | confidence | number | 0.86 |
-| audit_status | enum | `pending`, `approved`, `corrected`, `blocked` |
+| audit_status | enum | `pending` (not audited yet), `approved` (passed on the first draft), `corrected` (passed after revision), `blocked` (failed after 2 revisions, or blocked by the producer) |
 | audit_notes | string | Recomputed 4 turnovers from evidence: matches |
-| approved_by | string | producer_demo or auto-approval rule |
-| created_by_agent, model_version | string | explainer, v0.1 |
+| approved_by | string | producer_demo or auto-approval rule (empty: waiting for the producer) |
+| created_by_agent, model_version | string | `explainer`, `narrator` or `template`; `offline-templates` or `foundry:<strong>\|<small>` |
+| trigger_id | string | M0001-T0040 — the trigger the insight explains |
+
+An insight airs only when `approved_by` is set and `audit_status` is not `blocked`. Its `metrics` are copied by code from the trigger (agents name metric keys; they never supply values).
+
+**audit record** (the ledger's audit trail: one row per step, in order)
+
+| Field | Type | Example |
+| --- | --- | --- |
+| audit_id | string | M0002-A0071 |
+| match_id, insight_id, trigger_id | string | M0002, M0002-I0016, M0002-T0040 |
+| round | integer | 1, 2, 3 for explain/audit rounds; 0 for producer and copy steps |
+| actor | string | `explainer`, `narrator`, `auditor`, `copy_check`, `test`, or the producer's name |
+| action | enum | `draft`, `inject_error`, `check`, `review`, `revise`, `approve`, `correct`, `block`, `producer_approve`, `producer_block`, `fallback` |
+| passed | boolean | false for a check with findings |
+| findings | list | ["INS-01: '32' in the text matches no cited metric (cited: turnovers_after=16, …)"] |
+| headline, explanation | string | the draft as checked (draft, check and inject_error steps) |
+
+A planted error (`inject_error`, actor `test`) is recorded as such, so the trail shows a deliberate test rather than a model mistake.
 
 **overlay** (one per audience and language)
 
@@ -316,6 +334,9 @@ Run at ingest before any agent sees an event. **Reject** stops the row and logs 
 | Match | Exactly one period_start and one period_end per period | Reject |
 | Match | Totals within realism bands (below) | Flag |
 | Insight | Every number in an insight's text appears in `metrics` and recomputes from its evidence | Block insight |
+| Copy | Every number in each personalized or translated overlay text matches a recomputed trigger metric | Retry once, then template copy |
+
+Numbers are compared at the precision they are written with ("64" matches 64.3; "6.2" matches 6.2, not 6.3). In decimal-comma languages (Spanish) "79,3" is read as 79.3, and their copy uses no thousands separator; English and Filipino use a decimal point. Signs, units and percent marks are ignored; identifiers such as T02 are not numbers.
 
 ## Realism targets (calibrated from published league averages only)
 

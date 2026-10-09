@@ -17,6 +17,11 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 | Scenario pairings and seeds (home vs away) | M0001 none T01 vs T02 (4211); M0002 late_collapse T01 vs T02 (4212); M0003 high_press_switch T06 vs T02 (4213); M0004 red_card T03 vs T04 (4213); M0005 hot_streak T05 vs T06 (4212); M0006 none T02 vs T01 (4212). Selection rule in `scenarios/matches.yaml` |
 | Momentum detection | Evidence accumulation (CUSUM) on pass outcomes vs the difficulty model, pressured passes and possession endings, not the 5-minute 20-point rule (which fired ~11 times per baseline match); control score kept for explanation |
 | Planted effect size | Dramatic effects, 15-minute detection limit (37–40 of 40 seeds detected per scenario; momentum false alerts in 1 of 80 baseline matches) |
+| Agent flow by insight type | Momentum shift, key moment, player form and recap: Explainer (Narrator for recaps) ⇄ Auditor, producer approval, five audience modes in three languages. Speed alerts: template copy, code audit, auto-approved. Milestones and pass quality: stored in the ledger, not processed |
+| Player form rate | Fires in about 8% of baseline matches; accepted |
+| Planted error | `--inject-error` doubles a count in the first draft of the first momentum insight (M0002: 16 turnovers written as 32); the Auditor must reject it and the corrected draft airs |
+| Models | Offline templates by default (zero cost, also the fallback); live Foundry calls once the project settings exist, capped by a per-run call budget |
+| Cloud adapters | Cosmos DB ledger and Service Bus queue adapters move to Phase 4 with the Bicep; Phase 3 builds the interfaces with in-memory and local-file adapters |
 
 ## Phases
 
@@ -49,21 +54,22 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 1. `agents/model_manager.py` (single entry point to Foundry; token caps; retries; fallback).
 2. Stats MCP server with read-only tools: `get_events`, `get_team_state`, `get_player_stats`, `recompute_metric`.
 3. Explainer, Auditor (maker-checker, max 2 rounds), Narrator (handoff at breaks), Personalizer and Translator (concurrent), Overlay builder (code).
-4. Ledger repository: in-memory for tests, Cosmos DB adapter for cloud.
-5. Service Bus trigger queue with retry and dead letter (in-memory adapter locally).
+4. Ledger repository interface: in-memory for tests, local JSONL files for replays (Cosmos DB adapter in Phase 4).
+5. Trigger queue interface with retry and dead letter: in-memory adapter (Service Bus adapter in Phase 4).
 6. **Planted error test:** inject a wrong number into an Explainer draft and assert the Auditor blocks or corrects it. This is the demo's key moment.
-7. Evaluation script: detection rate, false alerts, factual accuracy across all scenario matches; results pushed to Foundry evaluations.
+7. Evaluation script: detection rate, false alerts, factual accuracy across all scenario matches; results pushed to Foundry evaluations once the live models are configured.
 
 **Done when:** replaying a scenario match locally produces audited insights and overlays in three languages and five audience modes, with the evaluation scorecard.
 
 ### Phase 4 — Studio app and deployment (Oct 20–23)
 
-1. FastAPI `/api/v1`: matches, insights, overlays, approvals, viewer preferences.
-2. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors).
-3. Web PubSub live push.
-4. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps.
-5. RTI dashboard (control room) and Activator ops alerts in Fabric.
-6. Managed identities, key auth disabled, content-safety policies, Application Insights and Foundry tracing.
+1. Cosmos DB ledger and Service Bus queue adapters (same interfaces as the Phase 3 in-memory ones), provisioned with the Bicep below.
+2. FastAPI `/api/v1`: matches, insights, overlays, approvals, viewer preferences.
+3. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors).
+4. Web PubSub live push.
+5. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps.
+6. RTI dashboard (control room) and Activator ops alerts in Fabric.
+7. Managed identities, key auth disabled, content-safety policies, Application Insights and Foundry tracing.
 
 **Done when:** the public link replays a match end to end in Azure.
 
