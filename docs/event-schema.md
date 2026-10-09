@@ -224,7 +224,7 @@ d = distance to goal centre (m); θ = angle in radians between the lines to each
 | subject | object | {team_id: T02} |
 | headline | string | Away side's build-up has broken down |
 | explanation | string | 4 own-half turnovers in 6 minutes since the home side switched to a high press |
-| metrics | object | {control_before: 64, control_after: 31, ppda: 6.2} — every number used in the text |
+| metrics | object | {own_half_turnovers: 4, window_min: 6, control_before: 64, control_after: 31, ppda: 6.2} — every number used in the text |
 | evidence_event_ids | list | [M0001-E000598, …] |
 | confidence | number | 0.86 |
 | audit_status | enum | `pending`, `approved`, `corrected`, `blocked` |
@@ -307,9 +307,9 @@ A scripted change injected at a known minute; each doubles as a test (the engine
 | --- | --- |
 | scenario_id | late_collapse |
 | description | Away side tires and loses control after 60' |
-| trigger | {period: 2, minute: 60} |
+| trigger | {period: 2, minute: 60} — `minute` is the match minute (60' = period 2 clock 15:00) |
 | team_id or player_id | T02 |
-| effects | {pass_success: −0.08, turnover_rate: ×1.6, top_speed: ×0.92} |
+| effects | {pass_success: {op: add, value: −0.08}, turnover_rate: {op: mul, value: 1.6}, top_speed: {op: mul, value: 0.92}} |
 | expected_detection | {insight_type: momentum_shift, team_id: T02, within_min: 6} |
 
 | scenario_id | Planted | Engine should say |

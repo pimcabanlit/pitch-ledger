@@ -1,1 +1,48 @@
 """Pydantic models and enums for every table and output object in docs/event-schema.md."""
+
+from pitch_ledger.schema.details import (
+    CardDetails,
+    DuelDetails,
+    EventDetails,
+    FoulDetails,
+    GoalkeeperDetails,
+    NoDetails,
+    PassDetails,
+    PressureDetails,
+    ShotDetails,
+    SubstitutionDetails,
+    details_model_for,
+)
+from pitch_ledger.schema.event import Event
+from pitch_ledger.schema.insight import Insight, InsightSubject
+from pitch_ledger.schema.overlay import Overlay
+from pitch_ledger.schema.reference import Match, Player, Ratings, Team
+from pitch_ledger.schema.scenario import Effect, ExpectedDetection, Scenario, ScenarioTrigger
+from pitch_ledger.schema.tracking import TrackingSample
+
+__all__ = [
+    "CardDetails",
+    "DuelDetails",
+    "Effect",
+    "Event",
+    "EventDetails",
+    "ExpectedDetection",
+    "FoulDetails",
+    "GoalkeeperDetails",
+    "Insight",
+    "InsightSubject",
+    "Match",
+    "NoDetails",
+    "Overlay",
+    "PassDetails",
+    "Player",
+    "PressureDetails",
+    "Ratings",
+    "Scenario",
+    "ScenarioTrigger",
+    "ShotDetails",
+    "SubstitutionDetails",
+    "Team",
+    "TrackingSample",
+    "details_model_for",
+]
