@@ -79,7 +79,7 @@ Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed l
 | Match orchestrator | Container Apps + Microsoft Agent Framework | Five agents + Overlay builder | (c), (d), (e) | Core |
 | Microsoft Foundry | Foundry | Models, content safety, evaluations, tracing | (c), (e) | Core |
 | Insight ledger | Cosmos DB (free tier) | System of record: insights, evidence, audits, approvals, overlays, ops alerts, viewer profiles. One container `ledger`, partition key `/match_id`; write-through adapter `infra_adapters/cosmos.py` | (c), (d) | Core |
-| Web PubSub | Web PubSub (Free tier) | Live overlay and ops-alert push | (d) | Core |
+| Web PubSub | Web PubSub (Free tier), hub `studio` | Change signals to the Studio per match (`fans.<match>`, `producers.<match>`); clients re-read through the API | (d) | Core |
 | Studio app | Container Apps (web), Next.js (`studio/`) | Producer console (queue, audit trail, evidence, approve/block; ops alerts to come) + fan view with mode, language, club (player and metric pickers to come); calls `/api/v1` through a Next.js rewrite | (d), (e) | Core |
 | Match history (medallion) | Fabric Lakehouse | Bronze/Silver/Gold history | (b) | Stretch (needs Fabric) |
 | "Ask the match" | Fabric data agent + Foundry | Natural-language questions for analysts | (e) | Stretch (needs Fabric) |
@@ -111,6 +111,13 @@ The feed, queue, ledger and store are the same interfaces as everywhere else (Ev
 - **Same numbers everywhere:** dashboard tiles show engine-computed values from `TeamState` and `Triggers`; KQL only filters, counts and charts them (and computes feed-health timings). The dashboard never derives its own football metrics, so the studio, the ledger and the dashboard agree.
 - **ADX dashboard (control room):** match clock and score, control score per team over time with momentum triggers marked, possession and pressing by window, feed latency and gaps, insight pipeline (drafted, blocked, approved, aired), latest ops alerts. Built in the Azure Data Explorer web UI against the free cluster; the tile queries are kept in the repo.
 - **Local-first:** without ADX settings, the event-store adapter writes the same tables as local files, so everything still runs offline.
+
+## Live push (Web PubSub)
+
+- **Signals, not data:** when the live worker stores an insight, or a producer approves or blocks one, the server sends `{"event": "insight_changed" | "overlays_changed", "match_id", "insight_id", "status"}` to the match's group (`producers.<match>`, and `fans.<match>` once aired). Clients then re-read through the API, so the rule "fans see aired overlays only" lives in one place.
+- **Connecting:** the browser gets a short-lived URL (60 minutes, one group) from `/api/v1/realtime/negotiate` (fans) or `/negotiate/producer` (producer sign-in) and connects straight to Web PubSub.
+- **Fallbacks:** push off or disconnected, the fan view polls every 5 s and the producer console every 10 s; while push is connected a 30 s poll stays as a safety net. Sends fail open (logged): the ledger is the source of truth.
+- **Interface:** `pitch_ledger.push.Notifier`; `NullNotifier` locally, `infra_adapters/webpubsub.py` in Azure (`PITCH_LEDGER_PUSH=webpubsub`).
 
 ## Ops alerts (producer console)
 

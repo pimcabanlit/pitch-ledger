@@ -316,6 +316,31 @@ The queue name defaults to `triggers` (`PITCH_LEDGER_SERVICEBUS_QUEUE`). `*.serv
 
 `uv run pitch-ledger replay data/M0002 --approve --inject-error --ledger cosmos --queue servicebus` runs the agents with the ledger in Cosmos DB and the triggers through Service Bus (the flags override the settings).
 
+## Live push: Azure Web PubSub (Free tier)
+
+Sends small "something changed" signals to the Studio so the fan view and the producer console update at once instead of polling. **Cost:** the Free tier (Free_F1) has no charge: 20 concurrent connections and 20,000 messages a day, plenty for the demo. It's limited to one Free unit per subscription.
+
+### 1. Create the resource
+
+1. Azure portal → **Create a resource** → search **Web PubSub Service** → Create.
+2. Resource group: the Pitch Ledger one. Name: `pitch-ledger-push` (globally unique). Region: **East US**. Pricing tier: **Free**. Review + create → Create.
+3. No hub needs creating: the hub `studio` exists as soon as it's used.
+
+### 2. Role for the app
+
+On the resource → Access control (IAM) → Add role assignment → **Web PubSub Service Owner** → member `pitch-ledger-dev`. This lets the server send to groups and sign client URLs. Allow 5–10 minutes.
+
+### 3. Settings and check
+
+```
+PITCH_LEDGER_PUSH=webpubsub
+PITCH_LEDGER_WEBPUBSUB_ENDPOINT=https://pitch-ledger-push.webpubsub.azure.com
+```
+
+The endpoint is on the resource's Overview page (Host name, with `https://`). Cloud sessions: allow **`*.webpubsub.azure.com`** in the environment's network access. Then `uv run pitch-ledger check-push` signs a client URL and sends one test signal.
+
+Browsers connect straight to Web PubSub with a short-lived URL from `GET /api/v1/realtime/negotiate?match_id=…` (fans; `/negotiate/producer` needs producer sign-in). Each URL joins one group: `fans.<match>` or `producers.<match>`.
+
 ## API sign-in for producers (needed with the Studio app)
 
 Not set up yet; do this when the Studio producer console is built. Until then run the API with `PITCH_LEDGER_API_AUTH=dev` on your own machine only.
@@ -379,6 +404,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
 - [x] Event Hubs: namespace `pitch-ledger-feed`, hub `match-events`, Data Sender and Data Receiver roles; verified with `listen` + `stream` (2026-10-09).
 - [ ] Event Hubs: delete the namespace after judging (Nov 20).
+- [ ] Web PubSub: create `pitch-ledger-push` (Free), Web PubSub Service Owner role, settings; `check-push`.
 - [x] Feed settings and `ADX_CLUSTER_URI` / `ADX_DATABASE` in the cloud environment; `listen` + `stream` pass with them (1,341/1,341 messages, p50 2.3 s from the cloud session).
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
 - [x] ADX tables created; `check-store` passes (streaming write readable after 3.5 s); M0002 loaded (`store --store adx`, 129,781 rows in 23 s); live `listen --store adx` verified with test match M0099 (1,343 rows, feed health).
