@@ -13,6 +13,8 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 | Names | One fictional league, clubs and players, generated once and kept fixed (committed as a roster file) |
 | Storage | Eventhouse for events; Cosmos DB for the ledger |
 | Repo | Public, MIT license, personal GitHub account |
+| Pass end point | A pass row stores its intended target as end_x/end_y, so difficulty recomputes exactly from the row; the next event shows where an incomplete pass was cut out or left the pitch |
+| Scenario pairings (home vs away) | none: T01 vs T02, seed 4211 (baseline); late_collapse: T01 vs T02; high_press_switch: T06 vs T02; red_card, hot_streak and the extra baseline still to choose |
 
 ## Phases
 
