@@ -118,6 +118,8 @@ uv run pitch-ledger check-store           # ADX settings, sign-in, roles, tables
 uv run pitch-ledger check-ledger          # Cosmos DB settings, sign-in, one document written, read, deleted
 uv run pitch-ledger check-queue           # Service Bus settings, sign-in, one probe trigger sent and received
 PITCH_LEDGER_API_AUTH=dev uv run pitch-ledger api   # /api/v1 on 127.0.0.1:8000 (docs at /api/v1/docs); dev = local producer
+cd studio && npm install && npm run dev  # Studio on http://localhost:3000 (fan view, producer console); needs the API
+cd studio && npx next typegen && npx tsc --noEmit && npm run lint && npm run build   # Studio checks (CI job "studio")
 uv run pitch-ledger replay data/M0002 --approve --ledger cosmos --queue servicebus   # cloud ledger and queue
 ```
 

@@ -27,4 +27,6 @@ uv run pytest
 
 `stream` publishes a match to the live feed at match pace and `listen` reads it back, landing the rows and reporting latency. The feed is a local file by default; set `PITCH_LEDGER_FEED=eventhubs` and the Event Hubs variables in `.env.example` to use Azure Event Hubs (or a Fabric Eventstream custom endpoint).
 
+**Studio** (`studio/`, Next.js): the fan view follows a match's aired insights by audience mode, language and club; the producer console lists insights with their audit trail and evidence and approves or blocks them. Run the API (`PITCH_LEDGER_API_AUTH=dev uv run pitch-ledger api`), then `cd studio && npm install && npm run dev` and open http://localhost:3000.
+
 See `docs/event-schema.md` for the data contract, `docs/architecture.md` for the design and `docs/build-plan.md` for the plan.

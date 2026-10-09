@@ -68,7 +68,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 1. Cosmos DB ledger and Service Bus queue adapters (same interfaces as the Phase 3 in-memory ones; built 2026-10-09, `replay --ledger cosmos --queue servicebus`), resources created by hand first and then captured in the Bicep below; the engine reads the feed through the feed adapter.
 2. Event-store adapter for the Azure Data Explorer free cluster (tables in the architecture doc; local-file fallback), written to by the engine and orchestrator.
 3. FastAPI `/api/v1`: matches, insights, overlays, approvals (built 2026-10-09: public fan endpoints, producer endpoints behind Entra ID with fail-closed sign-in, rate-limited decisions); viewer preferences stay in the Studio for now.
-4. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors).
+4. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors). Built 2026-10-09: fan view (mode, language, club; 5 s refresh) and producer console (queue, audit trail, metrics, evidence, approve/block) against the API in dev auth; Entra sign-in (MSAL) and the ops-alert panel to follow.
 5. Web PubSub live push.
 6. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps.
 7. ADX dashboard (control room) over the event store, tile queries kept in the repo; ops-alert records raised by the engine, orchestrator, queue and model manager, shown and acknowledged in the producer console.

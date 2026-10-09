@@ -80,7 +80,7 @@ Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed l
 | Microsoft Foundry | Foundry | Models, content safety, evaluations, tracing | (c), (e) | Core |
 | Insight ledger | Cosmos DB (free tier) | System of record: insights, evidence, audits, approvals, overlays, ops alerts, viewer profiles. One container `ledger`, partition key `/match_id`; write-through adapter `infra_adapters/cosmos.py` | (c), (d) | Core |
 | Web PubSub | Web PubSub (Free tier) | Live overlay and ops-alert push | (d) | Core |
-| Studio app | Container Apps (web) | Producer console (approvals, ops alerts) + fan view with mode, club, player, metric, language | (d), (e) | Core |
+| Studio app | Container Apps (web), Next.js (`studio/`) | Producer console (queue, audit trail, evidence, approve/block; ops alerts to come) + fan view with mode, language, club (player and metric pickers to come); calls `/api/v1` through a Next.js rewrite | (d), (e) | Core |
 | Match history (medallion) | Fabric Lakehouse | Bronze/Silver/Gold history | (b) | Stretch (needs Fabric) |
 | "Ask the match" | Fabric data agent + Foundry | Natural-language questions for analysts | (e) | Stretch (needs Fabric) |
 
