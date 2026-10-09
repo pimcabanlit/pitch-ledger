@@ -17,7 +17,9 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | Role on the Foundry resource | **Foundry User** → `pitch-ledger-dev` | Lets it call the models (data plane) |
 | Extra role (to remove) | Azure AI Administrator → `pitch-ledger-dev` | Control plane only; not needed for calling models. Remove it for least privilege |
 
-Not provisioned yet: Cosmos DB, Service Bus, Web PubSub, Container Apps, Key Vault, Application Insights, Fabric. They come in Phase 4 with Bicep under `infra/`.
+Not provisioned yet: Event Hubs (live feed, steps below, waiting on the cost go-ahead), Cosmos DB, Service Bus, Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
+
+Not available: **Microsoft Fabric**. The free trial isn't offered to this account (2026-10-09), so the live feed uses Azure Event Hubs, and Eventhouse, the RTI dashboard and Activator are deferred.
 
 ## Provisioning steps (Foundry + service principal)
 
@@ -84,6 +86,63 @@ Then run a capped live replay:
 uv run pitch-ledger replay data/M0002 --approve --inject-error --provider foundry --only momentum_shift --budget 25
 ```
 
+## Live feed: Azure Event Hubs (not provisioned yet)
+
+**Cost first:** Event Hubs has no free tier. The Basic tier with 1 throughput unit costs about **$11/month**, plus about $0.03 per million events (from memory; check the Azure pricing page for East US before creating it). It doesn't scale to zero, so create it when you need the live feed and delete it after judging (Nov 20). One full match is about 130,000 messages, a fraction of a cent in event charges.
+
+Why Basic is enough: one sender (Match Lab), one reader (engine), one consumer group (`$Default`) and 1-day retention. Pick **Standard** (about twice the price) only if something else must read the same hub with its own consumer group, for example Fabric Eventstream later.
+
+### 1. Create the namespace and the hub
+
+1. Azure portal → **Create a resource → Event Hubs → Create**.
+2. Resource group: the Pitch Ledger one. Namespace name: e.g. `pitchledger-feed` (must be globally unique). Region: **East US** (same as Foundry). Pricing tier: **Basic**. Throughput units: **1**.
+3. Review + create.
+4. In the namespace: **+ Event Hub**. Name: `match-feed`. Partition count: **2** (one match uses one partition; more partitions don't help here). Retention: 1 day (Basic).
+
+### 2. Roles for the app (Entra ID, no keys)
+
+On the **namespace** (or just the `match-feed` hub) → Access control (IAM) → Add role assignment, members = `pitch-ledger-dev`:
+
+- **Azure Event Hubs Data Sender**: lets it publish (Match Lab, `stream`).
+- **Azure Event Hubs Data Receiver**: lets it read (engine, `listen`).
+
+These are data-plane roles, like Foundry User for the models. A management role such as Owner or Contributor on the namespace does **not** let the app send or receive (same trap as lesson 4). Allow 5–10 minutes.
+
+### 3. Settings
+
+```
+PITCH_LEDGER_FEED=eventhubs
+PITCH_LEDGER_EVENTHUB_NAMESPACE=pitchledger-feed.servicebus.windows.net
+PITCH_LEDGER_EVENTHUB_NAME=match-feed
+```
+
+Sign-in reuses `AZURE_TENANT_ID` / `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET`, or a managed identity in Container Apps. A SAS connection string (`PITCH_LEDGER_EVENTHUB_CONNECTION`, from the namespace's Shared access policies) also works. It's a secret, so keep it in the environment settings only.
+
+**Claude Code cloud sessions:** the environment's network access must allow **`*.servicebus.windows.net`**. Add it under Allowed domains if the network level is limited. The adapter uses AMQP over WebSockets on port 443, so it goes through the session proxy.
+
+### 4. Verify
+
+In one terminal (or a background job), start the reader first. It only sees messages sent after it connects:
+
+```
+uv run pitch-ledger listen --idle 20
+```
+
+Then publish two match minutes at 10x pace (12 seconds, about 2,800 messages):
+
+```
+uv run pitch-ledger stream data/M0002 --start-min 60 --minutes 2 --speed 10
+```
+
+`listen` prints rows received and send-to-receive latency (p50/p95/p99), and writes `data/live/listen.json`.
+
+### Switching to Fabric Eventstream later
+
+No code changes either way (see docs/architecture.md, Live feed):
+
+- **Keep the hub, add Fabric on top:** in an Eventstream, add this Event Hub as a source and route it to an Eventhouse. Give Eventstream its own consumer group, which needs Standard.
+- **Replace the hub:** create an Eventstream custom endpoint source and set `PITCH_LEDGER_EVENTHUB_CONNECTION` to its connection string (Event Hub protocol, SAS). Remove the namespace settings.
+
 ## Lessons learned (first live run, 2026-10-09)
 
 Each problem below blocked the first live run. Read the error, find the matching row, apply the fix.
@@ -124,3 +183,5 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [ ] Confirm a budget alert exists on the subscription.
 - [ ] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User. Turn off key auth on the Foundry resource. Put all resources in Bicep under `infra/`.
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
+- [ ] Event Hubs: create the namespace and hub (above) once the ~$11/month cost is approved; assign Data Sender and Data Receiver; verify with `listen` + `stream`; delete after judging.
+- [ ] Decide what replaces the Fabric-only pieces (event storage and KQL, control-room dashboard, ops alerts), or leave them out.

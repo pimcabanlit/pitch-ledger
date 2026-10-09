@@ -47,7 +47,7 @@ Defaults follow my personal stack, with challenge-driven overrides marked **(ove
 | Agents | **(override)** Microsoft Agent Framework (Python), code-first orchestration |
 | Models | **(override)** Microsoft Foundry deployments: one stronger model (Explainer, Auditor, Narrator), one small fast model (Personalizer, Translator). Model names live in one config place only |
 | Tools for agents | **(override)** MCP server exposing read-only stats tools |
-| Live data | **(override)** Fabric Real-Time Intelligence: Eventstream, Eventhouse, RTI dashboard, Activator |
+| Live data | **(override)** Azure Event Hubs for the live feed, behind the feed adapter (Fabric trial not available; Fabric Eventstream can take over later through its custom endpoint, settings only). Eventhouse, RTI dashboard and Activator deferred |
 | Queue | **(override)** Azure Service Bus (trigger queue, retries, dead letter) |
 | Store | **(override)** Azure Cosmos DB (free tier) as the insight ledger, not Postgres |
 | Push | **(override)** Azure Web PubSub (Free tier) |
@@ -77,12 +77,13 @@ pitch-ledger/
     schema/                  Pydantic models + enums for every table and output object
     validation/              row, sequence, match and insight rules
     matchlab/                roster, generator, scenarios, tracking, replay CLI
+    feed/                    live feed interfaces, file and in-memory adapters, stream and listen
     engine/                  derived metrics, rolling windows, control/chaos, detector
     mcp_server/              read-only stats tools
     agents/                  model_manager, explainer, auditor, narrator, personalizer, translator, orchestrator, overlay builder
     ledger/                  insight ledger repository (Cosmos + in-memory)
     api/                     FastAPI app (/api/v1)
-    infra_adapters/          eventstream, service bus, cosmos, web pubsub
+    infra_adapters/          event hubs (also Fabric Eventstream endpoints), service bus, cosmos, web pubsub
   studio/                    Next.js app
   tests/                     mirrors src/
   data/                      generated outputs (gitignored except small samples/)
@@ -108,6 +109,8 @@ uv run pitch-ledger mcp data/M0002       # read-only stats tools as an MCP serve
 uv run pitch-ledger replay data/M0002 --approve --inject-error   # agents -> data/M0002/ledger (--provider foundry, --only, --budget, --local-stats)
 uv run pitch-ledger evaluate              # scorecard -> data/scorecard.json; exit 1 if a gate fails (--match M0002, --sweep N)
 uv run pitch-ledger check-models          # model settings, Entra ID sign-in, one tiny call per deployment; exit 1 on a FAIL
+uv run pitch-ledger listen                # read the live feed into data/live/<match>/, report latency (--feed, --idle, --from-start)
+uv run pitch-ledger stream data/M0002 --speed 10   # publish a match to the live feed at 10x pace (--start-min, --minutes, --feed)
 ```
 
 Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.
