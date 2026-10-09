@@ -5,7 +5,7 @@
   with Microsoft Entra ID via ``azure-identity``; no keys).
 - Model names live here only: a stronger deployment for the Explainer, Auditor and
   Narrator, a small fast one for the Personalizer and Translator.
-- Cost controls: an output-token cap per role and a call budget per run.
+- Cost controls: an output-token cap per role and a call budget per run (paid providers).
 - Reliability: one retry on an error or an unparseable reply, then ``ModelUnavailable``
   so the caller falls back to template copy built from code-computed numbers.
 """
@@ -58,7 +58,7 @@ class ModelSettings(BaseSettings):
             "PITCH_LEDGER_FOUNDRY_PROJECT_ENDPOINT", "FOUNDRY_PROJECT_ENDPOINT"
         ),
     )
-    model_call_budget: int = 120
+    model_call_budget: int = 120  # calls per run, paid providers only
     model_timeout_s: float = 60.0
     model_temperature: float = 0.2
 
@@ -127,6 +127,11 @@ class ModelManager:
     def provider(self) -> str:
         return self.settings.model_provider
 
+    @property
+    def paid(self) -> bool:
+        """Calls cost money (the call budget applies); offline templates are free."""
+        return self.provider != "offline"
+
     def client_for(self, role: Role) -> SupportsChatGetResponse[Any]:
         tier = TIER[role]
         for key in (role, tier):
@@ -167,7 +172,7 @@ class ModelManager:
         """Run one agent call and parse its JSON reply; retries once, then gives up."""
         last: Exception | None = None
         for _ in range(2):
-            if self.usage.calls >= self.settings.model_call_budget:
+            if self.paid and self.usage.calls >= self.settings.model_call_budget:
                 raise ModelUnavailable("model call budget spent") from last
             self.usage.calls += 1
             self.usage.by_role[role] += 1

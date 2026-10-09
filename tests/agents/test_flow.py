@@ -153,7 +153,8 @@ def test_translator_number_change_falls_back_to_template(cases: list[Case]) -> N
     translated = [o for o in overlays if o.language != "en"]
     assert len(translated) == 10 and all("999" not in o.text for o in translated)
     fallback = [a for a in svc.ledger.audits(insight.insight_id) if a.action == "fallback"]
-    assert len(fallback) == 1 and fallback[0].findings[0].count("/") == 10
+    assert len(fallback) == 1 and len(fallback[0].findings) == 10
+    assert all("999" in f for f in fallback[0].findings)
 
 
 def test_speed_alert_auto_path_uses_no_model(cases: list[Case]) -> None:

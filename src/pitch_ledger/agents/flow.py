@@ -4,14 +4,16 @@
    back at most twice; the insight ends ``approved``, ``corrected`` or ``blocked``.
 2. ``decide``: the producer (or the auto-approval rule for low-risk speed alerts)
    approves or holds an audited insight.
-3. ``localize``: the Personalizer writes five audience modes and the Translator renders each
-   in the other languages, concurrently; every copy passes a number check or falls back
-   to template copy; the Overlay builder turns each into an overlay.
+3. ``localize_mode`` (one per audience mode, concurrently): the Personalizer writes the
+   mode in English and the Translator renders it in the other languages; every copy passes
+   a number check or falls back to template copy.
+4. ``publish``: the Overlay builder turns each copy into an overlay in the ledger.
 """
 
 import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from itertools import product
 
 from pitch_ledger.agents import copy
 from pitch_ledger.agents.auditor import MAX_REVISIONS, Auditor, AuditResult
@@ -235,53 +237,95 @@ def decide(insight: Insight, trigger: Trigger, svc: Services, producer: str | No
     return updated
 
 
+def producer_block(
+    insight: Insight, trigger: Trigger, svc: Services, producer: str, reason: str | None
+) -> Insight:
+    """The producer keeps an audited insight off air."""
+    why = f"Blocked by {producer}" + (f": {reason}" if reason else "")
+    svc.audit(insight.insight_id, trigger, 0, producer, "producer_block", False, [why])
+    updated = insight.model_copy(update={"audit_status": AuditStatus.BLOCKED, "audit_notes": why})
+    svc.ledger.put_insight(updated)
+    return updated
+
+
+@dataclass(frozen=True)
+class CopyRow:
+    """One audience mode in one language, ready for an overlay."""
+
+    mode: str
+    language: str
+    text: str
+    source: str  # "model", "template" (model copy failed its check) or "auto" (no models)
+    findings: tuple[str, ...] = ()
+
+
+def airs(insight: Insight) -> bool:
+    return insight.approved_by is not None and insight.audit_status is not AuditStatus.BLOCKED
+
+
+async def localize_mode(
+    insight: Insight,
+    trigger: Trigger,
+    facts: Facts,
+    svc: Services,
+    mode: str,
+    use_models: bool = True,
+) -> list[CopyRow]:
+    """One audience mode: Personalizer writes English, Translator the other languages."""
+    key = copy.copy_key(trigger)
+    metrics = dict(trigger.metrics)  # all recomputed by the Auditor
+    others = [lang for lang in svc.languages if lang != "en"]
+    if not use_models:
+        values = {**metrics, **facts.names()}
+        return [
+            CopyRow(mode, lang, copy.mode_text(key, mode, lang, values), "auto")
+            for lang in ("en", *others)
+        ]
+    english = await personalize(svc.models, key, mode, insight, metrics, facts)
+    done = await asyncio.gather(
+        *(translate(svc.models, key, mode, lang, english.text, metrics, facts) for lang in others)
+    )
+    return [
+        CopyRow(mode, "en", english.text, english.source, tuple(english.findings)),
+        *(
+            CopyRow(mode, lang, c.text, c.source, tuple(c.findings))
+            for lang, c in zip(others, done, strict=True)
+        ),
+    ]
+
+
+def publish(
+    insight: Insight, trigger: Trigger, svc: Services, rows: Iterable[CopyRow]
+) -> list[Overlay]:
+    """Overlays for every copy (in mode, then language order) and one fallback record."""
+    order = {(m, lang): i for i, (m, lang) in enumerate(product(svc.modes, svc.languages))}
+    overlays = []
+    fallbacks = []
+    for row in sorted(rows, key=lambda r: order.get((r.mode, r.language), len(order))):
+        overlay = build_overlay(
+            svc.ledger.next_id(svc.match_id, "O"),
+            trigger,
+            insight,
+            row.mode,
+            row.language,
+            row.text,
+        )
+        svc.ledger.put_overlay(overlay)
+        overlays.append(overlay)
+        if row.source == "template":
+            fallbacks.append(f"{row.mode}/{row.language}: " + "; ".join(row.findings))
+    if fallbacks:
+        svc.audit(insight.insight_id, trigger, 0, "copy_check", "fallback", findings=fallbacks)
+    return overlays
+
+
 async def localize(
     insight: Insight, trigger: Trigger, facts: Facts, svc: Services, use_models: bool = True
 ) -> list[Overlay]:
     """Every audience mode in every language, as overlays (only for approved insights)."""
-    if insight.approved_by is None or insight.audit_status is AuditStatus.BLOCKED:
+    if not airs(insight):
         return []
-    key = copy.copy_key(trigger)
-    metrics = dict(trigger.metrics)  # all recomputed by the Auditor
-    values = {**metrics, **facts.names()}
-
-    async def one_mode(mode: str) -> list[tuple[str, str, str, str]]:
-        if use_models:
-            english = await personalize(svc.models, key, mode, insight, metrics, facts)
-            text, source = english.text, english.source
-        else:
-            text, source = copy.mode_text(key, mode, "en", values), "template"
-        out = [(mode, "en", text, source)]
-        others = [lang for lang in svc.languages if lang != "en"]
-        if use_models:
-            done = await asyncio.gather(
-                *(translate(svc.models, key, mode, lang, text, metrics, facts) for lang in others)
-            )
-            out += [(mode, lang, c.text, c.source) for lang, c in zip(others, done, strict=True)]
-        else:
-            out += [
-                (mode, lang, copy.mode_text(key, mode, lang, values), "template") for lang in others
-            ]
-        return out
-
-    results = await asyncio.gather(*(one_mode(mode) for mode in svc.modes))
-    overlays = []
-    fallbacks = []
-    for mode, language, text, source in (row for rows in results for row in rows):
-        overlay = build_overlay(
-            svc.ledger.next_id(svc.match_id, "O"), trigger, insight, mode, language, text
-        )
-        svc.ledger.put_overlay(overlay)
-        overlays.append(overlay)
-        if source == "template" and use_models:
-            fallbacks.append(f"{mode}/{language}")
-    if fallbacks:
-        svc.audit(
-            insight.insight_id,
-            trigger,
-            0,
-            "copy_check",
-            "fallback",
-            findings=[f"template copy used for {', '.join(fallbacks)}"],
-        )
-    return overlays
+    rows = await asyncio.gather(
+        *(localize_mode(insight, trigger, facts, svc, mode, use_models) for mode in svc.modes)
+    )
+    return publish(insight, trigger, svc, (row for mode_rows in rows for row in mode_rows))

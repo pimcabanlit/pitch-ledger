@@ -7,6 +7,7 @@ import pytest
 from pitch_ledger.agents import copy, prompts
 from pitch_ledger.agents.contracts import ExplainRequest, InsightDraft
 from pitch_ledger.agents.model_manager import ModelManager, ModelSettings, ModelUnavailable
+from pitch_ledger.agents.offline import OfflineChatClient
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 from tests.agents.conftest import Case
 from tests.agents.fakes import ScriptedChatClient
@@ -55,13 +56,30 @@ def test_two_failures_raise_model_unavailable(cases: list[Case]) -> None:
     assert manager.usage.failures == 2
 
 
-def test_call_budget(cases: list[Case]) -> None:
-    manager = ModelManager(ModelSettings(model_call_budget=1))
+def _paid(budget: int) -> ModelManager:
+    """A Foundry-configured manager whose clients are local (no network)."""
+    settings = ModelSettings(model_provider="foundry", foundry_project_endpoint="https://x",
+                             model_strong="strong", model_small="small",
+                             model_call_budget=budget)  # fmt: skip
+    return ModelManager(settings, clients={"strong": OfflineChatClient(),
+                                           "small": OfflineChatClient()})  # fmt: skip
+
+
+def test_call_budget_caps_paid_calls(cases: list[Case]) -> None:
+    manager = _paid(1)
     request = _request(_momentum(cases))
     asyncio.run(manager.complete("explainer", prompts.EXPLAINER, request, InsightDraft))
     with pytest.raises(ModelUnavailable):
         asyncio.run(manager.complete("explainer", prompts.EXPLAINER, request, InsightDraft))
     assert manager.usage.calls == 1
+
+
+def test_offline_calls_are_not_capped(cases: list[Case]) -> None:
+    manager = ModelManager(ModelSettings(model_provider="offline", model_call_budget=1))
+    request = _request(_momentum(cases))
+    for _ in range(3):
+        asyncio.run(manager.complete("explainer", prompts.EXPLAINER, request, InsightDraft))
+    assert manager.usage.calls == 3 and not manager.paid
 
 
 def test_foundry_needs_endpoint_and_deployments() -> None:

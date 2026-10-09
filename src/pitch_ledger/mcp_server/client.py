@@ -23,11 +23,14 @@ class LocalStats:
 
     def __init__(self, tools: StatsTools) -> None:
         self.tools = tools
+        self.calls = 0
 
     async def recompute_trigger(self, trigger_id: str) -> dict[str, int | float]:
+        self.calls += 1
         return self.tools.recompute_trigger(trigger_id)
 
     async def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]:
+        self.calls += 1
         return self.tools.get_events(event_ids)
 
 

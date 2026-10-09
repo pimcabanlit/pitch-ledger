@@ -69,6 +69,9 @@ def test_file_ledger_persists_and_resumes_ids(tmp_path: Path) -> None:
     assert again.triggers["M0002-T0001"] == _trigger()
     assert again.next_id("M0002", "I") == "M0002-I0002"
     assert again.next_id("M0002", "A") == "M0002-A0002"
+    assert again.get_trigger("M0002-T0001") == _trigger()
+    fresh = FileLedger(tmp_path / "ledger", fresh=True)
+    assert fresh.insights() == [] and fresh.next_id("M0002", "I") == "M0002-I0001"
 
 
 def test_queue_retries_then_dead_letters() -> None:

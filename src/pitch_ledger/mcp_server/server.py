@@ -13,7 +13,7 @@ from pitch_ledger.mcp_server.tools import StatsTools
 
 def build_server(match_dir: Path | str) -> FastMCP:
     tools = StatsTools(match_dir)
-    server = FastMCP("pitch-ledger-stats")
+    server = FastMCP("pitch-ledger-stats", log_level="WARNING")
 
     @server.tool()
     def get_events(

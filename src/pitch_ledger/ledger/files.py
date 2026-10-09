@@ -14,9 +14,12 @@ from pitch_ledger.schema import AuditRecord, Insight, Overlay, Trigger
 
 
 class FileLedger(InMemoryLedger):
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, fresh: bool = False) -> None:
+        """``fresh`` starts empty (a new replay); the next ``flush`` replaces the files."""
         super().__init__()
         self.root = root
+        if fresh:
+            return
         for line in self._lines("triggers"):
             self.save_trigger(Trigger.model_validate_json(line))
         for line in self._lines("insights"):

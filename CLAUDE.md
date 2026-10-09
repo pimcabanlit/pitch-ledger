@@ -103,9 +103,11 @@ uv run pitch-ledger generate-all --out data   # the six demo matches in scenario
 uv run pitch-ledger validate data/M0001  # every rule; exit 1 on any reject (--no-realism, --no-tracking)
 uv run pitch-ledger realism data/M0001   # compare against realism bands (--strict: exit 1 if out)
 uv run pitch-ledger detect data/M0002    # triggers.jsonl + scenario check; exit 1 on a miss or false alert (--all)
+uv run pitch-ledger mcp data/M0002       # read-only stats tools as an MCP server (stdio)
+uv run pitch-ledger replay data/M0002 --approve --inject-error   # agents -> data/M0002/ledger (--provider foundry, --only, --budget, --local-stats)
 ```
 
-Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.
+Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.
 
 ## Definition of done for any change
 

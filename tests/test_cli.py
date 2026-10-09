@@ -1,6 +1,7 @@
 """CLI commands and the match directory format."""
 
 import json
+import shutil
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -88,3 +89,17 @@ def test_unknown_or_mismatched_scenarios_rejected(tmp_path: Path) -> None:
     # red_card targets T04, which is not playing in the default T01 v T02 pairing
     assert main(["generate", "--scenario", "red_card", "--out", str(tmp_path)]) == 2
     assert not any(tmp_path.iterdir())
+
+
+def test_replay_writes_the_ledger(
+    match_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    copy = tmp_path / "M0007"
+    shutil.copytree(match_dir, copy)
+    assert main(["replay", str(copy), "--approve", "--local-stats"]) == 0
+    out = capsys.readouterr().out
+    assert "M0007 replay:" in out and "pending 0" in out and "ledger ->" in out
+    run = json.loads((copy / "ledger" / "run.json").read_text("utf-8"))
+    assert run["provider"] == "offline" and run["producer"] == "producer_demo"
+    assert run["overlays"] == 15 * run["counts"]["status"]["aired"] > 0
+    assert (copy / "triggers.jsonl").exists()

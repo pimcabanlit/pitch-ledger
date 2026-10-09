@@ -21,6 +21,9 @@ class InMemoryLedger:
     def save_trigger(self, trigger: Trigger) -> None:
         self.triggers[trigger.trigger_id] = trigger
 
+    def get_trigger(self, trigger_id: str) -> Trigger | None:
+        return self.triggers.get(trigger_id)
+
     def put_insight(self, insight: Insight) -> None:
         self._insights[insight.insight_id] = insight
 

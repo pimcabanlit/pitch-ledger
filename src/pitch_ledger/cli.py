@@ -1,4 +1,4 @@
-"""``pitch-ledger`` command line: generate, validate and check realism of matches."""
+"""``pitch-ledger`` command line: generate, validate, detect and replay matches."""
 
 import argparse
 import re
@@ -183,6 +183,72 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_replay(args: argparse.Namespace) -> int:
+    import asyncio
+
+    from pitch_ledger.agents.replay import ReplayOptions, replay_match
+
+    only = tuple(x.strip() for x in args.only.split(",") if x.strip()) if args.only else None
+    options = ReplayOptions(
+        approve=args.approve,
+        inject="first" if args.inject_error else "none",
+        provider=args.provider,
+        stats="local" if args.local_stats else "mcp",
+        only=only,
+        budget=args.budget,
+    )
+    run = asyncio.run(replay_match(Path(args.match_dir), options))
+    summary, ledger = run.summary, run.ledger
+    counts = run.report.counts()
+    routes, status = counts["routes"], counts["status"]
+    print(
+        f"{run.match_id} replay: {summary['triggers']} triggers (full flow "
+        f"{routes.get('full', 0)}, auto {routes.get('auto', 0)}, stored "
+        f"{routes.get('stored', 0)}); models {summary['model_version']}; stats via "
+        f"{'MCP' if summary['stats'] == 'mcp' else 'in-process tools'}"
+    )
+    for outcome in run.report.outcomes:
+        insight = ledger.get_insight(outcome.insight_id or "")
+        if insight is None:
+            continue
+        minute = match_minute(insight.period, insight.clock_ms)
+        trigger = ledger.get_trigger(outcome.trigger_id)
+        rule = trigger.rule_id if trigger else ""
+        print(
+            f"  {insight.insight_id} {minute:5.1f}' {rule:<18} {outcome.audit_status:<9} "
+            f"{outcome.status:<7} {outcome.overlays:>3} overlays  {insight.headline[:60]}"
+        )
+    for planted in (a for a in ledger.audits() if a.action == "inject_error"):
+        trail = ledger.audits(planted.insight_id)
+        caught = any(a.action in ("revise", "block") and a.round == planted.round for a in trail)
+        final = ledger.get_insight(planted.insight_id)
+        print(
+            f"planted error in {planted.insight_id}: {planted.findings[0]} -> "
+            f"{'caught by the Auditor' if caught else 'NOT CAUGHT'}; insight "
+            f"{final.audit_status.value if final else 'not stored'}"
+        )
+    print(
+        f"insights: aired {status.get('aired', 0)}, pending {status.get('pending', 0)}, "
+        f"blocked {status.get('blocked', 0)}; overlays {summary['overlays']}"
+    )
+    if status.get("pending"):
+        print("  pending insights wait for a producer (--approve approves them as producer_demo)")
+    usage = summary["usage"]
+    print(
+        f"model calls {usage['calls']} ({usage['failures']} failed; tokens in "
+        f"{usage['input_tokens']}, out {usage['output_tokens']}); stats calls "
+        f"{summary['stats_calls']}; {summary['duration_s']} s"
+    )
+    for dead in summary["dead_letters"]:
+        print(
+            f"DEAD LETTER {dead['trigger_id']} after {dead['deliveries']} deliveries: "
+            f"{dead['errors'][-1]}"
+        )
+    if run.ledger_dir is not None:
+        print(f"ledger -> {run.ledger_dir}")
+    return 1 if summary["dead_letters"] else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pitch-ledger", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -224,6 +290,24 @@ def build_parser() -> argparse.ArgumentParser:
     mcp = sub.add_parser("mcp", help="serve the read-only stats tools over MCP (stdio)")
     mcp.add_argument("match_dir")
     mcp.set_defaults(func=cmd_mcp)
+
+    rep = sub.add_parser(
+        "replay", help="run the agents over a match: audited insights, overlays, ledger"
+    )
+    rep.add_argument("match_dir")
+    rep.add_argument("--approve", action="store_true", help="approve as producer_demo")
+    rep.add_argument(
+        "--inject-error",
+        action="store_true",
+        help="plant a wrong number in the first momentum draft (the Auditor must catch it)",
+    )
+    rep.add_argument(
+        "--provider", choices=["offline", "foundry"], help="model provider (default: settings)"
+    )
+    rep.add_argument("--local-stats", action="store_true", help="stats in-process, not MCP")
+    rep.add_argument("--only", help="comma-separated insight types or rule IDs to process")
+    rep.add_argument("--budget", type=int, help="model call budget for paid providers")
+    rep.set_defaults(func=cmd_replay)
     return parser
 
 
