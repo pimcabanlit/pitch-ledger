@@ -4,7 +4,8 @@ expose the same Event Hubs protocol: point the settings at the endpoint, no code
 - Body: the feed row as compact JSON, unchanged. Properties: ``kind`` and ``sent_at``.
 - Partition key: the match ID, so a match's rows stay in order (Event Hubs orders within
   a partition).
-- Transport: AMQP over WebSockets (port 443), through ``HTTPS_PROXY`` when one is set.
+- Transport (``auto``): plain AMQP (port 5671) when there is no proxy, as in Azure; AMQP over
+  WebSockets (port 443) through ``HTTPS_PROXY`` when one is set. ``websockets`` forces 443.
 - Sign-in: Microsoft Entra ID (``DefaultAzureCredential``: service principal variables
   locally, managed identity in Azure) with namespace + hub name, or a SAS connection
   string (what Eventstream custom endpoints hand out).
@@ -17,7 +18,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any, cast
+from typing import Any, Literal, cast
 from urllib.parse import urlparse
 
 from azure.eventhub import (
@@ -33,12 +34,18 @@ from pitch_ledger.feed.port import FEED_KINDS, Delivered, FeedKind, FeedMessage
 log = logging.getLogger(__name__)
 
 
-def client_options() -> dict[str, Any]:
-    options: dict[str, Any] = {"transport_type": TransportType.AmqpOverWebsocket}
+Transport = Literal["auto", "amqp", "websockets"]
+
+
+def client_options(transport: Transport = "auto") -> dict[str, Any]:
     proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
-    if proxy:
-        url = urlparse(proxy)
-        options["http_proxy"] = {"proxy_hostname": url.hostname, "proxy_port": url.port or 80}
+    if transport == "amqp" or (transport == "auto" and not proxy):
+        options: dict[str, Any] = {"transport_type": TransportType.Amqp}
+    else:
+        options = {"transport_type": TransportType.AmqpOverWebsocket}
+        if proxy:
+            url = urlparse(proxy)
+            options["http_proxy"] = {"proxy_hostname": url.hostname, "proxy_port": url.port or 80}
     ca_bundle = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
     if ca_bundle:
         options["connection_verify"] = ca_bundle
@@ -88,18 +95,25 @@ class EventHubsPublisher:
 
     @classmethod
     def connect(
-        cls, namespace: str | None, eventhub: str | None, connection: str | None
+        cls,
+        namespace: str | None,
+        eventhub: str | None,
+        connection: str | None,
+        transport: Transport = "auto",
     ) -> "EventHubsPublisher":
         if connection:
             producer = EventHubProducerClient.from_connection_string(
-                connection, eventhub_name=eventhub, **client_options()
+                connection, eventhub_name=eventhub, **client_options(transport)
             )
             return cls(producer)
         from azure.identity import DefaultAzureCredential
 
         credential = DefaultAzureCredential()
         producer = EventHubProducerClient(
-            fully_qualified(namespace or ""), eventhub or "", credential, **client_options()
+            fully_qualified(namespace or ""),
+            eventhub or "",
+            credential,
+            **client_options(transport),
         )
         return cls(producer, credential)
 
@@ -162,10 +176,11 @@ class EventHubsSubscriber:
         connection: str | None,
         consumer_group: str,
         from_start: bool = False,
+        transport: Transport = "auto",
     ) -> "EventHubsSubscriber":
         if connection:
             consumer = EventHubConsumerClient.from_connection_string(
-                connection, consumer_group, eventhub_name=eventhub, **client_options()
+                connection, consumer_group, eventhub_name=eventhub, **client_options(transport)
             )
             return cls(consumer, from_start=from_start)
         from azure.identity import DefaultAzureCredential
@@ -176,7 +191,7 @@ class EventHubsSubscriber:
             eventhub or "",
             consumer_group,
             credential,
-            **client_options(),
+            **client_options(transport),
         )
         return cls(consumer, credential, from_start)
 
@@ -197,8 +212,12 @@ class EventHubsSubscriber:
             except queue.Empty:
                 return
 
-    def close(self) -> None:
-        self._consumer.close()
-        self._thread.join(timeout=10)
+    def close(self, timeout_s: float = 10.0) -> None:
+        """Stop receiving. The SDK's close can block for minutes on a stalled link (seen
+        behind a proxy), so it runs on a daemon thread and is abandoned after the timeout."""
+        closer = threading.Thread(target=self._consumer.close, daemon=True)
+        closer.start()
+        closer.join(timeout=timeout_s)
+        self._thread.join(timeout=1)
         if self._credential is not None:
             self._credential.close()

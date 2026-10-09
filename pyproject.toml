@@ -15,6 +15,7 @@ dependencies = [
     "azure-identity>=1.25",
     "mcp>=1.24,<2",
     "azure-eventhub>=5.15.1",
+    "websocket-client>=1.9.2",
 ]
 
 [project.scripts]

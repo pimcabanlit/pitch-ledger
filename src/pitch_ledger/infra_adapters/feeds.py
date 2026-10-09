@@ -20,6 +20,7 @@ class FeedSettings(BaseSettings):
     eventhub_name: str | None = None
     eventhub_connection: SecretStr | None = None  # SAS connection string (secret)
     eventhub_consumer_group: str = "$Default"
+    eventhub_transport: Literal["auto", "amqp", "websockets"] = "auto"  # auto: 443 behind a proxy
 
     def connection(self) -> str | None:
         return self.eventhub_connection.get_secret_value() if self.eventhub_connection else None
@@ -69,7 +70,10 @@ def open_publisher(settings: FeedSettings) -> FeedPublisher:
     from pitch_ledger.infra_adapters.eventhubs import EventHubsPublisher
 
     return EventHubsPublisher.connect(
-        settings.eventhub_namespace, settings.eventhub_name, settings.connection()
+        settings.eventhub_namespace,
+        settings.eventhub_name,
+        settings.connection(),
+        settings.eventhub_transport,
     )
 
 
@@ -84,4 +88,5 @@ def open_subscriber(settings: FeedSettings, from_start: bool = False) -> FeedSub
         settings.connection(),
         settings.eventhub_consumer_group,
         from_start=from_start,
+        transport=settings.eventhub_transport,
     )

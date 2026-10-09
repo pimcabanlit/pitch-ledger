@@ -1,16 +1,19 @@
 """Event Hubs feed adapter and feed settings, with fake SDK clients (no Azure calls)."""
 
 import json
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
 import pytest
-from azure.eventhub import EventData
+from azure.eventhub import EventData, TransportType
 
 from pitch_ledger.feed import FeedMessage, FilePublisher
 from pitch_ledger.infra_adapters.eventhubs import (
     EventHubsPublisher,
     EventHubsSubscriber,
+    client_options,
     from_event_data,
     fully_qualified,
     to_event_data,
@@ -107,6 +110,36 @@ def test_subscriber_yields_feed_messages_and_records_errors() -> None:
     assert consumer.kwargs["starting_position"] == "@latest"
     subscriber.close()
     assert consumer.closed
+
+
+def test_transport_is_plain_amqp_unless_a_proxy_or_websockets_is_asked_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("HTTPS_PROXY", "https_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    assert client_options()["transport_type"] == TransportType.Amqp  # Azure, laptop
+    assert client_options("websockets")["transport_type"] == TransportType.AmqpOverWebsocket
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:3128")
+    behind_proxy = client_options()
+    assert behind_proxy["transport_type"] == TransportType.AmqpOverWebsocket
+    assert behind_proxy["http_proxy"] == {"proxy_hostname": "127.0.0.1", "proxy_port": 3128}
+    assert client_options("amqp")["transport_type"] == TransportType.Amqp
+
+
+def test_websocket_transport_dependency_is_installed() -> None:
+    """The sync SDK needs websocket-client for AMQP over WebSockets."""
+    import websocket  # noqa: F401  (provided by websocket-client)
+
+
+def test_subscriber_close_gives_up_on_a_hanging_sdk_close() -> None:
+    class HangingConsumer(FakeConsumer):
+        def close(self) -> None:
+            threading.Event().wait(60)  # a stalled link
+
+    subscriber = EventHubsSubscriber(HangingConsumer([]))
+    started = time.monotonic()
+    subscriber.close(timeout_s=0.2)
+    assert time.monotonic() - started < 3
 
 
 NAMESPACE_FORMS = [
