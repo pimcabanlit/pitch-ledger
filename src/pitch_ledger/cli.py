@@ -202,7 +202,30 @@ def cmd_replay(args: argparse.Namespace) -> int:
         only=only,
         budget=args.budget,
     )
-    run = asyncio.run(replay_match(Path(args.match_dir), options))
+    from pitch_ledger.infra_adapters.ledger_queue import (
+        LedgerQueueSettings,
+        open_ledger,
+        open_queue,
+    )
+
+    overrides = {k: v for k, v in (("ledger", args.ledger), ("queue", args.queue)) if v}
+    services = LedgerQueueSettings(**overrides)
+    match_id = read_match(Path(args.match_dir), with_tracking=False).match.match_id
+    try:
+        cloud_ledger = open_ledger(services, fresh_match=match_id)
+        queue = open_queue(services)
+    except ValueError as exc:
+        print(f"ledger/queue settings: {exc}", file=sys.stderr)
+        return 2
+    if services.ledger != "file" or services.queue != "memory":
+        print(f"ledger: {services.describe_ledger()}; queue: {services.describe_queue()}")
+    try:
+        run = asyncio.run(replay_match(Path(args.match_dir), options, cloud_ledger, queue))
+    finally:
+        for part in (cloud_ledger, queue):
+            close = getattr(part, "close", None)
+            if close is not None:
+                close()
     summary, ledger = run.summary, run.ledger
     counts = run.report.counts()
     routes, status = counts["routes"], counts["status"]
@@ -469,6 +492,30 @@ def cmd_check_store(args: argparse.Namespace) -> int:
     return 0 if all(c.ok for c in checks) else 1
 
 
+def cmd_check_ledger(args: argparse.Namespace) -> int:
+    from pitch_ledger.infra_adapters.cosmos import check_ledger
+    from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
+
+    s = LedgerQueueSettings()
+    checks = check_ledger(s.cosmos_endpoint, s.cosmos_database, s.cosmos_container, s.key())
+    for check in checks:
+        print(f"[{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+    return 0 if all(c.ok for c in checks) else 1
+
+
+def cmd_check_queue(args: argparse.Namespace) -> int:
+    from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
+    from pitch_ledger.infra_adapters.servicebus import check_queue
+
+    s = LedgerQueueSettings()
+    checks = check_queue(
+        s.servicebus_namespace, s.servicebus_queue, s.connection(), s.servicebus_transport
+    )
+    for check in checks:
+        print(f"[{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+    return 0 if all(c.ok for c in checks) else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pitch-ledger", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -527,6 +574,8 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--local-stats", action="store_true", help="stats in-process, not MCP")
     rep.add_argument("--only", help="comma-separated insight types or rule IDs to process")
     rep.add_argument("--budget", type=int, help="model call budget for paid providers")
+    rep.add_argument("--ledger", choices=["file", "cosmos"], help="ledger (default: settings)")
+    rep.add_argument("--queue", choices=["memory", "servicebus"], help="trigger queue")
     rep.set_defaults(func=cmd_replay)
 
     ev = sub.add_parser("evaluate", help="scorecard: detection, accuracy, planted errors, coverage")
@@ -571,6 +620,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     cks = sub.add_parser("check-store", help="check ADX settings, sign-in, roles, tables, a write")
     cks.set_defaults(func=cmd_check_store)
+
+    ckl = sub.add_parser("check-ledger", help="check Cosmos DB settings, sign-in and a write")
+    ckl.set_defaults(func=cmd_check_ledger)
+
+    ckq = sub.add_parser("check-queue", help="check Service Bus settings, sign-in and a probe")
+    ckq.set_defaults(func=cmd_check_queue)
     return parser
 
 

@@ -229,6 +229,19 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-cosmos"
+version = "4.17.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d0/6d/5604820fa3417d98e61c57d07447500fce600d10695bed02f396c2d548b7/azure_cosmos-4.17.1.tar.gz", hash = "sha256:d692928a54d88163e96d41d8f899229ca2f6a6bf21973ece2bfc1f72d4b4edd8", size = 2494950, upload-time = "2026-09-16T22:21:15.154Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ca/04/d99d0b32c9265d0890b071fc062ae76c0dedc94a8071b9c36c8b0962d6a2/azure_cosmos-4.17.1-py3-none-any.whl", hash = "sha256:a33b796d055d1923b6dc7b6195aa1cfb5ae786dbc38771bb4ad702b0e5ec18db", size = 505766, upload-time = "2026-09-16T22:21:17.575Z" },
+]
+
+[[package]]
 name = "azure-eventhub"
 version = "5.15.1"
 source = { registry = "https://pypi.org/simple" }
@@ -287,6 +300,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/06/b0/c2353e224bcb7bcfad0de679a72a5c9e2396b0242fa13b283d86646e3710/azure_kusto_ingest-6.0.4.tar.gz", hash = "sha256:5cc3f547bc77496884af17ec0d3d874f5c32081393e5d846d8eb260afcbc29d5", size = 19822, upload-time = "2026-05-06T12:56:06.08Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4f/e3/aecf5bc1810c7738f9ce0d593dde6a39085d5fb6a3e8f2ff239b2c5eecc5/azure_kusto_ingest-6.0.4-py3-none-any.whl", hash = "sha256:af70305fa83edc0534214bceb6ece722117d798e4ece0a87a80ad3337fb4e019", size = 28275, upload-time = "2026-05-06T12:56:03.281Z" },
+]
+
+[[package]]
+name = "azure-servicebus"
+version = "7.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e1/34/a377ae04966328abdd4a5366aba51d499bbe3c4e0d2aa17ad29bf8276574/azure_servicebus-7.15.0.tar.gz", hash = "sha256:62c73f3d9efbaf0089a375adc5ef992ffe6d7d0b1218b8462265aa30ad352c3e", size = 637868, upload-time = "2026-10-08T20:15:26.613Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b5/55/204b3848057a4f4178501fed240964cf2ee4ee2ac532d6da77725029f46d/azure_servicebus-7.15.0-py3-none-any.whl", hash = "sha256:7d60ad0956d7d9a7b75a0dad0b9eea0d182564e48911c11af9cd47f65a1d6584", size = 449397, upload-time = "2026-10-08T20:15:28.691Z" },
 ]
 
 [[package]]
@@ -875,10 +902,12 @@ source = { editable = "." }
 dependencies = [
     { name = "agent-framework-core" },
     { name = "agent-framework-foundry" },
+    { name = "azure-cosmos" },
     { name = "azure-eventhub" },
     { name = "azure-identity" },
     { name = "azure-kusto-data" },
     { name = "azure-kusto-ingest" },
+    { name = "azure-servicebus" },
     { name = "mcp" },
     { name = "pyarrow" },
     { name = "pydantic" },
@@ -899,10 +928,12 @@ dev = [
 requires-dist = [
     { name = "agent-framework-core", specifier = ">=1.21,<2" },
     { name = "agent-framework-foundry", specifier = ">=1.14,<2" },
+    { name = "azure-cosmos", specifier = ">=4.17.1" },
     { name = "azure-eventhub", specifier = ">=5.15.1" },
     { name = "azure-identity", specifier = ">=1.25" },
     { name = "azure-kusto-data", specifier = ">=6.0.4" },
     { name = "azure-kusto-ingest", specifier = ">=6.0.4" },
+    { name = "azure-servicebus", specifier = ">=7.15.0" },
     { name = "mcp", specifier = ">=1.24,<2" },
     { name = "pyarrow", specifier = ">=17" },
     { name = "pydantic", specifier = ">=2.9" },

@@ -24,6 +24,7 @@ from pitch_ledger.agents.orchestrator import (
     clock_order,
     first_momentum,
 )
+from pitch_ledger.agents.queue import TriggerQueue
 from pitch_ledger.engine.detector import detect
 from pitch_ledger.ledger import FileLedger, InMemoryLedger
 from pitch_ledger.matchlab.io import read_match, write_triggers
@@ -81,7 +82,14 @@ def _settings(options: ReplayOptions) -> ModelSettings:
     return ModelSettings(**overrides)
 
 
-async def replay_match(match_dir: Path, options: ReplayOptions | None = None) -> ReplayRun:
+async def replay_match(
+    match_dir: Path,
+    options: ReplayOptions | None = None,
+    ledger: InMemoryLedger | None = None,
+    queue: TriggerQueue | None = None,
+) -> ReplayRun:
+    """``ledger`` and ``queue`` replace the local file ledger and in-memory queue (the CLI
+    passes the Cosmos DB and Service Bus adapters)."""
     options = options or ReplayOptions()
     files = read_match(match_dir)
     events = [Event.model_validate(e) for e in files.events]
@@ -91,7 +99,8 @@ async def replay_match(match_dir: Path, options: ReplayOptions | None = None) ->
     context = MatchContext(files.match, files.teams, files.players, {e.event_id: e for e in events})
     match_id = files.match.match_id
     ledger_dir = options.ledger_dir or match_dir / "ledger"
-    ledger = FileLedger(ledger_dir, fresh=True) if options.write else InMemoryLedger()
+    if ledger is None:
+        ledger = FileLedger(ledger_dir, fresh=True) if options.write else InMemoryLedger()
     started = datetime.now(UTC)
     clock = time.perf_counter()
     async with AsyncExitStack() as stack:
@@ -106,7 +115,7 @@ async def replay_match(match_dir: Path, options: ReplayOptions | None = None) ->
         )
         producer = DEMO_PRODUCER if options.approve else None
         orchestrator = Orchestrator(svc, context, producer, options.only)
-        report = await orchestrator.replay(triggers)
+        report = await orchestrator.replay(triggers, queue)
     summary = {
         "match_id": match_id,
         "started_at": started.isoformat(timespec="seconds"),
@@ -126,6 +135,8 @@ async def replay_match(match_dir: Path, options: ReplayOptions | None = None) ->
     run = ReplayRun(match_id, triggers, ledger, report, summary)
     if isinstance(ledger, FileLedger):
         ledger.flush()
+    if options.write:
+        ledger_dir.mkdir(parents=True, exist_ok=True)
         (ledger_dir / RUN_FILE).write_text(json.dumps(summary, indent=2) + "\n", "utf-8")
         run.ledger_dir = ledger_dir
     return run
