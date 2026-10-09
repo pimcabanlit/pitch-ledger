@@ -1,0 +1,2336 @@
+{
+  "competition": "Harbour Coast League",
+  "season": "2026-27",
+  "referees": [
+    "A. Navarro",
+    "M. Ellingham",
+    "J. Okonta",
+    "S. Varga",
+    "L. Brannigan",
+    "T. Moreau"
+  ],
+  "teams": [
+    {
+      "team_id": "T01",
+      "name": "Northbridge Athletic",
+      "short_name": "NBR",
+      "primary_color": "#1B4F9C",
+      "formation": "4-3-3",
+      "style_profile": "high_press",
+      "venue": "Harbourside Park",
+      "lineup": [
+        1,
+        2,
+        4,
+        5,
+        3,
+        6,
+        8,
+        14,
+        7,
+        9,
+        11
+      ],
+      "bench": [
+        13,
+        10,
+        12,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "players": [
+        {
+          "player_id": "T01-P01",
+          "team_id": "T01",
+          "name": "Viktor Zielonka",
+          "display_name": "V. Zielonka",
+          "shirt_number": 1,
+          "position": "gk",
+          "preferred_foot": "left",
+          "top_speed_kmh": 27.9,
+          "ratings": {
+            "pace": 40,
+            "passing": 59,
+            "finishing": 19,
+            "pressing": 45
+          }
+        },
+        {
+          "player_id": "T01-P02",
+          "team_id": "T01",
+          "name": "Oskar Brandauer",
+          "display_name": "O. Brandauer",
+          "shirt_number": 2,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.6,
+          "ratings": {
+            "pace": 72,
+            "passing": 67,
+            "finishing": 36,
+            "pressing": 85
+          }
+        },
+        {
+          "player_id": "T01-P03",
+          "team_id": "T01",
+          "name": "Amadou Okorafor",
+          "display_name": "A. Okorafor",
+          "shirt_number": 3,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 35.3,
+          "ratings": {
+            "pace": 85,
+            "passing": 67,
+            "finishing": 34,
+            "pressing": 74
+          }
+        },
+        {
+          "player_id": "T01-P04",
+          "team_id": "T01",
+          "name": "Ibrahima Kamissoko",
+          "display_name": "I. Kamissoko",
+          "shirt_number": 4,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 29.8,
+          "ratings": {
+            "pace": 50,
+            "passing": 51,
+            "finishing": 36,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T01-P05",
+          "team_id": "T01",
+          "name": "Malik Yazidi",
+          "display_name": "M. Yazidi",
+          "shirt_number": 5,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.0,
+          "ratings": {
+            "pace": 68,
+            "passing": 61,
+            "finishing": 38,
+            "pressing": 72
+          }
+        },
+        {
+          "player_id": "T01-P06",
+          "team_id": "T01",
+          "name": "Marek Andrijevic",
+          "display_name": "M. Andrijevic",
+          "shirt_number": 6,
+          "position": "dm",
+          "preferred_foot": "both",
+          "top_speed_kmh": 30.9,
+          "ratings": {
+            "pace": 63,
+            "passing": 69,
+            "finishing": 48,
+            "pressing": 91
+          }
+        },
+        {
+          "player_id": "T01-P07",
+          "team_id": "T01",
+          "name": "Elias Steenbergen",
+          "display_name": "E. Steenbergen",
+          "shirt_number": 7,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.6,
+          "ratings": {
+            "pace": 81,
+            "passing": 70,
+            "finishing": 71,
+            "pressing": 84
+          }
+        },
+        {
+          "player_id": "T01-P08",
+          "team_id": "T01",
+          "name": "Duarte Fuenmayor",
+          "display_name": "D. Fuenmayor",
+          "shirt_number": 8,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.9,
+          "ratings": {
+            "pace": 75,
+            "passing": 79,
+            "finishing": 57,
+            "pressing": 83
+          }
+        },
+        {
+          "player_id": "T01-P09",
+          "team_id": "T01",
+          "name": "Lukas Haugland",
+          "display_name": "L. Haugland",
+          "shirt_number": 9,
+          "position": "st",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.5,
+          "ratings": {
+            "pace": 83,
+            "passing": 60,
+            "finishing": 76,
+            "pressing": 68
+          }
+        },
+        {
+          "player_id": "T01-P10",
+          "team_id": "T01",
+          "name": "Stellan Leenders",
+          "display_name": "S. Leenders",
+          "shirt_number": 10,
+          "position": "am",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.5,
+          "ratings": {
+            "pace": 68,
+            "passing": 80,
+            "finishing": 85,
+            "pressing": 71
+          }
+        },
+        {
+          "player_id": "T01-P11",
+          "team_id": "T01",
+          "name": "Bram Engebret",
+          "display_name": "B. Engebret",
+          "shirt_number": 11,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.2,
+          "ratings": {
+            "pace": 86,
+            "passing": 70,
+            "finishing": 79,
+            "pressing": 69
+          }
+        },
+        {
+          "player_id": "T01-P12",
+          "team_id": "T01",
+          "name": "Paolo Macaraeg",
+          "display_name": "P. Macaraeg",
+          "shirt_number": 12,
+          "position": "fb",
+          "preferred_foot": "left",
+          "top_speed_kmh": 33.5,
+          "ratings": {
+            "pace": 80,
+            "passing": 63,
+            "finishing": 40,
+            "pressing": 78
+          }
+        },
+        {
+          "player_id": "T01-P13",
+          "team_id": "T01",
+          "name": "Andile Ntuli",
+          "display_name": "A. Ntuli",
+          "shirt_number": 13,
+          "position": "gk",
+          "preferred_foot": "both",
+          "top_speed_kmh": 27.4,
+          "ratings": {
+            "pace": 60,
+            "passing": 52,
+            "finishing": 12,
+            "pressing": 35
+          }
+        },
+        {
+          "player_id": "T01-P14",
+          "team_id": "T01",
+          "name": "Lorenzo Tavernese",
+          "display_name": "L. Tavernese",
+          "shirt_number": 14,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.3,
+          "ratings": {
+            "pace": 71,
+            "passing": 85,
+            "finishing": 54,
+            "pressing": 83
+          }
+        },
+        {
+          "player_id": "T01-P15",
+          "team_id": "T01",
+          "name": "Fionn Kilbride",
+          "display_name": "F. Kilbride",
+          "shirt_number": 15,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 29.6,
+          "ratings": {
+            "pace": 54,
+            "passing": 62,
+            "finishing": 22,
+            "pressing": 77
+          }
+        },
+        {
+          "player_id": "T01-P16",
+          "team_id": "T01",
+          "name": "Cormac Kenward",
+          "display_name": "C. Kenward",
+          "shirt_number": 16,
+          "position": "dm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.9,
+          "ratings": {
+            "pace": 70,
+            "passing": 71,
+            "finishing": 36,
+            "pressing": 85
+          }
+        },
+        {
+          "player_id": "T01-P17",
+          "team_id": "T01",
+          "name": "Idris Benali",
+          "display_name": "I. Benali",
+          "shirt_number": 17,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.6,
+          "ratings": {
+            "pace": 86,
+            "passing": 70,
+            "finishing": 75,
+            "pressing": 73
+          }
+        },
+        {
+          "player_id": "T01-P18",
+          "team_id": "T01",
+          "name": "Ren Hoshino",
+          "display_name": "R. Hoshino",
+          "shirt_number": 18,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 30.2,
+          "ratings": {
+            "pace": 60,
+            "passing": 82,
+            "finishing": 55,
+            "pressing": 86
+          }
+        },
+        {
+          "player_id": "T01-P19",
+          "team_id": "T01",
+          "name": "Milo Whitlock",
+          "display_name": "M. Whitlock",
+          "shirt_number": 19,
+          "position": "st",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.6,
+          "ratings": {
+            "pace": 78,
+            "passing": 61,
+            "finishing": 81,
+            "pressing": 66
+          }
+        },
+        {
+          "player_id": "T01-P20",
+          "team_id": "T01",
+          "name": "Joel Eichhorn",
+          "display_name": "J. Eichhorn",
+          "shirt_number": 20,
+          "position": "am",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.0,
+          "ratings": {
+            "pace": 69,
+            "passing": 78,
+            "finishing": 72,
+            "pressing": 71
+          }
+        },
+        {
+          "player_id": "T01-P22",
+          "team_id": "T01",
+          "name": "Jairo Quiroga",
+          "display_name": "J. Quiroga",
+          "shirt_number": 22,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 30.9,
+          "ratings": {
+            "pace": 65,
+            "passing": 69,
+            "finishing": 44,
+            "pressing": 75
+          }
+        },
+        {
+          "player_id": "T01-P24",
+          "team_id": "T01",
+          "name": "Callum Marchbank",
+          "display_name": "C. Marchbank",
+          "shirt_number": 24,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 29.6,
+          "ratings": {
+            "pace": 54,
+            "passing": 57,
+            "finishing": 35,
+            "pressing": 80
+          }
+        }
+      ]
+    },
+    {
+      "team_id": "T02",
+      "name": "Corrowmere Town",
+      "short_name": "CRW",
+      "primary_color": "#B22234",
+      "formation": "4-2-3-1",
+      "style_profile": "possession",
+      "venue": "Mill Lane Ground",
+      "lineup": [
+        1,
+        2,
+        4,
+        5,
+        3,
+        6,
+        8,
+        7,
+        10,
+        11,
+        9
+      ],
+      "bench": [
+        13,
+        12,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "players": [
+        {
+          "player_id": "T02-P01",
+          "team_id": "T02",
+          "name": "Alfie Yardley",
+          "display_name": "A. Yardley",
+          "shirt_number": 1,
+          "position": "gk",
+          "preferred_foot": "both",
+          "top_speed_kmh": 26.6,
+          "ratings": {
+            "pace": 49,
+            "passing": 72,
+            "finishing": 19,
+            "pressing": 35
+          }
+        },
+        {
+          "player_id": "T02-P02",
+          "team_id": "T02",
+          "name": "Bram Brekke",
+          "display_name": "B. Brekke",
+          "shirt_number": 2,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.0,
+          "ratings": {
+            "pace": 71,
+            "passing": 77,
+            "finishing": 26,
+            "pressing": 72
+          }
+        },
+        {
+          "player_id": "T02-P03",
+          "team_id": "T02",
+          "name": "Emilio Cordeiro",
+          "display_name": "E. Cordeiro",
+          "shirt_number": 3,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.3,
+          "ratings": {
+            "pace": 79,
+            "passing": 75,
+            "finishing": 38,
+            "pressing": 78
+          }
+        },
+        {
+          "player_id": "T02-P04",
+          "team_id": "T02",
+          "name": "Tiago Garrigues",
+          "display_name": "T. Garrigues",
+          "shirt_number": 4,
+          "position": "cb",
+          "preferred_foot": "left",
+          "top_speed_kmh": 31.7,
+          "ratings": {
+            "pace": 63,
+            "passing": 69,
+            "finishing": 26,
+            "pressing": 63
+          }
+        },
+        {
+          "player_id": "T02-P05",
+          "team_id": "T02",
+          "name": "Jairo Lacerda",
+          "display_name": "J. Lacerda",
+          "shirt_number": 5,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.4,
+          "ratings": {
+            "pace": 64,
+            "passing": 68,
+            "finishing": 38,
+            "pressing": 71
+          }
+        },
+        {
+          "player_id": "T02-P06",
+          "team_id": "T02",
+          "name": "Hugo Amaral",
+          "display_name": "H. Amaral",
+          "shirt_number": 6,
+          "position": "dm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.3,
+          "ratings": {
+            "pace": 66,
+            "passing": 82,
+            "finishing": 42,
+            "pressing": 83
+          }
+        },
+        {
+          "player_id": "T02-P07",
+          "team_id": "T02",
+          "name": "Ronan Merriwether",
+          "display_name": "R. Merriwether",
+          "shirt_number": 7,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.9,
+          "ratings": {
+            "pace": 79,
+            "passing": 80,
+            "finishing": 63,
+            "pressing": 75
+          }
+        },
+        {
+          "player_id": "T02-P08",
+          "team_id": "T02",
+          "name": "Dae-ho Baek",
+          "display_name": "D. Baek",
+          "shirt_number": 8,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.3,
+          "ratings": {
+            "pace": 69,
+            "passing": 75,
+            "finishing": 54,
+            "pressing": 73
+          }
+        },
+        {
+          "player_id": "T02-P09",
+          "team_id": "T02",
+          "name": "Leon Neuberger",
+          "display_name": "L. Neuberger",
+          "shirt_number": 9,
+          "position": "st",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.8,
+          "ratings": {
+            "pace": 78,
+            "passing": 67,
+            "finishing": 76,
+            "pressing": 59
+          }
+        },
+        {
+          "player_id": "T02-P10",
+          "team_id": "T02",
+          "name": "Ruairi Hartigan",
+          "display_name": "R. Hartigan",
+          "shirt_number": 10,
+          "position": "am",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.0,
+          "ratings": {
+            "pace": 70,
+            "passing": 83,
+            "finishing": 66,
+            "pressing": 71
+          }
+        },
+        {
+          "player_id": "T02-P11",
+          "team_id": "T02",
+          "name": "Felix Thorsrud",
+          "display_name": "F. Thorsrud",
+          "shirt_number": 11,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.3,
+          "ratings": {
+            "pace": 87,
+            "passing": 86,
+            "finishing": 64,
+            "pressing": 60
+          }
+        },
+        {
+          "player_id": "T02-P12",
+          "team_id": "T02",
+          "name": "Theo Holroyd",
+          "display_name": "T. Holroyd",
+          "shirt_number": 12,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.5,
+          "ratings": {
+            "pace": 77,
+            "passing": 82,
+            "finishing": 38,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T02-P13",
+          "team_id": "T02",
+          "name": "Seung-woo Seo",
+          "display_name": "S. Seo",
+          "shirt_number": 13,
+          "position": "gk",
+          "preferred_foot": "left",
+          "top_speed_kmh": 28.8,
+          "ratings": {
+            "pace": 33,
+            "passing": 54,
+            "finishing": 15,
+            "pressing": 33
+          }
+        },
+        {
+          "player_id": "T02-P14",
+          "team_id": "T02",
+          "name": "Femi Fofanah",
+          "display_name": "F. Fofanah",
+          "shirt_number": 14,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.3,
+          "ratings": {
+            "pace": 75,
+            "passing": 95,
+            "finishing": 58,
+            "pressing": 73
+          }
+        },
+        {
+          "player_id": "T02-P15",
+          "team_id": "T02",
+          "name": "Joaquin Almagro",
+          "display_name": "J. Almagro",
+          "shirt_number": 15,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.7,
+          "ratings": {
+            "pace": 61,
+            "passing": 66,
+            "finishing": 26,
+            "pressing": 64
+          }
+        },
+        {
+          "player_id": "T02-P16",
+          "team_id": "T02",
+          "name": "Tariq Haddadi",
+          "display_name": "T. Haddadi",
+          "shirt_number": 16,
+          "position": "dm",
+          "preferred_foot": "both",
+          "top_speed_kmh": 31.3,
+          "ratings": {
+            "pace": 67,
+            "passing": 72,
+            "finishing": 42,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T02-P17",
+          "team_id": "T02",
+          "name": "Lorenzo Capraro",
+          "display_name": "L. Capraro",
+          "shirt_number": 17,
+          "position": "wg",
+          "preferred_foot": "left",
+          "top_speed_kmh": 35.2,
+          "ratings": {
+            "pace": 89,
+            "passing": 81,
+            "finishing": 63,
+            "pressing": 67
+          }
+        },
+        {
+          "player_id": "T02-P18",
+          "team_id": "T02",
+          "name": "Owain Ollerton",
+          "display_name": "O. Ollerton",
+          "shirt_number": 18,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.5,
+          "ratings": {
+            "pace": 77,
+            "passing": 90,
+            "finishing": 39,
+            "pressing": 74
+          }
+        },
+        {
+          "player_id": "T02-P19",
+          "team_id": "T02",
+          "name": "Duarte Arriaga",
+          "display_name": "D. Arriaga",
+          "shirt_number": 19,
+          "position": "st",
+          "preferred_foot": "left",
+          "top_speed_kmh": 33.1,
+          "ratings": {
+            "pace": 87,
+            "passing": 67,
+            "finishing": 74,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T02-P20",
+          "team_id": "T02",
+          "name": "Luca Vannucci",
+          "display_name": "L. Vannucci",
+          "shirt_number": 20,
+          "position": "am",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.9,
+          "ratings": {
+            "pace": 75,
+            "passing": 80,
+            "finishing": 75,
+            "pressing": 64
+          }
+        },
+        {
+          "player_id": "T02-P22",
+          "team_id": "T02",
+          "name": "Finlay Sedgwick",
+          "display_name": "F. Sedgwick",
+          "shirt_number": 22,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.2,
+          "ratings": {
+            "pace": 86,
+            "passing": 80,
+            "finishing": 27,
+            "pressing": 69
+          }
+        },
+        {
+          "player_id": "T02-P24",
+          "team_id": "T02",
+          "name": "Paulo Figueiral",
+          "display_name": "P. Figueiral",
+          "shirt_number": 24,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.5,
+          "ratings": {
+            "pace": 62,
+            "passing": 76,
+            "finishing": 30,
+            "pressing": 64
+          }
+        }
+      ]
+    },
+    {
+      "team_id": "T03",
+      "name": "Halvenford City",
+      "short_name": "HVC",
+      "primary_color": "#2E8B57",
+      "formation": "4-4-2",
+      "style_profile": "counter",
+      "venue": "Halvenford Arena",
+      "lineup": [
+        1,
+        2,
+        4,
+        5,
+        3,
+        7,
+        8,
+        14,
+        11,
+        9,
+        19
+      ],
+      "bench": [
+        13,
+        6,
+        10,
+        12,
+        15,
+        16,
+        17,
+        18,
+        20
+      ],
+      "players": [
+        {
+          "player_id": "T03-P01",
+          "team_id": "T03",
+          "name": "Ronan Stobart",
+          "display_name": "R. Stobart",
+          "shirt_number": 1,
+          "position": "gk",
+          "preferred_foot": "right",
+          "top_speed_kmh": 26.8,
+          "ratings": {
+            "pace": 48,
+            "passing": 55,
+            "finishing": 21,
+            "pressing": 31
+          }
+        },
+        {
+          "player_id": "T03-P02",
+          "team_id": "T03",
+          "name": "Emilio Penalver",
+          "display_name": "E. Penalver",
+          "shirt_number": 2,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.3,
+          "ratings": {
+            "pace": 73,
+            "passing": 65,
+            "finishing": 37,
+            "pressing": 71
+          }
+        },
+        {
+          "player_id": "T03-P03",
+          "team_id": "T03",
+          "name": "Cormac Netherby",
+          "display_name": "C. Netherby",
+          "shirt_number": 3,
+          "position": "fb",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.3,
+          "ratings": {
+            "pace": 75,
+            "passing": 63,
+            "finishing": 48,
+            "pressing": 66
+          }
+        },
+        {
+          "player_id": "T03-P04",
+          "team_id": "T03",
+          "name": "Matthias Kuipers",
+          "display_name": "M. Kuipers",
+          "shirt_number": 4,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.6,
+          "ratings": {
+            "pace": 61,
+            "passing": 52,
+            "finishing": 16,
+            "pressing": 67
+          }
+        },
+        {
+          "player_id": "T03-P05",
+          "team_id": "T03",
+          "name": "Bram Fjelstad",
+          "display_name": "B. Fjelstad",
+          "shirt_number": 5,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 30.2,
+          "ratings": {
+            "pace": 60,
+            "passing": 64,
+            "finishing": 38,
+            "pressing": 72
+          }
+        },
+        {
+          "player_id": "T03-P06",
+          "team_id": "T03",
+          "name": "Kagiso Sithole",
+          "display_name": "K. Sithole",
+          "shirt_number": 6,
+          "position": "dm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.4,
+          "ratings": {
+            "pace": 63,
+            "passing": 74,
+            "finishing": 54,
+            "pressing": 79
+          }
+        },
+        {
+          "player_id": "T03-P07",
+          "team_id": "T03",
+          "name": "Anders Wouterse",
+          "display_name": "A. Wouterse",
+          "shirt_number": 7,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 35.4,
+          "ratings": {
+            "pace": 95,
+            "passing": 83,
+            "finishing": 66,
+            "pressing": 61
+          }
+        },
+        {
+          "player_id": "T03-P08",
+          "team_id": "T03",
+          "name": "Samir Lamrani",
+          "display_name": "S. Lamrani",
+          "shirt_number": 8,
+          "position": "cm",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.0,
+          "ratings": {
+            "pace": 73,
+            "passing": 80,
+            "finishing": 50,
+            "pressing": 68
+          }
+        },
+        {
+          "player_id": "T03-P09",
+          "team_id": "T03",
+          "name": "Amadou Olatunde",
+          "display_name": "A. Olatunde",
+          "shirt_number": 9,
+          "position": "st",
+          "preferred_foot": "both",
+          "top_speed_kmh": 33.2,
+          "ratings": {
+            "pace": 87,
+            "passing": 63,
+            "finishing": 93,
+            "pressing": 55
+          }
+        },
+        {
+          "player_id": "T03-P10",
+          "team_id": "T03",
+          "name": "Dae-ho Yoon",
+          "display_name": "D. Yoon",
+          "shirt_number": 10,
+          "position": "am",
+          "preferred_foot": "both",
+          "top_speed_kmh": 31.2,
+          "ratings": {
+            "pace": 61,
+            "passing": 79,
+            "finishing": 62,
+            "pressing": 58
+          }
+        },
+        {
+          "player_id": "T03-P11",
+          "team_id": "T03",
+          "name": "Oskar Brinkhorst",
+          "display_name": "O. Brinkhorst",
+          "shirt_number": 11,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.6,
+          "ratings": {
+            "pace": 90,
+            "passing": 61,
+            "finishing": 75,
+            "pressing": 67
+          }
+        },
+        {
+          "player_id": "T03-P12",
+          "team_id": "T03",
+          "name": "Jairo Valdivieso",
+          "display_name": "J. Valdivieso",
+          "shirt_number": 12,
+          "position": "fb",
+          "preferred_foot": "left",
+          "top_speed_kmh": 31.8,
+          "ratings": {
+            "pace": 70,
+            "passing": 68,
+            "finishing": 35,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T03-P13",
+          "team_id": "T03",
+          "name": "Tunde Sowande",
+          "display_name": "T. Sowande",
+          "shirt_number": 13,
+          "position": "gk",
+          "preferred_foot": "left",
+          "top_speed_kmh": 28.1,
+          "ratings": {
+            "pace": 38,
+            "passing": 48,
+            "finishing": 14,
+            "pressing": 32
+          }
+        },
+        {
+          "player_id": "T03-P14",
+          "team_id": "T03",
+          "name": "Kenji Matsuoka",
+          "display_name": "K. Matsuoka",
+          "shirt_number": 14,
+          "position": "cm",
+          "preferred_foot": "both",
+          "top_speed_kmh": 31.8,
+          "ratings": {
+            "pace": 64,
+            "passing": 75,
+            "finishing": 49,
+            "pressing": 78
+          }
+        },
+        {
+          "player_id": "T03-P15",
+          "team_id": "T03",
+          "name": "Yusuf Chraibi",
+          "display_name": "Y. Chraibi",
+          "shirt_number": 15,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.9,
+          "ratings": {
+            "pace": 69,
+            "passing": 71,
+            "finishing": 29,
+            "pressing": 71
+          }
+        },
+        {
+          "player_id": "T03-P16",
+          "team_id": "T03",
+          "name": "Luca Quaglia",
+          "display_name": "L. Quaglia",
+          "shirt_number": 16,
+          "position": "dm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.8,
+          "ratings": {
+            "pace": 73,
+            "passing": 68,
+            "finishing": 40,
+            "pressing": 82
+          }
+        },
+        {
+          "player_id": "T03-P17",
+          "team_id": "T03",
+          "name": "Lorenzo Lombardini",
+          "display_name": "L. Lombardini",
+          "shirt_number": 17,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.3,
+          "ratings": {
+            "pace": 88,
+            "passing": 74,
+            "finishing": 73,
+            "pressing": 64
+          }
+        },
+        {
+          "player_id": "T03-P18",
+          "team_id": "T03",
+          "name": "Bogdan Grzelak",
+          "display_name": "B. Grzelak",
+          "shirt_number": 18,
+          "position": "cm",
+          "preferred_foot": "left",
+          "top_speed_kmh": 33.1,
+          "ratings": {
+            "pace": 76,
+            "passing": 73,
+            "finishing": 50,
+            "pressing": 72
+          }
+        },
+        {
+          "player_id": "T03-P19",
+          "team_id": "T03",
+          "name": "Bruno Godinho",
+          "display_name": "B. Godinho",
+          "shirt_number": 19,
+          "position": "st",
+          "preferred_foot": "right",
+          "top_speed_kmh": 35.0,
+          "ratings": {
+            "pace": 90,
+            "passing": 64,
+            "finishing": 72,
+            "pressing": 59
+          }
+        },
+        {
+          "player_id": "T03-P20",
+          "team_id": "T03",
+          "name": "Jasper Jessop",
+          "display_name": "J. Jessop",
+          "shirt_number": 20,
+          "position": "am",
+          "preferred_foot": "right",
+          "top_speed_kmh": 30.5,
+          "ratings": {
+            "pace": 55,
+            "passing": 90,
+            "finishing": 68,
+            "pressing": 63
+          }
+        },
+        {
+          "player_id": "T03-P22",
+          "team_id": "T03",
+          "name": "Femi Adebanjo",
+          "display_name": "F. Adebanjo",
+          "shirt_number": 22,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.3,
+          "ratings": {
+            "pace": 81,
+            "passing": 65,
+            "finishing": 48,
+            "pressing": 61
+          }
+        },
+        {
+          "player_id": "T03-P24",
+          "team_id": "T03",
+          "name": "Radek Jankowiak",
+          "display_name": "R. Jankowiak",
+          "shirt_number": 24,
+          "position": "cb",
+          "preferred_foot": "both",
+          "top_speed_kmh": 29.9,
+          "ratings": {
+            "pace": 60,
+            "passing": 63,
+            "finishing": 25,
+            "pressing": 65
+          }
+        }
+      ]
+    },
+    {
+      "team_id": "T04",
+      "name": "Tarnwick United",
+      "short_name": "TRW",
+      "primary_color": "#6A2C70",
+      "formation": "5-4-1",
+      "style_profile": "low_block",
+      "venue": "Tarnwick Moor",
+      "lineup": [
+        1,
+        2,
+        4,
+        5,
+        15,
+        3,
+        7,
+        8,
+        6,
+        11,
+        9
+      ],
+      "bench": [
+        13,
+        10,
+        12,
+        14,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "players": [
+        {
+          "player_id": "T04-P01",
+          "team_id": "T04",
+          "name": "Aksel Uittenbosch",
+          "display_name": "A. Uittenbosch",
+          "shirt_number": 1,
+          "position": "gk",
+          "preferred_foot": "left",
+          "top_speed_kmh": 26.7,
+          "ratings": {
+            "pace": 39,
+            "passing": 48,
+            "finishing": 23,
+            "pressing": 26
+          }
+        },
+        {
+          "player_id": "T04-P02",
+          "team_id": "T04",
+          "name": "Duarte Damasceno",
+          "display_name": "D. Damasceno",
+          "shirt_number": 2,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.3,
+          "ratings": {
+            "pace": 87,
+            "passing": 63,
+            "finishing": 36,
+            "pressing": 68
+          }
+        },
+        {
+          "player_id": "T04-P03",
+          "team_id": "T04",
+          "name": "Tunde Mensah-Bonsu",
+          "display_name": "T. Mensah-Bonsu",
+          "shirt_number": 3,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.7,
+          "ratings": {
+            "pace": 87,
+            "passing": 62,
+            "finishing": 41,
+            "pressing": 57
+          }
+        },
+        {
+          "player_id": "T04-P04",
+          "team_id": "T04",
+          "name": "Ruairi Rushworth",
+          "display_name": "R. Rushworth",
+          "shirt_number": 4,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.1,
+          "ratings": {
+            "pace": 65,
+            "passing": 60,
+            "finishing": 40,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T04-P05",
+          "team_id": "T04",
+          "name": "Paulo Bettencourt",
+          "display_name": "P. Bettencourt",
+          "shirt_number": 5,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.6,
+          "ratings": {
+            "pace": 75,
+            "passing": 60,
+            "finishing": 39,
+            "pressing": 61
+          }
+        },
+        {
+          "player_id": "T04-P06",
+          "team_id": "T04",
+          "name": "Min-jun Jang",
+          "display_name": "M. Jang",
+          "shirt_number": 6,
+          "position": "dm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 30.6,
+          "ratings": {
+            "pace": 62,
+            "passing": 64,
+            "finishing": 41,
+            "pressing": 68
+          }
+        },
+        {
+          "player_id": "T04-P07",
+          "team_id": "T04",
+          "name": "Yaw Kyereme",
+          "display_name": "Y. Kyereme",
+          "shirt_number": 7,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.0,
+          "ratings": {
+            "pace": 90,
+            "passing": 73,
+            "finishing": 75,
+            "pressing": 63
+          }
+        },
+        {
+          "player_id": "T04-P08",
+          "team_id": "T04",
+          "name": "Hugo Barreiro",
+          "display_name": "H. Barreiro",
+          "shirt_number": 8,
+          "position": "cm",
+          "preferred_foot": "both",
+          "top_speed_kmh": 31.4,
+          "ratings": {
+            "pace": 61,
+            "passing": 77,
+            "finishing": 56,
+            "pressing": 65
+          }
+        },
+        {
+          "player_id": "T04-P09",
+          "team_id": "T04",
+          "name": "Theo McGarrigle",
+          "display_name": "T. McGarrigle",
+          "shirt_number": 9,
+          "position": "st",
+          "preferred_foot": "both",
+          "top_speed_kmh": 33.3,
+          "ratings": {
+            "pace": 90,
+            "passing": 55,
+            "finishing": 84,
+            "pressing": 67
+          }
+        },
+        {
+          "player_id": "T04-P10",
+          "team_id": "T04",
+          "name": "Kwame Adeleke",
+          "display_name": "K. Adeleke",
+          "shirt_number": 10,
+          "position": "am",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.1,
+          "ratings": {
+            "pace": 80,
+            "passing": 72,
+            "finishing": 72,
+            "pressing": 67
+          }
+        },
+        {
+          "player_id": "T04-P11",
+          "team_id": "T04",
+          "name": "Haruto Kuwabara",
+          "display_name": "H. Kuwabara",
+          "shirt_number": 11,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.3,
+          "ratings": {
+            "pace": 87,
+            "passing": 73,
+            "finishing": 68,
+            "pressing": 61
+          }
+        },
+        {
+          "player_id": "T04-P12",
+          "team_id": "T04",
+          "name": "Emeka Nwosu-Bello",
+          "display_name": "E. Nwosu-Bello",
+          "shirt_number": 12,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.2,
+          "ratings": {
+            "pace": 82,
+            "passing": 71,
+            "finishing": 32,
+            "pressing": 69
+          }
+        },
+        {
+          "player_id": "T04-P13",
+          "team_id": "T04",
+          "name": "Sota Ogasawara",
+          "display_name": "S. Ogasawara",
+          "shirt_number": 13,
+          "position": "gk",
+          "preferred_foot": "right",
+          "top_speed_kmh": 28.2,
+          "ratings": {
+            "pace": 53,
+            "passing": 54,
+            "finishing": 11,
+            "pressing": 28
+          }
+        },
+        {
+          "player_id": "T04-P14",
+          "team_id": "T04",
+          "name": "Arlo Fenwick",
+          "display_name": "A. Fenwick",
+          "shirt_number": 14,
+          "position": "cm",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.4,
+          "ratings": {
+            "pace": 70,
+            "passing": 74,
+            "finishing": 60,
+            "pressing": 66
+          }
+        },
+        {
+          "player_id": "T04-P15",
+          "team_id": "T04",
+          "name": "Jesper Ostendorf",
+          "display_name": "J. Ostendorf",
+          "shirt_number": 15,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.3,
+          "ratings": {
+            "pace": 70,
+            "passing": 50,
+            "finishing": 17,
+            "pressing": 66
+          }
+        },
+        {
+          "player_id": "T04-P16",
+          "team_id": "T04",
+          "name": "Thabo Dlamini-Zulu",
+          "display_name": "T. Dlamini-Zulu",
+          "shirt_number": 16,
+          "position": "dm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.8,
+          "ratings": {
+            "pace": 73,
+            "passing": 76,
+            "finishing": 37,
+            "pressing": 76
+          }
+        },
+        {
+          "player_id": "T04-P17",
+          "team_id": "T04",
+          "name": "Jairo Pangilinan",
+          "display_name": "J. Pangilinan",
+          "shirt_number": 17,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.1,
+          "ratings": {
+            "pace": 84,
+            "passing": 61,
+            "finishing": 62,
+            "pressing": 62
+          }
+        },
+        {
+          "player_id": "T04-P18",
+          "team_id": "T04",
+          "name": "Dario Giordanelli",
+          "display_name": "D. Giordanelli",
+          "shirt_number": 18,
+          "position": "cm",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.2,
+          "ratings": {
+            "pace": 73,
+            "passing": 81,
+            "finishing": 60,
+            "pressing": 74
+          }
+        },
+        {
+          "player_id": "T04-P19",
+          "team_id": "T04",
+          "name": "Finlay Oakhurst",
+          "display_name": "F. Oakhurst",
+          "shirt_number": 19,
+          "position": "st",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.1,
+          "ratings": {
+            "pace": 79,
+            "passing": 54,
+            "finishing": 79,
+            "pressing": 59
+          }
+        },
+        {
+          "player_id": "T04-P20",
+          "team_id": "T04",
+          "name": "Viktor Moravec",
+          "display_name": "V. Moravec",
+          "shirt_number": 20,
+          "position": "am",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.9,
+          "ratings": {
+            "pace": 69,
+            "passing": 81,
+            "finishing": 54,
+            "pressing": 65
+          }
+        },
+        {
+          "player_id": "T04-P22",
+          "team_id": "T04",
+          "name": "Owain Breathnach",
+          "display_name": "O. Breathnach",
+          "shirt_number": 22,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.3,
+          "ratings": {
+            "pace": 76,
+            "passing": 71,
+            "finishing": 37,
+            "pressing": 63
+          }
+        },
+        {
+          "player_id": "T04-P24",
+          "team_id": "T04",
+          "name": "Kamil Bartosik",
+          "display_name": "K. Bartosik",
+          "shirt_number": 24,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.3,
+          "ratings": {
+            "pace": 65,
+            "passing": 54,
+            "finishing": 37,
+            "pressing": 62
+          }
+        }
+      ]
+    },
+    {
+      "team_id": "T05",
+      "name": "Eldmoor Rangers",
+      "short_name": "ELD",
+      "primary_color": "#D4A017",
+      "formation": "4-4-2",
+      "style_profile": "direct",
+      "venue": "Quarry End",
+      "lineup": [
+        1,
+        2,
+        4,
+        5,
+        3,
+        7,
+        8,
+        14,
+        11,
+        9,
+        19
+      ],
+      "bench": [
+        13,
+        6,
+        10,
+        12,
+        15,
+        16,
+        17,
+        18,
+        20
+      ],
+      "players": [
+        {
+          "player_id": "T05-P01",
+          "team_id": "T05",
+          "name": "Owain Lathbury",
+          "display_name": "O. Lathbury",
+          "shirt_number": 1,
+          "position": "gk",
+          "preferred_foot": "right",
+          "top_speed_kmh": 27.8,
+          "ratings": {
+            "pace": 44,
+            "passing": 51,
+            "finishing": 2,
+            "pressing": 32
+          }
+        },
+        {
+          "player_id": "T05-P02",
+          "team_id": "T05",
+          "name": "Marek Filipek",
+          "display_name": "M. Filipek",
+          "shirt_number": 2,
+          "position": "fb",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.2,
+          "ratings": {
+            "pace": 73,
+            "passing": 65,
+            "finishing": 39,
+            "pressing": 77
+          }
+        },
+        {
+          "player_id": "T05-P03",
+          "team_id": "T05",
+          "name": "Joaquin Lacunza",
+          "display_name": "J. Lacunza",
+          "shirt_number": 3,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.9,
+          "ratings": {
+            "pace": 76,
+            "passing": 67,
+            "finishing": 44,
+            "pressing": 75
+          }
+        },
+        {
+          "player_id": "T05-P04",
+          "team_id": "T05",
+          "name": "Mateo Noronha",
+          "display_name": "M. Noronha",
+          "shirt_number": 4,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 30.8,
+          "ratings": {
+            "pace": 57,
+            "passing": 57,
+            "finishing": 40,
+            "pressing": 71
+          }
+        },
+        {
+          "player_id": "T05-P05",
+          "team_id": "T05",
+          "name": "Andres Pimentel",
+          "display_name": "A. Pimentel",
+          "shirt_number": 5,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.2,
+          "ratings": {
+            "pace": 61,
+            "passing": 63,
+            "finishing": 26,
+            "pressing": 63
+          }
+        },
+        {
+          "player_id": "T05-P06",
+          "team_id": "T05",
+          "name": "Andile Mahlangu",
+          "display_name": "A. Mahlangu",
+          "shirt_number": 6,
+          "position": "dm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.4,
+          "ratings": {
+            "pace": 76,
+            "passing": 66,
+            "finishing": 44,
+            "pressing": 69
+          }
+        },
+        {
+          "player_id": "T05-P07",
+          "team_id": "T05",
+          "name": "Bram Roelofsen",
+          "display_name": "B. Roelofsen",
+          "shirt_number": 7,
+          "position": "wg",
+          "preferred_foot": "left",
+          "top_speed_kmh": 33.0,
+          "ratings": {
+            "pace": 79,
+            "passing": 69,
+            "finishing": 72,
+            "pressing": 63
+          }
+        },
+        {
+          "player_id": "T05-P08",
+          "team_id": "T05",
+          "name": "Milan Rybar",
+          "display_name": "M. Rybar",
+          "shirt_number": 8,
+          "position": "cm",
+          "preferred_foot": "both",
+          "top_speed_kmh": 30.6,
+          "ratings": {
+            "pace": 56,
+            "passing": 78,
+            "finishing": 51,
+            "pressing": 72
+          }
+        },
+        {
+          "player_id": "T05-P09",
+          "team_id": "T05",
+          "name": "Jairo Villafuerte",
+          "display_name": "J. Villafuerte",
+          "shirt_number": 9,
+          "position": "st",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.6,
+          "ratings": {
+            "pace": 84,
+            "passing": 70,
+            "finishing": 89,
+            "pressing": 53
+          }
+        },
+        {
+          "player_id": "T05-P10",
+          "team_id": "T05",
+          "name": "Jesper Hollerbach",
+          "display_name": "J. Hollerbach",
+          "shirt_number": 10,
+          "position": "am",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.2,
+          "ratings": {
+            "pace": 66,
+            "passing": 69,
+            "finishing": 76,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T05-P11",
+          "team_id": "T05",
+          "name": "Declan Gallimore",
+          "display_name": "D. Gallimore",
+          "shirt_number": 11,
+          "position": "wg",
+          "preferred_foot": "left",
+          "top_speed_kmh": 34.1,
+          "ratings": {
+            "pace": 85,
+            "passing": 66,
+            "finishing": 73,
+            "pressing": 61
+          }
+        },
+        {
+          "player_id": "T05-P12",
+          "team_id": "T05",
+          "name": "Rui Urquiza",
+          "display_name": "R. Urquiza",
+          "shirt_number": 12,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.9,
+          "ratings": {
+            "pace": 77,
+            "passing": 74,
+            "finishing": 43,
+            "pressing": 67
+          }
+        },
+        {
+          "player_id": "T05-P13",
+          "team_id": "T05",
+          "name": "Idris Tahiri",
+          "display_name": "I. Tahiri",
+          "shirt_number": 13,
+          "position": "gk",
+          "preferred_foot": "right",
+          "top_speed_kmh": 27.5,
+          "ratings": {
+            "pace": 44,
+            "passing": 56,
+            "finishing": 18,
+            "pressing": 35
+          }
+        },
+        {
+          "player_id": "T05-P14",
+          "team_id": "T05",
+          "name": "Tomas Kowalczuk",
+          "display_name": "T. Kowalczuk",
+          "shirt_number": 14,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.2,
+          "ratings": {
+            "pace": 77,
+            "passing": 70,
+            "finishing": 50,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T05-P15",
+          "team_id": "T05",
+          "name": "Rhys Toomey",
+          "display_name": "R. Toomey",
+          "shirt_number": 15,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 30.4,
+          "ratings": {
+            "pace": 64,
+            "passing": 62,
+            "finishing": 37,
+            "pressing": 66
+          }
+        },
+        {
+          "player_id": "T05-P16",
+          "team_id": "T05",
+          "name": "Ewan Fairweather",
+          "display_name": "E. Fairweather",
+          "shirt_number": 16,
+          "position": "dm",
+          "preferred_foot": "both",
+          "top_speed_kmh": 31.2,
+          "ratings": {
+            "pace": 60,
+            "passing": 76,
+            "finishing": 47,
+            "pressing": 74
+          }
+        },
+        {
+          "player_id": "T05-P17",
+          "team_id": "T05",
+          "name": "Oskar Schwaiger",
+          "display_name": "O. Schwaiger",
+          "shirt_number": 17,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.1,
+          "ratings": {
+            "pace": 84,
+            "passing": 61,
+            "finishing": 78,
+            "pressing": 62
+          }
+        },
+        {
+          "player_id": "T05-P18",
+          "team_id": "T05",
+          "name": "Luca Ferrarotti",
+          "display_name": "L. Ferrarotti",
+          "shirt_number": 18,
+          "position": "cm",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.6,
+          "ratings": {
+            "pace": 68,
+            "passing": 75,
+            "finishing": 71,
+            "pressing": 72
+          }
+        },
+        {
+          "player_id": "T05-P19",
+          "team_id": "T05",
+          "name": "Finlay Underhill",
+          "display_name": "F. Underhill",
+          "shirt_number": 19,
+          "position": "st",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.7,
+          "ratings": {
+            "pace": 88,
+            "passing": 65,
+            "finishing": 79,
+            "pressing": 64
+          }
+        },
+        {
+          "player_id": "T05-P20",
+          "team_id": "T05",
+          "name": "Fionn Brindley",
+          "display_name": "F. Brindley",
+          "shirt_number": 20,
+          "position": "am",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.1,
+          "ratings": {
+            "pace": 79,
+            "passing": 82,
+            "finishing": 74,
+            "pressing": 63
+          }
+        },
+        {
+          "player_id": "T05-P22",
+          "team_id": "T05",
+          "name": "Soren Reinholz",
+          "display_name": "S. Reinholz",
+          "shirt_number": 22,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 33.6,
+          "ratings": {
+            "pace": 81,
+            "passing": 63,
+            "finishing": 47,
+            "pressing": 74
+          }
+        },
+        {
+          "player_id": "T05-P24",
+          "team_id": "T05",
+          "name": "Alfie Garside",
+          "display_name": "A. Garside",
+          "shirt_number": 24,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 30.0,
+          "ratings": {
+            "pace": 59,
+            "passing": 65,
+            "finishing": 24,
+            "pressing": 66
+          }
+        }
+      ]
+    },
+    {
+      "team_id": "T06",
+      "name": "Wrenhaven FC",
+      "short_name": "WRN",
+      "primary_color": "#0F7C8C",
+      "formation": "4-3-3",
+      "style_profile": "possession",
+      "venue": "Wrenhaven Quay",
+      "lineup": [
+        1,
+        2,
+        4,
+        5,
+        3,
+        6,
+        8,
+        14,
+        7,
+        9,
+        11
+      ],
+      "bench": [
+        13,
+        10,
+        12,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ],
+      "players": [
+        {
+          "player_id": "T06-P01",
+          "team_id": "T06",
+          "name": "Oskar Verhaegen",
+          "display_name": "O. Verhaegen",
+          "shirt_number": 1,
+          "position": "gk",
+          "preferred_foot": "right",
+          "top_speed_kmh": 27.4,
+          "ratings": {
+            "pace": 43,
+            "passing": 54,
+            "finishing": 16,
+            "pressing": 40
+          }
+        },
+        {
+          "player_id": "T06-P02",
+          "team_id": "T06",
+          "name": "Dario Abbondanza",
+          "display_name": "D. Abbondanza",
+          "shirt_number": 2,
+          "position": "fb",
+          "preferred_foot": "left",
+          "top_speed_kmh": 31.6,
+          "ratings": {
+            "pace": 74,
+            "passing": 81,
+            "finishing": 36,
+            "pressing": 67
+          }
+        },
+        {
+          "player_id": "T06-P03",
+          "team_id": "T06",
+          "name": "Andres Escobedo",
+          "display_name": "A. Escobedo",
+          "shirt_number": 3,
+          "position": "fb",
+          "preferred_foot": "left",
+          "top_speed_kmh": 32.5,
+          "ratings": {
+            "pace": 78,
+            "passing": 73,
+            "finishing": 46,
+            "pressing": 65
+          }
+        },
+        {
+          "player_id": "T06-P04",
+          "team_id": "T06",
+          "name": "Jasper Ingleby",
+          "display_name": "J. Ingleby",
+          "shirt_number": 4,
+          "position": "cb",
+          "preferred_foot": "left",
+          "top_speed_kmh": 30.2,
+          "ratings": {
+            "pace": 47,
+            "passing": 65,
+            "finishing": 25,
+            "pressing": 66
+          }
+        },
+        {
+          "player_id": "T06-P05",
+          "team_id": "T06",
+          "name": "Jairo Manalastas",
+          "display_name": "J. Manalastas",
+          "shirt_number": 5,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.5,
+          "ratings": {
+            "pace": 69,
+            "passing": 68,
+            "finishing": 36,
+            "pressing": 73
+          }
+        },
+        {
+          "player_id": "T06-P06",
+          "team_id": "T06",
+          "name": "Declan Northcott",
+          "display_name": "D. Northcott",
+          "shirt_number": 6,
+          "position": "dm",
+          "preferred_foot": "left",
+          "top_speed_kmh": 31.8,
+          "ratings": {
+            "pace": 64,
+            "passing": 75,
+            "finishing": 38,
+            "pressing": 77
+          }
+        },
+        {
+          "player_id": "T06-P07",
+          "team_id": "T06",
+          "name": "Callum Tillotson",
+          "display_name": "C. Tillotson",
+          "shirt_number": 7,
+          "position": "wg",
+          "preferred_foot": "both",
+          "top_speed_kmh": 34.0,
+          "ratings": {
+            "pace": 82,
+            "passing": 72,
+            "finishing": 65,
+            "pressing": 72
+          }
+        },
+        {
+          "player_id": "T06-P08",
+          "team_id": "T06",
+          "name": "Bogdan Vrabec",
+          "display_name": "B. Vrabec",
+          "shirt_number": 8,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.3,
+          "ratings": {
+            "pace": 69,
+            "passing": 80,
+            "finishing": 55,
+            "pressing": 74
+          }
+        },
+        {
+          "player_id": "T06-P09",
+          "team_id": "T06",
+          "name": "Milo Pennock",
+          "display_name": "M. Pennock",
+          "shirt_number": 9,
+          "position": "st",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.8,
+          "ratings": {
+            "pace": 75,
+            "passing": 67,
+            "finishing": 75,
+            "pressing": 65
+          }
+        },
+        {
+          "player_id": "T06-P10",
+          "team_id": "T06",
+          "name": "Miguel Vasconcelos",
+          "display_name": "M. Vasconcelos",
+          "shirt_number": 10,
+          "position": "am",
+          "preferred_foot": "left",
+          "top_speed_kmh": 30.8,
+          "ratings": {
+            "pace": 62,
+            "passing": 92,
+            "finishing": 75,
+            "pressing": 69
+          }
+        },
+        {
+          "player_id": "T06-P11",
+          "team_id": "T06",
+          "name": "Marco Benvenuti",
+          "display_name": "M. Benvenuti",
+          "shirt_number": 11,
+          "position": "wg",
+          "preferred_foot": "left",
+          "top_speed_kmh": 33.6,
+          "ratings": {
+            "pace": 87,
+            "passing": 80,
+            "finishing": 65,
+            "pressing": 70
+          }
+        },
+        {
+          "player_id": "T06-P12",
+          "team_id": "T06",
+          "name": "Elias Achterberg",
+          "display_name": "E. Achterberg",
+          "shirt_number": 12,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.2,
+          "ratings": {
+            "pace": 70,
+            "passing": 76,
+            "finishing": 31,
+            "pressing": 73
+          }
+        },
+        {
+          "player_id": "T06-P13",
+          "team_id": "T06",
+          "name": "Leon Albrechtsen",
+          "display_name": "L. Albrechtsen",
+          "shirt_number": 13,
+          "position": "gk",
+          "preferred_foot": "left",
+          "top_speed_kmh": 28.6,
+          "ratings": {
+            "pace": 48,
+            "passing": 64,
+            "finishing": 16,
+            "pressing": 40
+          }
+        },
+        {
+          "player_id": "T06-P14",
+          "team_id": "T06",
+          "name": "Radek Lisowski",
+          "display_name": "R. Lisowski",
+          "shirt_number": 14,
+          "position": "cm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.6,
+          "ratings": {
+            "pace": 65,
+            "passing": 85,
+            "finishing": 50,
+            "pressing": 72
+          }
+        },
+        {
+          "player_id": "T06-P15",
+          "team_id": "T06",
+          "name": "Lwazi Khumalo",
+          "display_name": "L. Khumalo",
+          "shirt_number": 15,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.5,
+          "ratings": {
+            "pace": 58,
+            "passing": 63,
+            "finishing": 43,
+            "pressing": 74
+          }
+        },
+        {
+          "player_id": "T06-P16",
+          "team_id": "T06",
+          "name": "Anders Kranzler",
+          "display_name": "A. Kranzler",
+          "shirt_number": 16,
+          "position": "dm",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.8,
+          "ratings": {
+            "pace": 61,
+            "passing": 79,
+            "finishing": 38,
+            "pressing": 77
+          }
+        },
+        {
+          "player_id": "T06-P17",
+          "team_id": "T06",
+          "name": "Owain Ashcombe",
+          "display_name": "O. Ashcombe",
+          "shirt_number": 17,
+          "position": "wg",
+          "preferred_foot": "right",
+          "top_speed_kmh": 34.3,
+          "ratings": {
+            "pace": 81,
+            "passing": 81,
+            "finishing": 59,
+            "pressing": 58
+          }
+        },
+        {
+          "player_id": "T06-P18",
+          "team_id": "T06",
+          "name": "Bram Lindqvist",
+          "display_name": "B. Lindqvist",
+          "shirt_number": 18,
+          "position": "cm",
+          "preferred_foot": "left",
+          "top_speed_kmh": 30.8,
+          "ratings": {
+            "pace": 64,
+            "passing": 82,
+            "finishing": 58,
+            "pressing": 64
+          }
+        },
+        {
+          "player_id": "T06-P19",
+          "team_id": "T06",
+          "name": "Bruno Echavarri",
+          "display_name": "B. Echavarri",
+          "shirt_number": 19,
+          "position": "st",
+          "preferred_foot": "right",
+          "top_speed_kmh": 31.2,
+          "ratings": {
+            "pace": 73,
+            "passing": 67,
+            "finishing": 97,
+            "pressing": 59
+          }
+        },
+        {
+          "player_id": "T06-P20",
+          "team_id": "T06",
+          "name": "Finlay Calloway",
+          "display_name": "F. Calloway",
+          "shirt_number": 20,
+          "position": "am",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.7,
+          "ratings": {
+            "pace": 74,
+            "passing": 98,
+            "finishing": 69,
+            "pressing": 59
+          }
+        },
+        {
+          "player_id": "T06-P22",
+          "team_id": "T06",
+          "name": "Rhys Rafferty",
+          "display_name": "R. Rafferty",
+          "shirt_number": 22,
+          "position": "fb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.0,
+          "ratings": {
+            "pace": 72,
+            "passing": 73,
+            "finishing": 35,
+            "pressing": 74
+          }
+        },
+        {
+          "player_id": "T06-P24",
+          "team_id": "T06",
+          "name": "Kwame Amankwah",
+          "display_name": "K. Amankwah",
+          "shirt_number": 24,
+          "position": "cb",
+          "preferred_foot": "right",
+          "top_speed_kmh": 32.3,
+          "ratings": {
+            "pace": 71,
+            "passing": 74,
+            "finishing": 38,
+            "pressing": 67
+          }
+        }
+      ]
+    }
+  ]
+}

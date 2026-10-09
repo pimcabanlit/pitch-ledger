@@ -38,7 +38,7 @@ Data contract for the Pitch Ledger pipeline. Every stage reads from one event ta
 | Field | Type | Example | Notes |
 | --- | --- | --- | --- |
 | match_id | string | M0001 | Primary key |
-| competition | string | Synthetic Premier Cup | Fictional |
+| competition | string | Harbour Coast League | Fictional |
 | season | string | 2026-27 | |
 | kickoff_utc | timestamp | 2026-10-24T14:00:00Z | |
 | venue | string | Harbourside Park | Fictional |
