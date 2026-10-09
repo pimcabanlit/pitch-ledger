@@ -1,0 +1,11 @@
+# The home striker's shot volume and quality rise for 15 minutes from 62'.
+# Engine should say: player-form insight; milestones for player-focus mode.
+scenario_id: hot_streak
+description: Home striker's shot volume and quality rise for 15 minutes from 62'
+trigger: {period: 2, minute: 62, duration_min: 15}
+player_id: T05-P09
+effects:
+  shot_rate: {op: mul, value: 4.0}
+  shot_quality: {op: mul, value: 3.0}
+  involvement: {op: mul, value: 10.0}
+expected_detection: {insight_type: player_form, player_id: T05-P09, within_min: 15}

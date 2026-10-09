@@ -1,0 +1,14 @@
+# The six demo matches: one per planted scenario plus an extra baseline.
+# Pairings are agreed in docs/build-plan.md. M0001 keeps the Phase 1 baseline seed; every
+# other seed is the first from 4212 upward whose match has no validation rejects, every
+# event realism band in range, no momentum alert before the planted minute (none at all
+# for a baseline), and the expected detection within 10 minutes; for red_card also the
+# ten men's possession falling after the card, as it does in 27 of 40 seeds. Seeds
+# regenerate each match exactly.
+matches:
+  - {match_id: M0001, scenario_id: none, home_team_id: T01, away_team_id: T02, seed: 4211}
+  - {match_id: M0002, scenario_id: late_collapse, home_team_id: T01, away_team_id: T02, seed: 4212}
+  - {match_id: M0003, scenario_id: high_press_switch, home_team_id: T06, away_team_id: T02, seed: 4213}
+  - {match_id: M0004, scenario_id: red_card, home_team_id: T03, away_team_id: T04, seed: 4213}
+  - {match_id: M0005, scenario_id: hot_streak, home_team_id: T05, away_team_id: T06, seed: 4212}
+  - {match_id: M0006, scenario_id: none, home_team_id: T02, away_team_id: T01, seed: 4212}

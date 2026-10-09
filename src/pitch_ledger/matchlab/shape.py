@@ -42,12 +42,13 @@ def slot_position(
     ball_y: float,
     in_possession: bool,
     style: StyleProfile,
+    depth_shift: float = 0.0,
 ) -> Point:
     """Where a slot stands given the ball, in the team's own frame.
 
     ``ball_x``/``ball_y`` are in the same (own) frame. In possession the shape pushes up and
     spreads; out of possession it drops, narrows toward the ball and holds a style-based
-    block depth.
+    block depth, moved by ``depth_shift`` metres (a scenario pushing the press higher).
     """
     base_x, base_y = FORMATION_SLOTS[formation][slot]
     if slot == 0:  # goalkeeper
@@ -57,7 +58,7 @@ def slot_position(
         x = base_x * 0.7 + ball_x * 0.38
         y = base_y + (ball_y - 34.0) * 0.25
     else:
-        x = base_x * 0.6 + ball_x * 0.32 + BLOCK_DEPTH_M[style] - 6.0
+        x = base_x * 0.6 + ball_x * 0.32 + BLOCK_DEPTH_M[style] - 6.0 + depth_shift
         y = 34.0 + (base_y - 34.0) * 0.8 + (ball_y - 34.0) * 0.35
     return (
         round(_clamp(x, 2.0, PITCH_LENGTH_M - 2.0), 1),

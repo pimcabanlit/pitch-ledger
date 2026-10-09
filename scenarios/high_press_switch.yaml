@@ -1,0 +1,12 @@
+# The home side switches from a mid block to a high press at 30'.
+# Engine should say: pressing jumped (PPDA falls), forcing build-up errors. The detection
+# is on the away side, whose build-up breaks down under the new press.
+scenario_id: high_press_switch
+description: Home side switches from a mid block to a high press at 30'
+trigger: {period: 1, minute: 30}
+team_id: T06
+effects:
+  press_rate: {op: mul, value: 3.0}
+  press_win: {op: mul, value: 1.5}
+  block_depth: {op: add, value: 12.0}
+expected_detection: {insight_type: momentum_shift, team_id: T02, within_min: 15}

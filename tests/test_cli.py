@@ -83,7 +83,8 @@ def test_realism_prints_every_band(match_dir: Path, capsys: pytest.CaptureFixtur
         assert metric in out
 
 
-def test_unknown_and_future_scenarios_rejected(tmp_path: Path) -> None:
-    assert main(["generate", "--scenario", "late_collapse", "--out", str(tmp_path)]) == 2
+def test_unknown_or_mismatched_scenarios_rejected(tmp_path: Path) -> None:
     assert main(["generate", "--scenario", "bogus", "--out", str(tmp_path)]) == 2
+    # red_card targets T04, which is not playing in the default T01 v T02 pairing
+    assert main(["generate", "--scenario", "red_card", "--out", str(tmp_path)]) == 2
     assert not any(tmp_path.iterdir())

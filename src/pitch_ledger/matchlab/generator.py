@@ -14,6 +14,7 @@ dead-ball restart) and emits events as it goes:
 
 import math
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -39,6 +40,7 @@ from pitch_ledger.matchlab.styles import (
     STYLES,
     ModifierProvider,
     Modifiers,
+    SendOff,
     StyleParams,
     no_modifiers,
 )
@@ -193,11 +195,19 @@ class _Team:
 
 
 class _Simulator:
-    def __init__(self, spec: MatchSpec, modifiers: ModifierProvider) -> None:
+    def __init__(
+        self,
+        spec: MatchSpec,
+        modifiers: ModifierProvider,
+        send_offs: Sequence[SendOff] = (),
+        protected: frozenset[str] = frozenset(),
+    ) -> None:
         league = load_league()
         self.rng = random.Random(spec.seed)
         self.spec = spec
         self.modifiers = modifiers
+        self.send_offs = list(send_offs)
+        self.protected = protected
         self.home, self.away = spec.home_team_id, spec.away_team_id
         if self.home == self.away:
             raise ValueError("home and away teams must differ")
@@ -273,8 +283,9 @@ class _Simulator:
 
     def shape_pos(self, team: str, slot: int, ball: Point, in_possession: bool) -> Point:
         club = self.teams[team].club
+        shift = 0.0 if in_possession else self.mods(team).block_shift_m
         return slot_position(
-            club.formation, slot, ball[0], ball[1], in_possession, club.style_profile
+            club.formation, slot, ball[0], ball[1], in_possession, club.style_profile, shift
         )
 
     def pick_near(self, team: str, at: Point, in_possession: bool, exclude: str = "") -> str:
@@ -438,7 +449,7 @@ class _Simulator:
 
     def substitute(self, team: str) -> None:
         state = self.teams[team]
-        on = self.outfield(team)
+        on = [(s, p) for s, p in self.outfield(team) if p not in self.protected]
         if not on:
             return
         weights = [_ROLE_SUB_WEIGHT[self.role(pid)] for _, pid in on]
@@ -468,6 +479,10 @@ class _Simulator:
         hold = self.rng.gauss(style.hold_s * (0.7 if c.counter else 1.0), 0.35)
         self.advance(max(0.3, hold * (0.6 if c.pressed else 1.0)))
 
+        if not is_keeper and self.due_send_off(opp):
+            offender = self.pick_presser(opp, flip(c.x, c.y))
+            return self.foul(opp, offender, c, c.last, force_red=True)
+
         pressure_index: int | None = None
         last = c.last
         if c.pressed and not is_keeper:
@@ -493,7 +508,7 @@ class _Simulator:
             foul_p = 0.012 if in_attacking_box(c.x, c.y) else 0.04
             if roll < foul_p:
                 return self.foul(opp, presser, c, pressure)
-            if roll < foul_p + 0.056 * turnover:
+            if roll < foul_p + 0.056 * turnover * self.mods(opp).press_win_mult:
                 result = self.tackle(opp, presser, c, pressure, won_p=0.62)
                 if isinstance(result, _Carrier) and result.team == team:
                     c, last = result, result.last
@@ -505,6 +520,17 @@ class _Simulator:
         if pressure_index is not None and self.lost_ball(result, team):
             self.mark_forced_turnover(pressure_index)
         return result
+
+    def due_send_off(self, team: str) -> bool:
+        """True (once) when a planted sending-off for ``team`` is due."""
+        for i, planned in enumerate(self.send_offs):
+            if planned.team_id == team and (planned.period, planned.clock_ms) <= (
+                self.period,
+                self.clock,
+            ):
+                del self.send_offs[i]
+                return True
+        return False
 
     def lost_ball(self, result: _Situation, team: str) -> bool:
         if isinstance(result, _Loose):
@@ -535,19 +561,28 @@ class _Simulator:
         ):
             return self.shot(c, ShotType.HEADER, last)
 
+        mods = self.mods(team)
+        focus = c.player == mods.focus_player
         p_shot = 0.0
         if c.x > 70 and abs(c.y - 34) < 24:
             xg = expected_goals(c.x, c.y)
             finishing = 0.75 + ratings.finishing / 200.0
-            p_shot = style.shot_appetite * finishing * (0.052 + 0.7 * xg)
-            p_shot *= self.mods(team).shot_rate_mult
-            p_shot = min(p_shot, 0.45)
+            # A player on a hot streak shoots more from good positions, not from distance.
+            boost = mods.focus_quality_mult * mods.focus_shot_mult if focus else 1.0
+            base = 0.026 if focus else 0.052
+            p_shot = style.shot_appetite * finishing * (base + 0.7 * xg * boost)
+            p_shot *= mods.shot_rate_mult
+            p_shot = min(p_shot, 0.7 if focus else 0.45)
         attacker = role in (Position.WG, Position.AM, Position.ST)
         p_dribble = style.dribble_rate * (1.7 if attacker else 0.5) * (1.3 if c.x > 50 else 0.5)
         p_dribble *= ratings.pace / 75.0
         p_carry = style.carry_rate * (0.45 if c.pressed else 1.0) * (1.5 if c.counter else 1.0)
         p_carry *= 0.4 if c.carries >= 2 else 1.0
+        if focus and c.x > 70:
+            p_carry *= mods.focus_quality_mult
 
+        if focus and c.x > 70 and not in_attacking_box(c.x, c.y) and self.rng.random() < 0.6:
+            return self.carry(c, last)  # in form: drive into the box before shooting
         roll = self.rng.random()
         if roll < p_shot:
             return self.shot(c, ShotType.OPEN_PLAY, last)
@@ -582,8 +617,13 @@ class _Simulator:
             return _Carrier(team, tackler, *at, pressed, tackle, counter=counter)
         return _Carrier(c.team, c.player, c.x, c.y, False, tackle, c.assist, c.counter, c.carries)
 
-    def foul(self, team: str, fouler: str, c: _Carrier, related: Event) -> _Situation:
-        """``team`` fouls carrier ``c``: free kick (or penalty) and maybe a card."""
+    def foul(
+        self, team: str, fouler: str, c: _Carrier, related: Event, force_red: bool = False
+    ) -> _Situation:
+        """``team`` fouls carrier ``c``: free kick (or penalty) and maybe a card.
+
+        ``force_red`` makes it a straight red card (a planted sending-off).
+        """
         penalty = in_attacking_box(c.x, c.y)
         foul = self.emit(
             EventType.FOUL,
@@ -596,7 +636,19 @@ class _Simulator:
             body_part=self.foot(fouler),
         )
         self.advance(self.rng.uniform(12, 28))
-        if self.rng.random() < (0.45 if penalty else 0.16):
+        if force_red:
+            self.emit(
+                EventType.CARD,
+                team,
+                fouler,
+                Outcome.RED,
+                related=(foul,),
+                details=CardDetails(reason=CardReason.FOUL),
+            )
+            slots = self.teams[team].slots
+            slots[slots.index(fouler)] = None
+            self.advance(self.rng.uniform(40, 90))
+        elif self.rng.random() < (0.45 if penalty else 0.16):
             second = fouler in self.yellow
             self.emit(
                 EventType.CARD,
@@ -659,11 +711,15 @@ class _Simulator:
     def carry(self, c: _Carrier, last: Event) -> _Situation:
         length = self.rng.uniform(8, 22) if c.counter else self.rng.uniform(3, 14)
         angle = self.rng.gauss(0, 0.6)
+        focus = c.player == self.mods(c.team).focus_player
         if c.x > 80:  # work across the edge of the box rather than straight at goal
             angle = math.atan2(34 - c.y, 100 - c.x) + self.rng.choice([-1, 1]) * 0.9
             length *= 0.6
+            if focus:  # a player on a hot streak drives straight at goal
+                angle = math.atan2(34 - c.y, 100 - c.x)
+                length /= 0.6
         end = _on_pitch(c.x + length * math.cos(angle), c.y + length * math.sin(angle))
-        max_x = 96.0 if c.counter else 92.0
+        max_x = 98.0 if focus else 96.0 if c.counter else 92.0
         end = (_clamp(end[0], 1.0, max(max_x, c.x)), _clamp(end[1], 1.0, 67.0))
         dispossessed = (
             self.rng.random() < (0.07 if c.pressed else 0.025) * self.mods(c.team).turnover_mult
@@ -715,11 +771,14 @@ class _Simulator:
 
         weights = []
         positions = []
-        for slot, _pid in candidates:
+        focus_player = self.mods(team).focus_player
+        for slot, pid in candidates:
             pos = self.shape_pos(team, slot, (c.x, c.y), True)
             dx = pos[0] - c.x
             d = distance(c.x, c.y, *pos)
             w = math.exp(-d / 15.0) * (1 + style.forward_bias * max(0.0, dx) / 10.0)
+            if pid == focus_player:
+                w *= self.mods(team).focus_involvement_mult
             if dx < -12:
                 w *= 0.5
             if c.pressed and dx < 0:
@@ -731,11 +790,14 @@ class _Simulator:
         pos = positions[index]
         target = (pos[0] + rng.gauss(0, 2.5), pos[1] + rng.gauss(0, 2.5))
         forced: PassType | None = None
+        through_p = 0.2
+        if receiver == focus_player:
+            through_p = min(0.8, through_p * self.mods(team).focus_quality_mult)
         if (
             self.role(receiver) in (Position.ST, Position.WG, Position.AM)
             and pos[0] > c.x + 6
             and pos[0] > 55
-            and rng.random() < 0.2
+            and rng.random() < through_p
         ):
             forced = PassType.THROUGH_BALL
             target = (min(pos[0] + rng.uniform(3, 8), 96.0), pos[1] + rng.gauss(0, 3))
@@ -1233,6 +1295,15 @@ class _Simulator:
         return self.make_pass(c, receiver, target, None, None, set_piece, last)
 
 
-def simulate_match(spec: MatchSpec, modifiers: ModifierProvider = no_modifiers) -> SimulatedMatch:
-    """Generate the reference rows and event stream for one match."""
-    return _Simulator(spec, modifiers).run()
+def simulate_match(
+    spec: MatchSpec,
+    modifiers: ModifierProvider = no_modifiers,
+    send_offs: Sequence[SendOff] = (),
+    protected: frozenset[str] = frozenset(),
+) -> SimulatedMatch:
+    """Generate the reference rows and event stream for one match.
+
+    ``modifiers``, ``send_offs`` and ``protected`` (players never substituted) come from a
+    planted scenario; the defaults simulate a baseline match.
+    """
+    return _Simulator(spec, modifiers, send_offs, protected).run()

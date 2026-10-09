@@ -28,7 +28,7 @@ LOOKAHEAD_S = 3
 
 DRIFT_THETA = 0.1
 DRIFT_SIGMA = 1.0
-REACTION = 0.25
+REACTION = 0.18
 """Share of the gap to the shape target a player closes each second (smooths ball chasing)."""
 SPRINT_GAP_S = (130, 280)
 SPRINT_LEN_S = (2, 4)
@@ -145,8 +145,11 @@ def generate_tracking(
             for pid, st in on_pitch.items():
                 team = teams[st.team_id]
                 own_ball = (bx, by) if st.team_id == home else flip(bx, by)
+                in_possession = poss == st.team_id
+                mods = modifiers(st.team_id, period, t_ms)
+                shift = 0.0 if in_possession else mods.block_shift_m
                 shape_x, shape_y = slot_position(
-                    team.formation, st.slot, *own_ball, poss == st.team_id, team.style_profile
+                    team.formation, st.slot, *own_ball, in_possession, team.style_profile, shift
                 )
                 if st.sx is None or st.sy is None:
                     st.sx, st.sy = shape_x, shape_y
@@ -156,7 +159,7 @@ def generate_tracking(
                 st.dx += -DRIFT_THETA * st.dx + rng.gauss(0, DRIFT_SIGMA)
                 st.dy += -DRIFT_THETA * st.dy + rng.gauss(0, DRIFT_SIGMA)
                 tx, ty = tx + st.dx, ty + st.dy
-                cap_kmh = top_speed[pid] * modifiers(st.team_id, period, t_ms).top_speed_mult
+                cap_kmh = top_speed[pid] * mods.top_speed_mult
                 limit = cap_kmh * 0.62
                 anchored = _next_anchor(anchors.get(pid), cursor, pid, second)
                 if anchored is not None:

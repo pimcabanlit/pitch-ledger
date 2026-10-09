@@ -6,6 +6,7 @@ Layout of ``data/<match_id>/``:
 - ``events.jsonl`` / ``tracking.jsonl``: one JSON object per line (live-feed format)
 - ``events.parquet`` / ``tracking.parquet``: the same rows as columnar tables; the
   heterogeneous ``details`` object is stored as a JSON string column
+- ``triggers.jsonl``: detector output, written by ``pitch-ledger detect``
 
 Writers are deterministic: the same rows always produce the same bytes.
 """
@@ -19,13 +20,14 @@ from typing import Any
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from pitch_ledger.schema import Event, Match, Player, Team, TrackingSample
+from pitch_ledger.schema import Event, Match, Player, Team, TrackingSample, Trigger
 
 MATCH_FILE = "match.json"
 EVENTS_JSONL = "events.jsonl"
 EVENTS_PARQUET = "events.parquet"
 TRACKING_JSONL = "tracking.jsonl"
 TRACKING_PARQUET = "tracking.parquet"
+TRIGGERS_JSONL = "triggers.jsonl"
 
 _EVENT_SCHEMA = pa.schema(
     [
@@ -121,6 +123,17 @@ def read_match(match_dir: Path, with_tracking: bool = True) -> MatchFiles:
         events=list(_read_jsonl(match_dir / EVENTS_JSONL)),
         tracking=list(_read_jsonl(tracking_path)) if with_tracking else [],
     )
+
+
+def write_triggers(match_dir: Path, triggers: Sequence[Trigger]) -> Path:
+    """Write detector triggers next to the match files."""
+    path = match_dir / TRIGGERS_JSONL
+    _write_jsonl(path, (t.model_dump_json() for t in triggers))
+    return path
+
+
+def read_triggers(match_dir: Path) -> list[Trigger]:
+    return [Trigger.model_validate(row) for row in _read_jsonl(match_dir / TRIGGERS_JSONL)]
 
 
 def _event_row(event: Event) -> dict[str, Any]:

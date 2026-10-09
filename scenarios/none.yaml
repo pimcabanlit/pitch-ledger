@@ -1,0 +1,3 @@
+# Baseline: no planted change. Control case: the detector must raise no momentum alerts.
+scenario_id: none
+description: Baseline match with no planted change

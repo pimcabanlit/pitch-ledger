@@ -13,10 +13,12 @@ class _Frozen(BaseModel):
 
 
 class ScenarioTrigger(_Frozen):
-    """When the change starts. ``minute`` is the match minute (60 = period 2 clock 15:00)."""
+    """When the change starts. ``minute`` is the match minute (60 = period 2 clock 15:00);
+    ``duration_min`` ends it early (None: until full time)."""
 
     period: Annotated[int, Field(ge=1, le=2)]
     minute: Annotated[int, Field(ge=0, le=120)]
+    duration_min: Annotated[int, Field(gt=0)] | None = None
 
 
 class Effect(_Frozen):

@@ -1,0 +1,11 @@
+# The away side tires and its build-up falls apart from 60'.
+# Engine should say: control flipped; turnovers and running data as evidence.
+scenario_id: late_collapse
+description: Away side tires and loses control after 60'
+trigger: {period: 2, minute: 60}
+team_id: T02
+effects:
+  pass_success: {op: add, value: -0.40}
+  turnover_rate: {op: mul, value: 3.0}
+  top_speed: {op: mul, value: 0.92}
+expected_detection: {insight_type: momentum_shift, team_id: T02, within_min: 15}

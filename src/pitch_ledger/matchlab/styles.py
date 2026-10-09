@@ -39,22 +39,39 @@ class Modifiers:
     """Scenario effects for one team at one moment. Neutral values change nothing.
 
     ``pass_success_add`` shifts the completion probability away from the difficulty
-    model on purpose: that gap is the planted signal the engine must detect.
+    model on purpose: that gap is the planted signal the engine must detect. The
+    ``focus_*`` fields apply to one player only (``focus_player``).
     """
 
     pass_success_add: float = 0.0
     turnover_mult: float = 1.0
     press_mult: float = 1.0
+    press_win_mult: float = 1.0
+    block_shift_m: float = 0.0
     shot_rate_mult: float = 1.0
     top_speed_mult: float = 1.0
+    focus_player: str | None = None
+    focus_shot_mult: float = 1.0
+    focus_quality_mult: float = 1.0
+    focus_involvement_mult: float = 1.0
 
 
 NEUTRAL = Modifiers()
 
 ModifierProvider = Callable[[str, int, int], Modifiers]
-"""(team_id, period, clock_ms) -> Modifiers. Phase 2 builds one from scenario YAML."""
+"""(team_id, period, clock_ms) -> Modifiers. Built from a scenario by ``matchlab.scenarios``."""
 
 
 def no_modifiers(team_id: str, period: int, clock_ms: int) -> Modifiers:
     """Baseline provider: no planted change."""
     return NEUTRAL
+
+
+@dataclass(frozen=True)
+class SendOff:
+    """A planted straight red card: ``team_id`` loses a player at the first challenge
+    after ``period``/``clock_ms``."""
+
+    team_id: str
+    period: int
+    clock_ms: int

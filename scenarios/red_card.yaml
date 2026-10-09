@@ -1,0 +1,12 @@
+# An away player is sent off at 55'; the stretched ten men press less and lose the ball more.
+# Engine should say: shape and possession changed after the red card.
+scenario_id: red_card
+description: Away player sent off at 55'
+trigger: {period: 2, minute: 55}
+team_id: T04
+effects:
+  send_off: {op: add, value: 1}
+  press_rate: {op: mul, value: 0.8}
+  pass_success: {op: add, value: -0.06}
+  turnover_rate: {op: mul, value: 1.4}
+expected_detection: {insight_type: key_moment, team_id: T04, within_min: 15}

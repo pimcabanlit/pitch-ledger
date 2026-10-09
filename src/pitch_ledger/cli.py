@@ -7,15 +7,20 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-from pitch_ledger.matchlab.generator import DEFAULT_KICKOFF, MatchSpec, simulate_match
-from pitch_ledger.matchlab.io import read_match, write_match
-from pitch_ledger.matchlab.tracking import generate_tracking
-from pitch_ledger.schema import Event, TrackingSample
+from pitch_ledger.engine import match_minute
+from pitch_ledger.engine.detector import detect
+from pitch_ledger.engine.evaluation import check_detection
+from pitch_ledger.matchlab.build import build_match
+from pitch_ledger.matchlab.generator import DEFAULT_KICKOFF, MatchSpec
+from pitch_ledger.matchlab.io import read_match, write_match, write_triggers
+from pitch_ledger.matchlab.scenarios import load_manifest, load_scenario
+from pitch_ledger.schema import Event, TrackingSample, Trigger
 from pitch_ledger.schema.enums import ScenarioId
 from pitch_ledger.validation import RULES, measure, validate_match
 from pitch_ledger.validation.realism import RealismCheck
 
-PHASE_1_SCENARIOS = {ScenarioId.NONE.value}
+IMPORTANT = {"momentum_shift", "key_moment", "player_form", "recap"}
+"""Insight types ``detect`` lists by default (``--all`` lists every trigger)."""
 
 
 def _match_id_for(out: Path, given: str | None) -> str:
@@ -24,13 +29,23 @@ def _match_id_for(out: Path, given: str | None) -> str:
     return out.name if re.fullmatch(r"M\d{4}", out.name) else "M0001"
 
 
+def _write(spec: MatchSpec, out: Path) -> None:
+    sim, tracking = build_match(spec)
+    paths = write_match(out, sim.match, sim.teams, sim.players, sim.events, tracking)
+    last = sim.events[-1]
+    print(
+        f"{spec.match_id} ({spec.scenario_id}, seed {spec.seed}): {sim.match.home_team_id} "
+        f"{last.score_home}-{last.score_away} {sim.match.away_team_id}, "
+        f"{len(sim.events)} events, {len(tracking)} tracking rows -> {out}"
+    )
+    for path in paths:
+        print(f"  wrote {path}")
+
+
 def cmd_generate(args: argparse.Namespace) -> int:
-    if args.scenario not in PHASE_1_SCENARIOS:
-        known = ", ".join(s.value for s in ScenarioId)
-        if args.scenario in known.split(", "):
-            print(f"scenario {args.scenario!r} is planned for Phase 2; use 'none'", file=sys.stderr)
-        else:
-            print(f"unknown scenario {args.scenario!r}; known: {known}", file=sys.stderr)
+    known = [s.value for s in ScenarioId]
+    if args.scenario not in known:
+        print(f"unknown scenario {args.scenario!r}; known: {', '.join(known)}", file=sys.stderr)
         return 2
     out = Path(args.out)
     spec = MatchSpec(
@@ -41,16 +56,25 @@ def cmd_generate(args: argparse.Namespace) -> int:
         kickoff_utc=datetime.fromisoformat(args.kickoff) if args.kickoff else DEFAULT_KICKOFF,
         scenario_id=args.scenario,
     )
-    sim = simulate_match(spec)
-    tracking = generate_tracking(sim)
-    paths = write_match(out, sim.match, sim.teams, sim.players, sim.events, tracking)
-    last = sim.events[-1]
-    print(
-        f"{spec.match_id}: {sim.match.home_team_id} {last.score_home}-{last.score_away} "
-        f"{sim.match.away_team_id}, {len(sim.events)} events, {len(tracking)} tracking rows"
-    )
-    for path in paths:
-        print(f"  wrote {path}")
+    try:
+        _write(spec, out)
+    except ValueError as exc:
+        print(f"cannot generate: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def cmd_generate_all(args: argparse.Namespace) -> int:
+    root = Path(args.out)
+    for entry in load_manifest():
+        spec = MatchSpec(
+            match_id=entry.match_id,
+            home_team_id=entry.home_team_id,
+            away_team_id=entry.away_team_id,
+            seed=entry.seed,
+            scenario_id=entry.scenario_id.value,
+        )
+        _write(spec, root / entry.match_id)
     return 0
 
 
@@ -100,12 +124,56 @@ def cmd_realism(args: argparse.Namespace) -> int:
     events = [Event.model_validate(e) for e in files.events]
     tracking = [TrackingSample.model_validate(s) for s in files.tracking]
     checks = measure(files.match, files.players, events, tracking)
-    print(f"{files.match.match_id} realism (scenario {files.match.scenario_id}, "
-          f"seed {files.match.random_seed})")  # fmt: skip
+    print(
+        f"{files.match.match_id} realism (scenario {files.match.scenario_id}, "
+        f"seed {files.match.random_seed})"
+    )
     print(format_realism(checks))
     out = [c.band.metric for c in checks if not c.ok]
     print("all metrics in band" if not out else f"out of band: {', '.join(out)}")
     return 1 if out and args.strict else 0
+
+
+def _brief(trigger: Trigger) -> str:
+    shown = list(trigger.metrics.items())[:4]
+    return ", ".join(f"{k} {v:g}" for k, v in shown)
+
+
+def cmd_detect(args: argparse.Namespace) -> int:
+    match_dir = Path(args.match_dir)
+    files = read_match(match_dir, with_tracking=not args.no_tracking)
+    events = [Event.model_validate(e) for e in files.events]
+    tracking = [TrackingSample.model_validate(s) for s in files.tracking]
+    triggers = detect(files.match, events, tracking)
+    path = write_triggers(match_dir, triggers)
+    print(f"{files.match.match_id}: {len(triggers)} triggers -> {path}")
+    for t in triggers:
+        if args.all or t.insight_type.value in IMPORTANT:
+            who = t.subject.player_id or t.subject.team_id or "match"
+            minute = match_minute(t.period, t.clock_ms)
+            print(f"  {t.trigger_id} {minute:5.1f}' {t.rule_id:<18} {who:<8} {_brief(t)}")
+    scenario = load_scenario(files.match.scenario_id)
+    check = check_detection(scenario, triggers)
+    expected = scenario.expected_detection
+    if expected is not None:
+        target = expected.player_id or expected.team_id
+        if check.hit is not None:
+            print(
+                f"expected {expected.insight_type.value} for {target} within "
+                f"{expected.within_min} min: found {check.hit.trigger_id} after "
+                f"{check.latency_min} min"
+            )
+        else:
+            print(
+                f"expected {expected.insight_type.value} for {target} within "
+                f"{expected.within_min} min: NOT FOUND"
+            )
+    if check.false_momentum:
+        ids = ", ".join(t.trigger_id for t in check.false_momentum)
+        print(f"false momentum alerts: {ids}")
+    elif scenario.expected_detection is None:
+        print("no false momentum alerts")
+    return 0 if check.passed else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,7 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     gen = sub.add_parser("generate", help="simulate a synthetic match and write its files")
-    gen.add_argument("--scenario", default="none", help="planted scenario (Phase 1: none)")
+    gen.add_argument("--scenario", default="none", help="planted scenario ID (default none)")
     gen.add_argument("--seed", type=int, default=4211, help="random seed (default 4211)")
     gen.add_argument("--out", required=True, help="output directory, e.g. data/M0001")
     gen.add_argument("--match-id", help="match ID (default: output folder name or M0001)")
@@ -121,6 +189,12 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument("--away", default="T02", help="away team ID (default T02)")
     gen.add_argument("--kickoff", help="kick-off time, ISO 8601 with time zone")
     gen.set_defaults(func=cmd_generate)
+
+    every = sub.add_parser(
+        "generate-all", help="generate the demo matches in scenarios/matches.yaml"
+    )
+    every.add_argument("--out", default="data", help="root folder (default data)")
+    every.set_defaults(func=cmd_generate_all)
 
     val = sub.add_parser("validate", help="run every validation rule over a match directory")
     val.add_argument("match_dir")
@@ -133,6 +207,12 @@ def build_parser() -> argparse.ArgumentParser:
     real.add_argument("match_dir")
     real.add_argument("--strict", action="store_true", help="exit 1 if any metric is out")
     real.set_defaults(func=cmd_realism)
+
+    det = sub.add_parser("detect", help="run the moment detector and check the scenario")
+    det.add_argument("match_dir")
+    det.add_argument("--no-tracking", action="store_true", help="skip tracking-based rules")
+    det.add_argument("--all", action="store_true", help="list every trigger, not just key ones")
+    det.set_defaults(func=cmd_detect)
     return parser
 
 
