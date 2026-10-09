@@ -19,7 +19,7 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | Event Hubs namespace | `pitch-ledger-feed` (Basic) | Live feed; created 2026-10-09; recurring cost, delete after judging |
 | Event hub | `match-events` | One partition key per match |
 | Roles on the namespace | **Azure Event Hubs Data Sender** and **Data Receiver** → `pitch-ledger-dev` | Verified by a live `stream` + `listen` run (2026-10-09) |
-| Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` is **Ingestor** and **Viewer** (verified 2026-10-09); no tables yet |
+| Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` is **Ingestor** and **Viewer**; tables created from `infra/adx/tables.kql`; `check-store` passes (2026-10-09) |
 
 Not provisioned yet: Cosmos DB, Service Bus, Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
 
@@ -198,7 +198,7 @@ From a cloud session, as `pitch-ledger-dev`: Entra ID token for the cluster, `pr
 ### 4. Tables, dashboard, verification
 
 1. **Create the tables (you, once):** open the free cluster's query editor on `matchdata`, paste the whole of `infra/adx/tables.kql` (or the output of `uv run pitch-ledger store-schema`) and run it. It creates every table, its JSON mapping, streaming ingestion and a 10-second batching fallback. Re-running is safe. The result lists each command; a failed line (for example if the free cluster refuses a policy) shows its error.
-2. **Check:** `uv run pitch-ledger check-store` reports settings, sign-in, roles, tables, and one test write read back.
+2. **Check:** `uv run pitch-ledger check-store` (verified 2026-10-09: all PASS, test write readable after 3.5 s, so streaming ingestion works on the free cluster) reports settings, sign-in, roles, tables, and one test write read back.
 3. **Load a match:** `uv run pitch-ledger store data/M0002 --store adx` (events, tracking, engine snapshots, triggers, insight status). Live: `uv run pitch-ledger listen --store adx` also writes rows and feed health.
 4. **Dashboard:** Azure Data Explorer web UI → Dashboards → New dashboard → data source: the free cluster, database `matchdata` → parameter `_match_id` → one tile per query in `infra/adx/dashboard.kql`.
 
@@ -250,5 +250,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [ ] Event Hubs: delete the namespace after judging (Nov 20).
 - [x] Feed settings and `ADX_CLUSTER_URI` / `ADX_DATABASE` in the cloud environment; `listen` + `stream` pass with them (1,341/1,341 messages, p50 2.3 s from the cloud session).
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
-- [ ] ADX: run `infra/adx/tables.kql` in the free cluster's query editor, then `check-store`; build the dashboard from `infra/adx/dashboard.kql`.
+- [x] ADX tables created; `check-store` passes (streaming write readable after 3.5 s); M0002 loaded (`store --store adx`, 129,781 rows in 23 s); live `listen --store adx` verified with test match M0099 (1,343 rows, feed health).
+- [ ] ADX: build the dashboard from `infra/adx/dashboard.kql`.
+- [ ] ADX (optional): clear the test match before the demo: `.delete table Events records <| Events | where match_id == 'M0099'` (same for Tracking and FeedHealth), run as database admin.
 - [x] Fabric-only pieces replaced (2026-10-09): ADX free cluster (event store), ADX dashboard (control room), producer-console ops alerts. Fabric kept as a future upgrade.
