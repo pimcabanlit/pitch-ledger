@@ -13,14 +13,18 @@
 import asyncio
 import json
 import logging
+import os
+import re
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from agent_framework import Agent, SupportsChatGetResponse
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pitch_ledger.agents.contracts import CopyText, PingRequest
 from pitch_ledger.agents.offline import OfflineChatClient
 
 Role = Literal["explainer", "auditor", "narrator", "personalizer", "translator"]
@@ -198,3 +202,126 @@ class ModelManager:
                 last = exc
                 log.warning("%s call failed: %s", role, exc)
         raise ModelUnavailable(f"{role}: no usable reply") from last
+
+
+# Configuration check (``pitch-ledger check-models``) -----------------------------------
+
+ENDPOINT_PATTERN = re.compile(r"^https://[\w-]+\.services\.ai\.azure\.com/api/projects/[\w.-]+/?$")
+TOKEN_SCOPE = "https://ai.azure.com/.default"
+CREDENTIAL_VARS = ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET")
+PING_INSTRUCTIONS = 'Reply with JSON only: {"text": "<reply_with>"}.'
+
+
+@dataclass(frozen=True)
+class Check:
+    name: str
+    ok: bool
+    detail: str
+
+
+def _short(exc: BaseException) -> str:
+    line = str(exc).strip().splitlines()[0] if str(exc).strip() else ""
+    return f"{type(exc).__name__}: {line}"[:300]
+
+
+def check_settings() -> tuple[list[Check], ModelSettings | None]:
+    """Settings as the model manager reads them; never prints secret values."""
+    try:
+        settings = ModelSettings()
+    except ValidationError as exc:
+        fields = ", ".join(
+            f"PITCH_LEDGER_{str(e['loc'][0]).upper()}" for e in exc.errors() if e["loc"]
+        )
+        return [
+            Check(
+                "settings",
+                False,
+                f"invalid value for {fields}: provider must be exactly 'offline' or 'foundry' "
+                "(one variable per line)",
+            )
+        ], None
+    checks = [Check("provider", True, settings.model_provider)]
+    if settings.model_provider == "offline":
+        checks.append(Check("models", True, "offline templates: no Foundry settings needed"))
+        return checks, settings
+    endpoint = settings.foundry_project_endpoint
+    if not endpoint:
+        checks.append(Check("FOUNDRY_PROJECT_ENDPOINT", False, "not set"))
+    elif not ENDPOINT_PATTERN.match(endpoint):
+        checks.append(
+            Check(
+                "FOUNDRY_PROJECT_ENDPOINT",
+                False,
+                "expected https://<resource>.services.ai.azure.com/api/projects/<project>",
+            )
+        )
+    else:
+        checks.append(Check("FOUNDRY_PROJECT_ENDPOINT", True, endpoint))
+    for name, value in (
+        ("PITCH_LEDGER_MODEL_STRONG", settings.model_strong),
+        ("PITCH_LEDGER_MODEL_SMALL", settings.model_small),
+    ):
+        checks.append(Check(name, bool(value), value or "not set"))
+    missing = [v for v in CREDENTIAL_VARS if not os.environ.get(v)]
+    checks.append(
+        Check(
+            "service principal variables",
+            not missing,
+            "set (values hidden)" if not missing else f"not set: {', '.join(missing)}",
+        )
+    )
+    return checks, settings
+
+
+async def check_models(
+    clients: dict[str, SupportsChatGetResponse[Any]] | None = None,
+    credential: Any = None,
+) -> list[Check]:
+    """Settings, Entra ID sign-in and one tiny call per deployment (at most 4 calls with
+    retries). ``clients`` and ``credential`` replace the real ones in tests."""
+    checks, settings = check_settings()
+    if settings is None or settings.model_provider == "offline":
+        return checks
+    if not all(c.ok for c in checks if c.name != "service principal variables"):
+        return checks
+    own_credential = credential is None
+    if own_credential:
+        from azure.identity.aio import DefaultAzureCredential
+
+        credential = DefaultAzureCredential()
+    try:
+        await credential.get_token(TOKEN_SCOPE)
+        checks.append(Check("Entra ID sign-in", True, "token issued for Foundry"))
+    except Exception as exc:  # wrong tenant, client or secret
+        checks.append(Check("Entra ID sign-in", False, _short(exc)))
+        return checks
+    finally:
+        if own_credential:
+            await credential.close()
+    manager = ModelManager(settings, clients=clients)
+    try:
+        tiers: dict[str, Role] = {}
+        for role, tier in (("explainer", "strong"), ("translator", "small")):
+            tiers.setdefault(settings.deployment(tier) or tier, role)  # type: ignore[arg-type]
+        for deployment, role in tiers.items():
+            start = time.perf_counter()
+            try:
+                reply = await manager.complete(role, PING_INSTRUCTIONS, PingRequest(), CopyText)
+                ok = reply.text.strip().lower() == "ok"
+                detail = f"replied in {time.perf_counter() - start:.1f} s" + (
+                    "" if ok else f" (unexpected text {reply.text[:40]!r})"
+                )
+            except ModelUnavailable as exc:
+                ok, detail = False, _short(exc.__cause__ or exc)
+            checks.append(Check(f"deployment {deployment}", ok, detail))
+        usage = manager.usage
+        checks.append(
+            Check(
+                "usage",
+                True,
+                f"{usage.calls} calls, tokens in {usage.input_tokens}, out {usage.output_tokens}",
+            )
+        )
+    finally:
+        await manager.close()
+    return checks

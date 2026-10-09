@@ -45,6 +45,8 @@ def respond(payload: dict[str, Any]) -> str:
         values = {**t.metrics, **t.facts.names()}
         text = copy.mode_text(t.copy_key, t.mode, t.language, values)
         return CopyText(text=text).model_dump_json()
+    if task == "ping":
+        return CopyText(text=str(payload.get("reply_with", "ok"))).model_dump_json()
     raise ValueError(f"offline model cannot handle task {task!r}")
 
 

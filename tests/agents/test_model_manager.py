@@ -6,7 +6,12 @@ import pytest
 
 from pitch_ledger.agents import copy, prompts
 from pitch_ledger.agents.contracts import ExplainRequest, InsightDraft
-from pitch_ledger.agents.model_manager import ModelManager, ModelSettings, ModelUnavailable
+from pitch_ledger.agents.model_manager import (
+    ModelManager,
+    ModelSettings,
+    ModelUnavailable,
+    check_models,
+)
 from pitch_ledger.agents.offline import OfflineChatClient
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 from tests.agents.conftest import Case
@@ -92,3 +97,66 @@ def test_roles_share_clients_by_tier() -> None:
     assert manager.client_for("explainer") is manager.client_for("auditor")
     assert manager.client_for("personalizer") is manager.client_for("translator")
     assert manager.client_for("explainer") is not manager.client_for("translator")
+
+
+class _Credential:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+
+    async def get_token(self, *scopes: str) -> object:
+        if self.error is not None:
+            raise self.error
+        return object()
+
+
+def _foundry_env(monkeypatch: pytest.MonkeyPatch, small: str = "small-model") -> None:
+    monkeypatch.setenv("PITCH_LEDGER_MODEL_PROVIDER", "foundry")
+    monkeypatch.setenv(
+        "FOUNDRY_PROJECT_ENDPOINT", "https://res.services.ai.azure.com/api/projects/proj"
+    )
+    monkeypatch.setenv("PITCH_LEDGER_MODEL_STRONG", "strong-model")
+    monkeypatch.setenv("PITCH_LEDGER_MODEL_SMALL", small)
+    for name in ("AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET"):
+        monkeypatch.setenv(name, "x")
+
+
+def test_check_flags_two_variables_on_one_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PITCH_LEDGER_MODEL_PROVIDER", "foundry FOUNDRY_PROJECT_ENDPOINT=https://x")
+    checks = asyncio.run(check_models())
+    assert [c.ok for c in checks] == [False]
+    assert "PITCH_LEDGER_MODEL_PROVIDER" in checks[0].detail
+
+
+def test_check_offline_needs_nothing() -> None:
+    checks = asyncio.run(check_models())
+    assert all(c.ok for c in checks) and "offline" in checks[-1].detail
+
+
+def test_check_flags_a_bad_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    _foundry_env(monkeypatch)
+    monkeypatch.setenv("FOUNDRY_PROJECT_ENDPOINT", "https://example.com")
+    checks = asyncio.run(check_models(credential=_Credential()))
+    endpoint = next(c for c in checks if c.name == "FOUNDRY_PROJECT_ENDPOINT")
+    assert not endpoint.ok and not any(c.name.startswith("deployment") for c in checks)
+
+
+def test_check_calls_each_deployment_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    _foundry_env(monkeypatch)
+    clients = {"strong": ScriptedChatClient(['{"text": "ok"}']),
+               "small": ScriptedChatClient(['{"text": "ok"}'])}  # fmt: skip
+    checks = asyncio.run(check_models(clients=clients, credential=_Credential()))
+    assert all(c.ok for c in checks), checks
+    names = [c.name for c in checks]
+    assert "deployment strong-model" in names and "deployment small-model" in names
+    assert clients["strong"].requests[0]["task"] == "ping"
+
+
+def test_check_reports_sign_in_and_deployment_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    _foundry_env(monkeypatch, small="strong-model")  # one deployment for both tiers
+    failed = asyncio.run(check_models(credential=_Credential(PermissionError("bad secret"))))
+    assert failed[-1].name == "Entra ID sign-in" and "bad secret" in failed[-1].detail
+    client = ScriptedChatClient([RuntimeError("403 Forbidden"), RuntimeError("403 Forbidden")])
+    checks = asyncio.run(check_models(clients={"strong": client}, credential=_Credential()))
+    deployment = next(c for c in checks if c.name == "deployment strong-model")
+    assert not deployment.ok and "403" in deployment.detail
+    assert [c.name for c in checks].count("deployment strong-model") == 1

@@ -99,3 +99,10 @@ class TranslateRequest(_Model):
 
 class CopyText(_Model):
     text: str
+
+
+class PingRequest(_Model):
+    """A one-word connectivity check (``check-models``)."""
+
+    task: Literal["ping"] = "ping"
+    reply_with: str = "ok"

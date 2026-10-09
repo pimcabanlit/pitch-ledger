@@ -106,6 +106,7 @@ uv run pitch-ledger detect data/M0002    # triggers.jsonl + scenario check; exit
 uv run pitch-ledger mcp data/M0002       # read-only stats tools as an MCP server (stdio)
 uv run pitch-ledger replay data/M0002 --approve --inject-error   # agents -> data/M0002/ledger (--provider foundry, --only, --budget, --local-stats)
 uv run pitch-ledger evaluate              # scorecard -> data/scorecard.json; exit 1 if a gate fails (--match M0002, --sweep N)
+uv run pitch-ledger check-models          # model settings, Entra ID sign-in, one tiny call per deployment; exit 1 on a FAIL
 ```
 
 Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.

@@ -299,6 +299,17 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     return 0 if card["passed"] else 1
 
 
+def cmd_check_models(args: argparse.Namespace) -> int:
+    import asyncio
+
+    from pitch_ledger.agents.model_manager import check_models
+
+    checks = asyncio.run(check_models())
+    for check in checks:
+        print(f"[{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+    return 0 if all(c.ok for c in checks) else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pitch-ledger", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -365,6 +376,11 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--provider", choices=["offline", "foundry"], help="model provider")
     ev.add_argument("--match", action="append", help="limit to these demo match IDs")
     ev.set_defaults(func=cmd_evaluate)
+
+    chk = sub.add_parser(
+        "check-models", help="check model settings, Entra ID sign-in and each deployment"
+    )
+    chk.set_defaults(func=cmd_check_models)
     return parser
 
 
