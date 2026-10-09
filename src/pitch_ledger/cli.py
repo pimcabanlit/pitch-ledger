@@ -176,6 +176,13 @@ def cmd_detect(args: argparse.Namespace) -> int:
     return 0 if check.passed else 1
 
 
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from pitch_ledger.mcp_server.server import serve
+
+    serve(args.match_dir)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="pitch-ledger", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -213,6 +220,10 @@ def build_parser() -> argparse.ArgumentParser:
     det.add_argument("--no-tracking", action="store_true", help="skip tracking-based rules")
     det.add_argument("--all", action="store_true", help="list every trigger, not just key ones")
     det.set_defaults(func=cmd_detect)
+
+    mcp = sub.add_parser("mcp", help="serve the read-only stats tools over MCP (stdio)")
+    mcp.add_argument("match_dir")
+    mcp.set_defaults(func=cmd_mcp)
     return parser
 
 
