@@ -36,7 +36,7 @@ def test_insight_text_uses_only_its_metric_keys(cases: list[Case]) -> None:
     for case in cases:
         key = copy.copy_key(case.trigger)
         values = {**case.trigger.metrics, **case.facts.names()}
-        used = copy.used_metrics(key, case.trigger.metrics)
+        used = copy.used_metrics(key, case.trigger.metrics, values)
         text = f"{copy.headline(key, values)} {copy.explanation(key, values)}"
         allowed = [case.trigger.metrics[k] for k in used]
         assert unsupported_numbers(text, allowed) == [], (key, text)
@@ -53,7 +53,8 @@ def test_pressing_falls_back_when_ppda_missing() -> None:
     values = {"team": "A", "opp": "B", "player": "P", "control_before": 50, "control_after": 20,
               "onset_minute": 61.2, "pass_accuracy_before": 80.0, "pass_accuracy_after": 60.0,
               "turnovers_after": 5, "own_half_turnovers_after": 3,
-              "minutes_since_onset": 8.0}  # fmt: skip
-    assert "build-up" in copy.headline("momentum_shift/pressing", values)
+              "minutes_since_onset": 8.0, "expected_pass_accuracy_after": 78.0}  # fmt: skip
+    assert copy.resolve_key("momentum_shift/pressing", values) == "momentum_shift/build_up"
+    assert "lose control" in copy.headline("momentum_shift/pressing", values)
     assert "PPDA" not in copy.mode_text("momentum_shift/pressing", "analyst", "en", values)
     assert "opponent_ppda_before" not in copy.used_metrics("momentum_shift/pressing", values)  # type: ignore[arg-type]

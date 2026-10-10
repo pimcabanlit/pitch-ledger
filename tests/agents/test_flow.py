@@ -1,6 +1,7 @@
 """Explainer -> Auditor maker-checker, approval gate and localization (planted errors)."""
 
 import asyncio
+import json
 
 import pytest
 
@@ -148,7 +149,7 @@ def test_localize_five_modes_three_languages(cases: list[Case]) -> None:
 
 def test_translator_number_change_falls_back_to_template(cases: list[Case]) -> None:
     case = _case(cases, "M0002", "momentum_shift")
-    translator = ScriptedChatClient(['{"text": "Control 999"}'] * 20)
+    translator = ScriptedChatClient(['{"texts": {"es": "Control 999", "fil": "Control 999"}}'] * 20)
     svc = _services(case, {"translator": translator})
     insight = decide(asyncio.run(explain_and_audit(case.trigger, case.facts, svc)), case.trigger,
                      svc, "producer_demo")  # fmt: skip
@@ -179,3 +180,58 @@ def test_other_full_flow_rules_pass_audit(cases: list[Case], rule: str) -> None:
     assert insight.audit_status == "approved", svc.ledger.audits(insight.insight_id)
     if rule.endswith("recap"):
         assert insight.created_by_agent == "narrator"
+
+
+def test_clean_insight_costs_eight_model_calls(cases: list[Case]) -> None:
+    """1 Explainer + 1 review + 1 Personalizer (all modes) + 5 Translator (both languages)."""
+    case = _case(cases, "M0002", "goal")
+    svc = _services(case)
+    insight = decide(asyncio.run(explain_and_audit(case.trigger, case.facts, svc)), case.trigger,
+                     svc, "producer_demo")  # fmt: skip
+    overlays = asyncio.run(localize(insight, case.trigger, case.facts, svc))
+    assert len(overlays) == 15
+    assert dict(svc.models.usage.by_role) == {
+        "explainer": 1, "auditor": 1, "personalizer": 1, "translator": 5,
+    }  # fmt: skip
+
+
+def test_failing_mode_is_asked_again_alone_then_falls_back(cases: list[Case]) -> None:
+    case = _case(cases, "M0002", "goal")
+    good = {m: f"Good {m} copy" for m in ("analyst", "club_focus", "player_focus",
+                                          "single_metric")}  # fmt: skip
+    first = {"texts": {**good, "casual": "What a stunning goal, 77 of them!"}}
+    again = {"texts": {"casual": "Still 77 stunning goals"}}
+    personalizer = ScriptedChatClient([json.dumps(first), json.dumps(again)])
+    svc = _services(case, {"personalizer": personalizer})
+    insight = decide(asyncio.run(explain_and_audit(case.trigger, case.facts, svc)), case.trigger,
+                     svc, "producer_demo")  # fmt: skip
+    overlays = asyncio.run(localize(insight, case.trigger, case.facts, svc))
+    assert [r["modes"] for r in personalizer.requests] == [list(svc.modes), ["casual"]]
+    english = {o.audience_mode.value: o.text for o in overlays if o.language == "en"}
+    assert english["analyst"] == "Good analyst copy"  # passed the checks first time
+    assert "stunning" not in english["casual"]  # template copy after two failures
+    [fallback] = [a for a in svc.ledger.audits(insight.insight_id) if a.action == "fallback"]
+    assert fallback.findings[0].startswith("casual/en:") and "cliché" in fallback.findings[0]
+
+
+def _styled_draft(trigger: Trigger) -> str:
+    draft = InsightDraft(
+        headline="What a stunning moment in the history of this incredible fixture",
+        explanation="A thrilling goal.",
+        metric_keys=[],
+        evidence_event_ids=trigger.evidence_event_ids[:1],
+    )
+    return draft.model_dump_json()
+
+
+def test_style_only_failures_air_template_copy_not_a_block(cases: list[Case]) -> None:
+    case = _case(cases, "M0002", "goal")
+    explainer = ScriptedChatClient([_styled_draft(case.trigger)] * 3)
+    svc = _services(case, {"explainer": explainer})
+    insight = asyncio.run(explain_and_audit(case.trigger, case.facts, svc))
+    assert insight.audit_status == "corrected"
+    assert insight.audit_notes == "Template copy after 2 revision(s) for style"
+    actions = _actions(svc, insight)
+    assert actions.count("revise") == 2 and actions[-3:] == ["fallback", "check", "correct"]
+    assert all(f.startswith("STYLE:") for f in explainer.requests[1]["feedback"])
+    assert "stunning" not in insight.headline.lower()

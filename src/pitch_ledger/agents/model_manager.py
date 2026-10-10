@@ -42,8 +42,8 @@ MAX_OUTPUT_TOKENS: dict[Role, int] = {
     "explainer": 400,
     "auditor": 300,
     "narrator": 500,
-    "personalizer": 200,
-    "translator": 250,
+    "personalizer": 700,  # five modes in one reply
+    "translator": 400,  # two languages in one reply
 }
 
 log = logging.getLogger(__name__)

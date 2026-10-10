@@ -3,6 +3,7 @@
 from collections import Counter
 from collections.abc import Sequence
 
+from pitch_ledger.agents import copy
 from pitch_ledger.agents.contracts import Facts
 from pitch_ledger.schema import Event, Player, Team, Trigger
 
@@ -16,7 +17,8 @@ def build_facts(
     events_by_id: dict[str, Event],
 ) -> Facts:
     """Names for the trigger's subject, its opponent and, for team moments, the subject
-    team's player most involved in the evidence (for player-focus copy)."""
+    team's player most involved in the evidence (for player-focus copy; none when no
+    subject-team player is in the evidence), plus the moment's context signals."""
     team_names = {t.team_id: t.name for t in teams}
     player_names = {p.player_id: p.display_name for p in players}
     subject_team = trigger.subject.team_id
@@ -33,9 +35,7 @@ def build_facts(
         )
         if involved:
             focus = sorted(involved.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
-        else:
-            focus = next((p.player_id for p in players if p.team_id == subject_team), None)
-    return Facts(
+    facts = Facts(
         home_team_id=home_team_id,
         away_team_id=away_team_id,
         team_names=team_names,
@@ -45,3 +45,6 @@ def build_facts(
         subject_player_id=trigger.subject.player_id,
         focus_player_id=focus,
     )
+    key = copy.copy_key(trigger)
+    values = {**trigger.metrics, **facts.names()}
+    return facts.model_copy(update={"signals": copy.signals(key, values)})

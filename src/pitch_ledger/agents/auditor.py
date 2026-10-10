@@ -5,7 +5,10 @@ Deterministic checks run first, in code:
   written precision, and every cited metric exists on the trigger;
 - evidence: cited event IDs belong to the trigger's evidence (and some are cited);
 - recompute: the trigger's metrics are recomputed from raw rows through the stats tools
-  (the MCP server), so a tampered or stale number fails.
+  (the MCP server), so a tampered or stale number fails;
+- editorial (``STYLE:``): headline and explanation length, clichés, unsupported claims
+  (history, causes, predictions) and repetition. A draft that fails only on style after
+  the last revision airs as template copy instead of being blocked.
 Only when those pass does a model review the wording (unsupported claims, tone,
 neutrality). Findings go back to the Explainer, at most twice; then the insight is blocked.
 """
@@ -14,6 +17,7 @@ from dataclasses import dataclass, field
 
 from pitch_ledger.agents import prompts
 from pitch_ledger.agents.contracts import Facts, InsightDraft, ReviewRequest, ReviewVerdict
+from pitch_ledger.agents.editorial import draft_issues
 from pitch_ledger.agents.model_manager import ModelManager, ModelUnavailable
 from pitch_ledger.mcp_server.client import StatsGateway
 from pitch_ledger.schema import Trigger
@@ -64,6 +68,7 @@ class Auditor:
         findings += [f"evidence {i} is not part of this moment" for i in stray]
         if evidence and not draft.evidence_event_ids:
             findings.append("no evidence event IDs cited")
+        findings += draft_issues(draft.headline, draft.explanation)
         fresh = await self.recomputed(trigger)
         for key, stated in trigger.metrics.items():
             if fresh.get(key) != stated:

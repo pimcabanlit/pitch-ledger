@@ -8,15 +8,17 @@
             └─ anything else ─> store (kept in the ledger only)           v
                                                                     approval gate
                                                                           │ approved
+                                              personalize (all modes, one call)
             ┌────────────┬────────────┬─────────────┬─────────────┬───────┘
          analyst      casual     club_focus   player_focus  single_metric
             └────────────┴────────────┴──────┬──────┴─────────────┘
-               (Personalizer + Translator)   v
-                                          publish (overlays to the ledger)
+           (Translator: other languages,     v
+            one call per mode)            publish (overlays to the ledger)
 
 Explain/audit is the Explainer ⇄ Auditor maker-checker loop. The approval gate passes
 speed alerts by rule and other insights only with a producer's approval; without one
-they wait (``pending``). The five audience modes run concurrently. Each run yields one
+they wait (``pending``). The Personalizer writes every mode's English copy in one call;
+the five audience modes then translate concurrently. Each run yields one
 ``Outcome``. ``replay`` feeds a match's triggers through the trigger queue in match-clock
 order (retries, then dead letter), as the live service will from Service Bus.
 """
@@ -24,8 +26,8 @@ order (retries, then dead letter), as the live service will from Service Bus.
 import logging
 import time
 from collections import Counter
-from collections.abc import Iterable, Sequence
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal, Never
 
 from agent_framework import (
@@ -40,6 +42,7 @@ from agent_framework import (
 
 from pitch_ledger.agents import copy
 from pitch_ledger.agents.contracts import Facts
+from pitch_ledger.agents.copy_check import CheckedCopy
 from pitch_ledger.agents.facts import build_facts
 from pitch_ledger.agents.flow import (
     AUTO_APPROVE,
@@ -50,6 +53,7 @@ from pitch_ledger.agents.flow import (
     decide,
     explain_and_audit,
     localize_mode,
+    personalize_modes,
     producer_block,
     publish,
     template_insight,
@@ -114,6 +118,7 @@ class LocalizeJob:
     trigger: Trigger
     facts: Facts
     route: Route
+    english: Mapping[str, CheckedCopy] | None = None  # per mode, once personalized
 
 
 @dataclass(frozen=True)
@@ -226,8 +231,19 @@ class ApprovalGate(_Step):
             await ctx.yield_output(_outcome(insight, trigger, route))
 
 
+class Personalize(_Step):
+    """Personalizer: every mode's English copy in one call (full route only)."""
+
+    @handler
+    async def run(self, job: LocalizeJob, ctx: WorkflowContext[LocalizeJob]) -> None:
+        english = None
+        if job.route == "full":
+            english = await personalize_modes(job.insight, job.trigger, job.facts, self.orch.svc)
+        await ctx.send_message(replace(job, english=english))
+
+
 class ModeWriter(_Step):
-    """One audience mode: Personalizer (English), then Translator (other languages)."""
+    """One audience mode: its English copy, then the Translator (other languages)."""
 
     def __init__(self, orchestrator: "Orchestrator", mode: str) -> None:
         super().__init__(orchestrator, f"mode_{mode}")
@@ -242,6 +258,7 @@ class ModeWriter(_Step):
             self.orch.svc,
             self.mode,
             use_models=job.route == "full",
+            english=job.english.get(self.mode) if job.english else None,
         )
         await ctx.send_message(ModeCopy(job, tuple(rows)))
 
@@ -337,6 +354,8 @@ class Orchestrator:
         selected = self.only is None or {trigger.insight_type.value, trigger.rule_id} & self.only
         if not selected or not copy.supported(copy.copy_key(trigger)):
             return "stored"
+        if trigger.context.get("superseded_by"):
+            return "stored"  # the detector folded it into another moment (or a cooldown)
         if trigger.insight_type in FULL_FLOW:
             return "full"
         if trigger.insight_type in AUTO_APPROVE:
@@ -349,6 +368,7 @@ class Orchestrator:
         template = Template(self, "template")
         store = Store(self, "store")
         gate = ApprovalGate(self, "approval_gate")
+        personalizer = Personalize(self, "personalize")
         modes = [ModeWriter(self, mode) for mode in self.svc.modes]
         publisher = Publisher(self, "publish")
 
@@ -368,7 +388,8 @@ class Orchestrator:
             )
             .add_edge(explain, gate)
             .add_edge(template, gate)
-            .add_fan_out_edges(gate, modes)
+            .add_edge(gate, personalizer)
+            .add_fan_out_edges(personalizer, modes)
             .add_fan_in_edges(modes, publisher)
             .build()
         )

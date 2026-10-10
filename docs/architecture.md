@@ -54,11 +54,11 @@ Across every service: Microsoft Entra ID (managed identities, producer sign-in),
 1. **Generate.** The Match Lab replays a synthetic match and sends events and 1 Hz tracking samples to the live feed (Azure Event Hubs), one batch per second of match time.
 2. **Ingest.** The Stats and Momentum Engine reads the feed through the feed adapter. Validation rules reject or flag bad rows; rejects raise an ops alert. The engine appends the raw rows to the event store in Azure Data Explorer.
 3. **Compute.** The engine updates team and player state in rolling 5-minute windows: possession, turnovers, PPDA, control and chaos scores, speeds and distances. It writes these snapshots to the event store, so the dashboard shows the same numbers the agents use.
-4. **Detect.** The Moment detector sees, for example, the away side's control score fall 20+ points and hold, then puts a trigger with evidence event IDs on the Service Bus queue.
+4. **Detect.** The Moment detector sees, for example, the away side's build-up evidence (passes, pressure and possession) cross its threshold, computes the moment's metrics with context (before and after windows, the score, the opponent's shots in the spell), folds a repeat alert into the moment it repeats, then puts a trigger with evidence event IDs on the Service Bus queue.
 5. **Explain.** The orchestrator picks up the trigger. The Explainer pulls numbers through the Stats MCP server and drafts an insight (headline, explanation, metrics, evidence).
 6. **Audit.** The Auditor recomputes every number through the same tools. A mismatch goes back to the Explainer, at most twice; then approve or block. The decision is written to the ledger; a block raises an ops alert.
 7. **Approve.** The producer approves in the Studio app (low-risk types such as speed alerts can auto-approve).
-8. **Personalize and translate.** Personalizer writes analyst, casual, club, player and single-metric versions concurrently; Translator renders each language concurrently, numbers checked unchanged.
+8. **Personalize and translate.** Personalizer writes the analyst, casual, club, player and single-metric versions in one call; then, per mode concurrently, the Translator renders the other languages in one call. Every copy passes the number check and the editorial check, or is asked for again alone once, then falls back to template copy.
 9. **Deliver.** The Overlay builder sets template, timing and priority; overlays are saved to the ledger and pushed through Web PubSub.
 10. **Recap.** At half-time and full-time the orchestrator hands off to the Narrator; recaps go through the same audit.
 
@@ -169,11 +169,13 @@ FastAPI (`pitch_ledger.api`, `pitch-ledger api`); OpenAPI docs at `/api/v1/docs`
 
 | Agent | Job | Model tier | Pattern |
 | --- | --- | --- | --- |
-| Explainer | Why a moment matters, citing evidence events | Stronger | Sequential; maker in maker-checker loop |
-| Auditor | Recomputes every number; checks claims, tone, neutrality; approve, correct or block | Stronger | Checker (max 2 rounds) |
-| Narrator | Player context, milestones, half-time and full-time recaps | Stronger | Handoff at breaks; output audited |
-| Personalizer | Analyst, casual, club, player and single-metric versions | Small, fast | Concurrent fan-out per mode |
-| Translator | Every version into each language, numbers unchanged | Small, fast | Concurrent fan-out per language |
+| Explainer | What happened, then why it matters (a comparison, the match state, the opponent's response), from metrics and context signals chosen in code; cites evidence events | Stronger | Sequential; maker in maker-checker loop |
+| Auditor | Recomputes every number; checks editorial form in code (length, clichés, unsupported claims, repetition); a model checks claims, tone, neutrality; approve, correct or block | Stronger | Checker (max 2 rounds; style-only failures air as template copy) |
+| Narrator | Half-time and full-time recaps: do the chances back the scoreline, how the match moved | Stronger | Handoff at breaks; output audited |
+| Personalizer | Analyst, casual, club, player and single-metric versions: same facts, different depth and angle | Small, fast | One call for all modes |
+| Translator | Each version into the other languages, numbers unchanged | Small, fast | Concurrent per mode, one call for both languages |
+
+A full-flow insight costs 8 model calls when every check passes (Explainer, review, Personalizer, five Translator calls), down from 17; speed alerts use none.
 
 Failure handling: a model error retries once, then falls back to a plain template overlay built from code-computed numbers; a blocked insight never airs and is logged; Service Bus dead-letters a trigger that keeps failing. Each of these raises an ops alert.
 
