@@ -25,8 +25,11 @@ def _parse_error_message(exc: ValidationError) -> str:
 class MatchValidator:
     """Stateful ingest validator for one match's event stream."""
 
-    def __init__(self, match: Match, players: Iterable[Player]) -> None:
+    def __init__(self, match: Match, players: Iterable[Player], stateful: bool = True) -> None:
+        """``stateful=False`` runs only the rules that need no earlier rows (a feed joined
+        mid-match cannot know the lineup or the previous sequence number)."""
         self.match = match
+        self.stateful = stateful
         self.lineup = Lineup(players)
         self.sequence = SequenceChecker(match.home_team_id, match.away_team_id)
         self.markers = PeriodMarkerCounter()
@@ -45,10 +48,13 @@ class MatchValidator:
         results = [
             *row_rules.check_required(event, self.match.match_id),
             *row_rules.check_coordinates(event),
-            *row_rules.check_player_on_pitch(event, self.lineup),
             *row_rules.check_speeds(event),
-            *self.sequence.check(event),
         ]
+        if self.stateful:
+            results += [
+                *row_rules.check_player_on_pitch(event, self.lineup),
+                *self.sequence.check(event),
+            ]
         self.lineup.apply(event)
         self.markers.add(event)
         if not any(r.action == "reject" for r in results):
@@ -57,6 +63,8 @@ class MatchValidator:
 
     def finish(self) -> list[ValidationResult]:
         """Close the stream: pending look-ahead checks and MATCH-01."""
+        if not self.stateful:
+            return []
         return [*self.sequence.finish(), *self.markers.results()]
 
 

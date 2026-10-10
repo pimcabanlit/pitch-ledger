@@ -12,6 +12,7 @@ from pitch_ledger.cli import main
 from pitch_ledger.infra_adapters.cosmos import CosmosLedger
 from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings, open_ledger, open_queue
 from pitch_ledger.infra_adapters.servicebus import ServiceBusTriggerQueue
+from pitch_ledger.ops import OpsDesk
 from pitch_ledger.schema import InsightSubject, Trigger
 
 
@@ -64,6 +65,11 @@ def test_replay_through_the_cosmos_ledger_and_reload(match_dir: Path, tmp_path: 
     assert reloaded.next_id("M0002", "I") == "M0002-I0002"  # counters continue
     assert reloaded.get_insight(insights[0].insight_id) == insights[0]
     assert len(reloaded.overlays()) == len(run.ledger.overlays())
+    alert = OpsDesk(reloaded).raise_alert("M0002", "feed_gap", "warning", "gap", ["M0002-E000001"])
+    assert alert is not None and alert.alert_id == "M0002-X0001"
+    again = CosmosLedger(container)
+    again.load("M0002")
+    assert again.alerts("M0002") == [alert] and again.next_id("M0002", "X") == "M0002-X0002"
 
 
 def test_fresh_replay_empties_only_its_match() -> None:

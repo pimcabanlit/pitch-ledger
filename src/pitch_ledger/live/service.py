@@ -10,6 +10,10 @@ Two concurrent loops share one process:
 - **worker** takes triggers off the queue and runs the orchestrator over a snapshot of the
   match so far; outcomes go to the ledger, insight status to the store.
 
+Ops alerts (``pitch_ledger.ops``) are raised along the way: feed gaps, feed lag and
+validation results in ingest; blocked insights, template fallbacks and dead-lettered
+triggers in the worker.
+
 The queue, ledger, store and feed are interfaces (Service Bus, Cosmos DB, ADX, Event Hubs
 in Azure; in-memory or files locally), so this module never imports a cloud SDK.
 """
@@ -35,12 +39,15 @@ from pitch_ledger.eventstore.port import EventStore
 from pitch_ledger.eventstore.rows import FeedHealthMeter, insight_status_row, trigger_row
 from pitch_ledger.feed.port import Delivered, FeedSubscriber
 from pitch_ledger.ledger import FileLedger, InMemoryLedger
-from pitch_ledger.live.engine import LiveMatch
+from pitch_ledger.live.engine import LiveMatch, rejected
 from pitch_ledger.matchlab.io import EVENTS_JSONL, MATCH_FILE, TRACKING_JSONL, TRIGGERS_JSONL
 from pitch_ledger.mcp_server.client import LocalStats
 from pitch_ledger.mcp_server.tools import StatsTools
+from pitch_ledger.ops import FeedWatch, OpsDesk, dead_lettered, review_insight
+from pitch_ledger.ops.alerts import minute_label
 from pitch_ledger.push import Notifier, NullNotifier
 from pitch_ledger.schema.enums import InsightType
+from pitch_ledger.validation import RuleAction
 
 log = logging.getLogger(__name__)
 DEMO_PRODUCER = "producer_demo"
@@ -57,6 +64,8 @@ class LiveOptions:
     settle_s: float = 60.0
     tick_s: float = 5.0
     idle_s: float = 30.0
+    gap_s: float = 10.0  # ops alert: no feed message for this long during play
+    lag_p95_ms: float = 5000.0  # ops alert: p95 feed latency over a minute above this
 
 
 @dataclass
@@ -105,6 +114,9 @@ class LiveService:
         self.report = LiveReport()
         self.meter = FeedHealthMeter()
         self.notifier: Notifier = notifier or NullNotifier()
+        self.desk = OpsDesk(ledger, store, self.notifier)
+        self.watch = FeedWatch(self.desk, self.options.gap_s, self.options.lag_p95_ms)
+        self._validated: set[str] = set()  # matches whose end-of-match checks ran
         self._inbox: queue.Queue[Delivered | None] = queue.Queue()
         self._ingest_done = asyncio.Event()
         self._emitted_at: dict[str, float] = {}
@@ -147,11 +159,18 @@ class LiveService:
     def _take(self, delivered: Delivered) -> None:
         m = delivered.message
         live = self.matches.setdefault(m.match_id, LiveMatch(m.match_id))
-        live.add(m.kind, m.row)
-        self._land(m.match_id, m.kind, m.row)
+        results = live.add(m.kind, m.row)
+        self.watch.seen(m.match_id, self.clock())
+        if rejected(results):  # a dropped row's warnings would only repeat the reject
+            results = [r for r in results if r.action is RuleAction.REJECT]
+        self.watch.validated(m.match_id, results)
         counts = self.report.matches.setdefault(
-            m.match_id, {"events": 0, "tracking": 0, "triggers": 0}
+            m.match_id, {"events": 0, "tracking": 0, "triggers": 0, "rejected": 0}
         )
+        if rejected(results):  # dropped before the engine, the match folder and the store
+            counts["rejected"] += 1
+            return
+        self._land(m.match_id, m.kind, m.row)
         if m.kind in ("event", "tracking"):
             counts["events" if m.kind == "event" else "tracking"] += 1
             self.meter.add(m.match_id, delivered.received_at, delivered.latency_ms)
@@ -181,10 +200,23 @@ class LiveService:
                     self.store.append("Triggers", [trigger_row(t) for t in triggers])
                 if snapshots := await asyncio.to_thread(live.team_state_rows):
                     self.store.append("TeamState", snapshots)
+            if live.full_time and live.match_id not in self._validated:
+                self._validated.add(live.match_id)
+                self.watch.validated(live.match_id, live.finish_validation())
+            if not final:
+                period, clock_ms = live.position()
+                where = minute_label(period, clock_ms)
+                self.watch.check_gap(
+                    live.match_id, self.clock(), live.in_play, where, live.last_event_id
+                )
+        finished = self.meter.take(before=time.time() if not final else float("inf"))
+        if self.store is not None and finished:
+            self.store.append("FeedHealth", finished)
+        alerts = self.watch.check_lag(finished) + self.watch.flush(self.clock(), final)
         if self.store is not None:
-            if finished := self.meter.take(before=time.time() if not final else float("inf")):
-                self.store.append("FeedHealth", finished)
             self.store.flush()
+        if alerts and isinstance(self.ledger, FileLedger):
+            self.ledger.flush()
 
     async def ingest(self) -> None:
         last_tick = self.clock()
@@ -251,11 +283,13 @@ class LiveService:
             except Exception as exc:  # retried by the queue, then dead-lettered
                 log.warning("%s failed: %s", delivery.message_id, exc)
                 self.report.failures.append(f"{delivery.message_id}: {type(exc).__name__}: {exc}")
-                await asyncio.to_thread(
-                    self.queue.abandon, delivery, f"{type(exc).__name__}: {exc}"
-                )
-                if delivery.delivery_count >= 3:
+                reason = f"{type(exc).__name__}: {exc}"
+                await asyncio.to_thread(self.queue.abandon, delivery, reason)
+                if delivery.delivery_count >= 3:  # the queue dead-letters it
                     self._pending -= 1
+                    dead_lettered(self.desk, delivery.trigger, delivery.delivery_count, [reason])
+                    if isinstance(self.ledger, FileLedger):
+                        self.ledger.flush()
                 continue
             await asyncio.to_thread(self.queue.complete, delivery)
             self._pending -= 1
@@ -269,6 +303,7 @@ class LiveService:
                 self.notifier.notify(insight.match_id, "producers", "insight_changed", signal)
                 if outcome.status == "aired":
                     self.notifier.notify(insight.match_id, "fans", "overlays_changed", signal)
+            review_insight(self.desk, outcome.insight_id)
             if insight is not None and self.store is not None:
                 self.store.append(
                     "InsightStatus", [insight_status_row(insight, datetime.now(UTC).timestamp())]

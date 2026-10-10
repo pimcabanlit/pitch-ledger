@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import time
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,7 +13,8 @@ from pitch_ledger.cli import main
 from pitch_ledger.engine.detector import detect
 from pitch_ledger.eventstore import FileEventStore
 from pitch_ledger.feed import InMemoryFeed, listen
-from pitch_ledger.feed.live import feed_seconds, stream_match
+from pitch_ledger.feed.live import feed_seconds, match_minute, stream_match
+from pitch_ledger.feed.port import Delivered, FeedMessage
 from pitch_ledger.ledger import InMemoryLedger
 from pitch_ledger.live.engine import LiveMatch
 from pitch_ledger.live.service import LiveOptions, LiveService
@@ -70,6 +73,16 @@ def test_stream_sends_the_match_reference_first_and_listen_lands_it(
     assert landed == json.loads((match_dir / "match.json").read_text())
 
 
+def test_stream_can_stage_a_feed_fault(match_dir: Path) -> None:
+    feed, pauses = InMemoryFeed(), []
+    report = stream_match(match_dir, feed, speed=1000, start_min=10, minutes=1, fault_at=10.5,
+                          sleep=pauses.append)  # fmt: skip
+    rows = [d.message.row for d in feed.messages(0.05)]
+    [bad] = [r for r in rows if r.get("start_x") == 140.0]
+    assert bad["event_type"] == "pass" and match_minute(bad) >= 10.5
+    assert report.fault and report.fault.startswith(bad["event_id"]) and 12.0 in pauses
+
+
 def test_live_run_ends_like_a_replay(match_dir: Path, tmp_path: Path) -> None:
     feed = InMemoryFeed()
     stream_match(match_dir, feed, speed=10_000, sleep=lambda s: None)
@@ -82,6 +95,7 @@ def test_live_run_ends_like_a_replay(match_dir: Path, tmp_path: Path) -> None:
     report = asyncio.run(service.run())
     groups = [g for g, _ in push.sent]
     assert groups.count("producers.M0002") == 18 and groups.count("fans.M0002") == 18
+    assert ledger.alerts() == []  # a clean feed and run raise no ops alerts
     store.close()
 
     summary = report.as_dict()
@@ -96,3 +110,66 @@ def test_live_run_ends_like_a_replay(match_dir: Path, tmp_path: Path) -> None:
     counts = {p.stem: len(p.read_text().splitlines()) for p in (tmp_path / "store").iterdir()}
     assert counts["Triggers"] == 56 and counts["InsightStatus"] == 18
     assert counts["TeamState"] == 190 and counts["Events"] == 2418
+
+
+class PausingFeed:
+    """Feed rows from memory with one pause (a feed gap) before row ``pause_at``."""
+
+    def __init__(self, messages: list[FeedMessage], pause_at: int, pause_s: float) -> None:
+        self.items, self.pause_at, self.pause_s = messages, pause_at, pause_s
+
+    def messages(self, idle_timeout_s: float) -> Iterator[Delivered]:
+        for n, message in enumerate(self.items):
+            if n == self.pause_at:
+                time.sleep(self.pause_s)
+            yield Delivered(message, time.time())
+
+    def close(self) -> None:
+        pass
+
+
+def _opening(match_dir: Path, minutes: float) -> list[FeedMessage]:
+    files = read_match(match_dir)
+    reference = json.loads((match_dir / "match.json").read_text())
+    rows = [FeedMessage("match", reference)]
+    for _, batch in feed_seconds(files.events, files.tracking):
+        rows += [m for m in batch if match_minute(m.row) < minutes]
+    return rows
+
+
+def test_feed_faults_raise_ops_alerts(match_dir: Path, tmp_path: Path) -> None:
+    rows = _opening(match_dir, 3)
+    bad_at = next(n for n, m in enumerate(rows) if m.kind == "event" and m.row["event_type"]
+                  == "pass" and match_minute(m.row) > 1)  # fmt: skip
+    bad_id = rows[bad_at].row["event_id"]
+    rows[bad_at] = FeedMessage("event", {**rows[bad_at].row, "start_x": 140.0})  # off the pitch
+    pause_at = next(n for n, m in enumerate(rows) if n and match_minute(m.row) > 2)
+    before_gap = [m.row["event_id"] for m in rows[:pause_at]
+                  if m.kind == "event" and m.row["event_id"] != bad_id][-1]  # fmt: skip
+    ledger, push = InMemoryLedger(), RecordingNotifier()
+    options = LiveOptions(provider="offline", tick_s=0.05, idle_s=0.3, gap_s=0.2)
+    service = LiveService(PausingFeed(rows, pause_at, 0.6), InMemoryTriggerQueue(), ledger, None,
+                          tmp_path / "live", options, notifier=push)  # fmt: skip
+    report = asyncio.run(service.run())
+
+    alerts = {a.kind: a for a in ledger.alerts("M0002")}
+    assert set(alerts) == {"validation_reject", "feed_gap"}
+    reject, gap = alerts["validation_reject"], alerts["feed_gap"]
+    assert reject.refs == [bad_id] and "ROW-02" in reject.message
+    assert gap.refs == [before_gap] and gap.message.startswith("No feed message for")
+    assert report.matches["M0002"]["rejected"] == 1
+    landed = (tmp_path / "live" / "M0002" / "events.jsonl").read_text()
+    assert f'"event_id":"{bad_id}"' not in landed  # dropped before the match folder
+    assert [m["event"] for g, m in push.sent if g == "producers.M0002"].count("alert_changed") == 2
+
+
+def test_a_feed_joined_mid_match_raises_no_false_rejects(match_dir: Path) -> None:
+    files = read_match(match_dir)
+    live = LiveMatch("M0002")
+    live.add("match", json.loads((match_dir / "match.json").read_text()))
+    results = []
+    for _, batch in feed_seconds(files.events, files.tracking):
+        for m in batch:
+            if match_minute(m.row) >= 60 and m.row.get("period") == 2:  # lineup changes before
+                results += live.add(m.kind, m.row)
+    assert results == [] and live.events and live.full_time

@@ -3,7 +3,8 @@
 The detector runs over the match feed (writing ``triggers.jsonl``, which the MCP stats
 server reads), then every trigger goes through the queue and the insight workflow. The
 ledger lands in ``<match_dir>/ledger/`` with a ``run.json`` summary (provider, counts,
-model usage, timings).
+model usage, timings). Ops alerts for blocked insights, template fallbacks and dead letters
+go to the same ledger.
 """
 
 import json
@@ -31,6 +32,8 @@ from pitch_ledger.ledger import FileLedger, InMemoryLedger
 from pitch_ledger.matchlab.io import read_match, write_triggers
 from pitch_ledger.mcp_server.client import LocalStats, McpStats
 from pitch_ledger.mcp_server.tools import StatsTools
+from pitch_ledger.ops import OpsDesk, dead_lettered, review_insight
+from pitch_ledger.push import Notifier
 from pitch_ledger.schema import Event, TrackingSample, Trigger
 
 DEMO_PRODUCER = "producer_demo"
@@ -117,6 +120,13 @@ async def replay_match(
         producer = DEMO_PRODUCER if options.approve else None
         orchestrator = Orchestrator(svc, context, producer, options.only)
         report = await orchestrator.replay(triggers, queue)
+    desk = OpsDesk(ledger)
+    for outcome in report.outcomes:
+        review_insight(desk, outcome.insight_id)
+    by_id = {t.trigger_id: t for t in triggers}
+    for dead in report.dead_letters:
+        if (trigger := by_id.get(dead["trigger_id"])) is not None:
+            dead_lettered(desk, trigger, dead["deliveries"], dead["errors"])
     summary = {
         "match_id": match_id,
         "started_at": started.isoformat(timespec="seconds"),
@@ -131,6 +141,7 @@ async def replay_match(
         "only": list(options.only) if options.only else None,
         "triggers": len(triggers),
         "usage": models.usage.as_dict(),
+        "ops_alerts": len(ledger.alerts(match_id)),
         **report.as_dict(),
     }
     run = ReplayRun(match_id, triggers, ledger, report, summary)
@@ -152,10 +163,12 @@ async def decide_insight(
     reason: str | None = None,
     provider: Literal["offline", "foundry"] | None = None,
     stats: Literal["mcp", "local"] = "local",
+    notifier: Notifier | None = None,
 ) -> Outcome:
     """A producer's decision on a pending insight (the Studio console): approve runs the
     Personalizer and Translator and stores the overlays; block records the block. An insight
-    that is already decided is left as it is. The ledger is flushed if it is a file ledger."""
+    that is already decided is left as it is. Template fallbacks raise an ops alert (signalled
+    through ``notifier``). The ledger is flushed if it is a file ledger."""
     files = read_match(match_dir, with_tracking=False)
     events = [Event.model_validate(e) for e in files.events]
     context = MatchContext(files.match, files.teams, files.players, {e.event_id: e for e in events})
@@ -170,6 +183,7 @@ async def decide_insight(
             gateway = LocalStats(StatsTools(match_dir))
         svc = Services(files.match.match_id, models, Auditor(models, gateway), ledger)
         outcome = await Orchestrator(svc, context).decide(insight_id, producer, approve, reason)
+    review_insight(OpsDesk(ledger, notifier=notifier), insight_id)
     if isinstance(ledger, FileLedger):
         ledger.flush()
     return outcome

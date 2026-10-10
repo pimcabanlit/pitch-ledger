@@ -1,6 +1,7 @@
 """Local file ledger: the in-memory ledger persisted as JSONL under ``<match_dir>/ledger/``.
 
-Files: ``insights.jsonl``, ``audits.jsonl``, ``overlays.jsonl`` and ``triggers.jsonl``,
+Files: ``insights.jsonl``, ``audits.jsonl``, ``overlays.jsonl``, ``triggers.jsonl`` and
+``alerts.jsonl``,
 rewritten in full by ``flush()`` (a replay writes once at the end).
 """
 
@@ -10,7 +11,7 @@ from pydantic import BaseModel
 
 from pitch_ledger.ledger.memory import InMemoryLedger
 from pitch_ledger.ledger.repository import IdKind
-from pitch_ledger.schema import AuditRecord, Insight, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, Trigger
 
 
 class FileLedger(InMemoryLedger):
@@ -28,12 +29,16 @@ class FileLedger(InMemoryLedger):
             self.add_audit(AuditRecord.model_validate_json(line))
         for line in self._lines("overlays"):
             self.put_overlay(Overlay.model_validate_json(line))
+        for line in self._lines("alerts"):
+            self.put_alert(OpsAlert.model_validate_json(line))
         for insight in self.insights():
             self._seen(insight.insight_id, "I")
         for overlay in self.overlays():
             self._seen(overlay.overlay_id, "O")
         for audit in self.audits():
             self._seen(audit.audit_id, "A")
+        for alert in self.alerts():
+            self._seen(alert.alert_id, "X")
 
     def _seen(self, ident: str, kind: IdKind) -> None:
         """Keep ID counters ahead of IDs already on disk."""
@@ -52,6 +57,7 @@ class FileLedger(InMemoryLedger):
             "insights": list(self.insights()),
             "audits": list(self.audits()),
             "overlays": list(self.overlays()),
+            "alerts": list(self.alerts()),
         }
         paths = []
         for name, rows in collections.items():

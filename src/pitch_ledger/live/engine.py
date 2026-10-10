@@ -6,6 +6,11 @@ match. A trigger is emitted once the feed is ``settle_ms`` of match time past it
 that look a few seconds ahead (a pass completes at its receipt) have their data, and at
 full time everything left is emitted. Triggers get IDs in emission order, which is match
 order, so a live run numbers its triggers like a batch run.
+
+Once the match reference has arrived, every row goes through the ingest validation rules
+(docs/event-schema.md): a rejected row is dropped before the engine, and ``add`` returns
+the rule results so the service can raise ops alerts. A feed joined mid-match (first event
+after ``seq_no`` 1) gets only the rules that need no earlier rows.
 """
 
 from dataclasses import dataclass, field
@@ -16,6 +21,8 @@ from pitch_ledger.engine.windows import MatchEngine
 from pitch_ledger.eventstore.rows import STEP_MS, WINDOW_MS, team_state_row
 from pitch_ledger.matchlab.io import MatchFiles
 from pitch_ledger.schema import Event, Match, Player, Team, TrackingSample, Trigger
+from pitch_ledger.validation import MatchValidator, RuleAction, ValidationResult
+from pitch_ledger.validation.validator import check_tracking_rows
 
 Position = tuple[int, int]  # (period, clock_ms): first-half stoppage comes before period 2
 
@@ -34,6 +41,9 @@ class LiveMatch:
     tracking: list[TrackingSample] = field(default_factory=list)
     emitted: list[Trigger] = field(default_factory=list)
     full_time: bool = False
+    in_play: bool = False  # play is on: the last event is not a period end
+    validator: MatchValidator | None = None
+    _players: list[Player] = field(default_factory=list)
     _keys: set[tuple[Any, ...]] = field(default_factory=set)
     _snapshot_ms: dict[int, int] = field(default_factory=dict)  # period -> last snapshot end
 
@@ -52,18 +62,48 @@ class LiveMatch:
             tracking=list(self.tracking_raw),
         )
 
-    def add(self, kind: str, row: dict[str, Any]) -> None:
+    def add(self, kind: str, row: dict[str, Any]) -> list[ValidationResult]:
+        """Take one feed row; returns its validation results (a reject is not kept)."""
         if kind == "match":
             self.reference = row
-        elif kind == "event":
+            self._players = [Player.model_validate(p) for p in row["players"]]
+            self.validator = MatchValidator(Match.model_validate(row["match"]), self._players)
+            return []
+        if kind == "event":
+            results: list[ValidationResult] = []
+            if self.validator is None:
+                event: Event | None = Event.model_validate(row)
+            else:
+                if not self.events and row.get("seq_no") != 1:  # joined mid-match
+                    self.validator = MatchValidator(self.validator.match, self._players, False)
+                event, results = self.validator.check(row)
+            if event is None or rejected(results):
+                return results
             self.events_raw.append(row)
-            event = Event.model_validate(row)
             self.events.append(event)
+            self.in_play = event.event_type.value != "period_end"  # a stream may start mid-half
             if event.event_type.value == "period_end" and event.period == 2:
                 self.full_time = True
-        elif kind == "tracking":
-            self.tracking_raw.append(row)
-            self.tracking.append(TrackingSample.model_validate(row))
+            return results
+        if kind == "tracking":
+            if self.validator is None:
+                samples, results = [TrackingSample.model_validate(row)], []
+            else:
+                samples, results = check_tracking_rows(self.match_id, [row])
+            if samples and not rejected(results):
+                self.tracking_raw.append(row)
+                self.tracking.append(samples[0])
+            return results
+        return []
+
+    def finish_validation(self) -> list[ValidationResult]:
+        """End-of-match checks (pending look-ahead rules, one start and end per period);
+        call once, at full time."""
+        return self.validator.finish() if self.validator is not None else []
+
+    @property
+    def last_event_id(self) -> str | None:
+        return self.events[-1].event_id if self.events else None
 
     def position(self) -> Position:
         """How far the feed has got: the latest (period, clock) received."""
@@ -113,3 +153,8 @@ class LiveMatch:
                     rows.append(team_state_row(self.match_id, window))
                 self._snapshot_ms[period] = end_ms
         return rows
+
+
+def rejected(results: list[ValidationResult]) -> bool:
+    """True when a rule rejected the row (flags still pass)."""
+    return any(r.action is RuleAction.REJECT for r in results)

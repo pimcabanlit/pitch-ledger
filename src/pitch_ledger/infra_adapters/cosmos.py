@@ -1,11 +1,13 @@
 """Azure Cosmos DB ledger adapter (NoSQL API, free tier).
 
 One container (``ledger``, partition key ``/match_id``): every trigger, insight, audit
-record and overlay is a document ``{"id", "match_id", "kind", ...model fields}``, so a
-match's ledger is one partition. The adapter is the in-memory ledger with write-through:
-reads come from memory, every write is upserted at once (the Studio sees it live), and the
-first time a match is touched its documents are loaded so ID counters continue. That
-assumes one writer per match, which is the architecture (one orchestrator).
+record, overlay and ops alert is a document ``{"id", "match_id", "kind", ...model fields}``,
+so a match's ledger is one partition. An ops alert's own ``kind`` (feed_gap, ...) is stored
+as ``alert_kind``, since ``kind`` names the document type. The adapter is the in-memory
+ledger with write-through: reads come from memory, every write is upserted at once (the
+Studio sees it live), and the first time a match is touched its documents are loaded so ID
+counters continue. That assumes one writer per match, which is the architecture (one
+orchestrator).
 
 Sign-in: Microsoft Entra ID with the *Cosmos DB Built-in Data Contributor* data-plane role
 (assigned with the Azure CLI; see docs/azure-setup.md), or an account key.
@@ -21,14 +23,15 @@ from pydantic import BaseModel
 from pitch_ledger.core.checks import Check, short_error
 from pitch_ledger.ledger import InMemoryLedger
 from pitch_ledger.ledger.repository import IdKind
-from pitch_ledger.schema import AuditRecord, Insight, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, Trigger
 
-DocKind = Literal["trigger", "insight", "audit", "overlay"]
+DocKind = Literal["trigger", "insight", "audit", "overlay", "alert"]
 ID_KIND: dict[DocKind, IdKind | None] = {
     "trigger": None,
     "insight": "I",
     "audit": "A",
     "overlay": "O",
+    "alert": "X",
 }
 
 
@@ -123,6 +126,9 @@ class CosmosLedger(InMemoryLedger):
             elif kind == "overlay":  # match_id is the partition key only, not an overlay field
                 body.pop("match_id", None)
                 super().put_overlay(Overlay.model_validate(body))
+            elif kind == "alert":
+                body["kind"] = body.pop("alert_kind")
+                super().put_alert(OpsAlert.model_validate(body))
             id_kind = ID_KIND[kind]
             if id_kind is not None:
                 number = int(doc["id"].split(f"-{id_kind}")[1])
@@ -163,6 +169,12 @@ class CosmosLedger(InMemoryLedger):
         self._write(
             match_id, {**to_doc("overlay", overlay.overlay_id, overlay), "match_id": match_id}
         )
+
+    def put_alert(self, alert: OpsAlert) -> None:
+        self._touch(alert.match_id)
+        super().put_alert(alert)
+        doc = {**to_doc("alert", alert.alert_id, alert), "alert_kind": alert.kind}
+        self._write(alert.match_id, doc)
 
     def close(self) -> None:
         if self._on_close:

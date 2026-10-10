@@ -1,4 +1,4 @@
-"""Insight ledger: triggers, insights, audit trail and overlays."""
+"""Insight ledger: triggers, insights, audit trail, overlays and ops alerts."""
 
 from pitch_ledger.ledger.files import FileLedger
 from pitch_ledger.ledger.memory import InMemoryLedger
