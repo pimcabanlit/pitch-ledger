@@ -16,7 +16,8 @@ percentages, speeds and distances, two for xG).
 | pass_milestone | milestone | a player completes his 50th, 75th or 100th pass |
 | brace / hat_trick | milestone | a player's second or third goal |
 | distance_milestone | milestone | a player passes 5 or 10 km (tracking) |
-| shot_speed | speed_alert | a shot above 100 km/h (auto-approved) |
+| shot_speed | speed_alert | a shot above 100 km/h (auto-approved); superseded on a goal or
+  within 10 minutes of the player's last, faster alert (stored, not aired) |
 | top_speed | speed_alert | a player's first sample at 34+ km/h (tracking, auto-approved) |
 | pass_quality | pass_quality | completed pass of difficulty 65+, 15+ m forward (at its receipt) |
 | half_time_recap / full_time_recap | recap | at each period end |
@@ -25,7 +26,7 @@ percentages, speeds and distances, two for xG).
 import math
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from pitch_ledger.engine import rule_metrics as rm
@@ -65,6 +66,7 @@ class DetectorConfig:
     pass_milestones: tuple[int, ...] = (50, 75, 100)
     distance_milestones_km: tuple[float, ...] = (5.0, 10.0)
     shot_speed_alert_kmh: float = 100.0
+    shot_speed_cooldown_ms: int = 10 * MIN
     top_speed_alert_kmh: float = 34.0
     pass_quality_min_difficulty: float = 65.0
     pass_quality_min_forward_m: float = 15.0
@@ -86,10 +88,6 @@ class _Draft:
     evidence: tuple[str, ...]
     context: dict[str, Any] = field(default_factory=dict)
     auto_approve: bool = False
-
-
-def _pct(value: float | None) -> float:
-    return round(100.0 * value, 1) if value is not None else 0.0
 
 
 def _minute(period: int, clock_ms: int) -> float:
@@ -122,6 +120,7 @@ class Detector:
             *self._tracking_rules(tracking),
         ]
         drafts.sort(key=lambda d: (d.period, d.clock_ms, d.order))
+        drafts = self._prioritise(drafts)
         return [
             Trigger(
                 trigger_id=f"{self.match.match_id}-T{i:04d}",
@@ -138,6 +137,39 @@ class Detector:
             )
             for i, d in enumerate(drafts, start=1)
         ]
+
+    # Prioritisation -----------------------------------------------------------
+    def _prioritise(self, drafts: list[_Draft]) -> list[_Draft]:
+        """Mark speed alerts that would repeat a moment as superseded (stored, not aired).
+
+        A shot-speed alert on a goal is folded into the goal (which reports the speed);
+        another alert for the same player within the cooldown, and no faster, is dropped.
+        Every trigger is kept, so counts, IDs and the stored record do not change.
+        """
+        goal_shots = {d.evidence[0] for d in drafts if d.rule_id == "goal"}
+        last: dict[str, tuple[int, int, float]] = {}
+        out = []
+        for d in drafts:
+            if d.rule_id == "shot_speed":
+                player = d.subject.player_id or ""
+                speed = float(d.metrics["shot_speed_kmh"])
+                prev = last.get(player)
+                reason = None
+                if d.evidence[0] in goal_shots:
+                    reason = "goal"
+                elif (
+                    prev is not None
+                    and prev[0] == d.period
+                    and d.clock_ms - prev[1] < self.config.shot_speed_cooldown_ms
+                    and speed <= prev[2]
+                ):
+                    reason = "cooldown"
+                else:
+                    last[player] = (d.period, d.clock_ms, speed)
+                if reason is not None:
+                    d = replace(d, context={**d.context, "superseded_by": reason})
+            out.append(d)
+        return out
 
     # Momentum ---------------------------------------------------------------
     def _momentum(self, engine: MatchEngine, tracking: Sequence[TrackingSample]) -> list[_Draft]:
@@ -177,11 +209,12 @@ class Detector:
     def _key_moments(self, engine: MatchEngine) -> list[_Draft]:
         out = []
         by_id = {e.event_id: e for e in engine.events}
-        goals: dict[str, int] = defaultdict(int)
         for e in engine.events:
             if e.event_type is EventType.SHOT and e.outcome is Outcome.GOAL and e.team_id:
-                goals[e.player_id or ""] += 1
                 assist = [r for r in e.related_event_ids if by_id[r].event_type is EventType.PASS]
+                regain = rm.goal_regain(e, engine.events)
+                if regain is not None and regain.event_id not in assist:
+                    assist.append(regain.event_id)
                 out.append(
                     _Draft(
                         e.period,
@@ -190,7 +223,7 @@ class Detector:
                         InsightType.KEY_MOMENT,
                         "goal",
                         InsightSubject(team_id=e.team_id, player_id=e.player_id),
-                        rm.goal(e, self.match.home_team_id),
+                        rm.goal(e, self.match.home_team_id, engine.events),
                         (e.event_id, *assist),
                     )
                 )
@@ -291,7 +324,7 @@ class Detector:
                         InsightType.PLAYER_FORM,
                         "player_form",
                         InsightSubject(team_id=e.team_id, player_id=e.player_id),
-                        rm.player_form(recent, cfg.form_window_ms),
+                        rm.player_form(recent, cfg.form_window_ms, events),
                         tuple(s.event_id for s in recent),
                         {
                             "window": _window(

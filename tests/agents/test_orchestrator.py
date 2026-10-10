@@ -44,8 +44,13 @@ def _orchestrator(m0002: list[Case], stats: Any = None, **kwargs: Any) -> Orches
     return Orchestrator(svc, context, **kwargs)
 
 
-def _trigger(m0002: list[Case], rule: str) -> Trigger:
-    return next(c.trigger for c in m0002 if c.trigger.rule_id == rule)
+def _trigger(m0002: list[Case], rule: str, superseded: bool = False) -> Trigger:
+    """The first trigger of ``rule`` (by default one the detector did not supersede)."""
+    return next(
+        c.trigger
+        for c in m0002
+        if c.trigger.rule_id == rule and bool(c.trigger.context.get("superseded_by")) == superseded
+    )
 
 
 def test_replay_m0002_end_to_end_over_mcp(m0002_dir: Path, tmp_path: Path) -> None:
@@ -55,7 +60,11 @@ def test_replay_m0002_end_to_end_over_mcp(m0002_dir: Path, tmp_path: Path) -> No
     expected_full = sum(
         t.insight_type in FULL_FLOW and copy.supported(copy.copy_key(t)) for t in run.triggers
     )
-    expected_auto = sum(t.insight_type in AUTO_APPROVE for t in run.triggers)
+    expected_auto = sum(
+        t.insight_type in AUTO_APPROVE and not t.context.get("superseded_by")
+        for t in run.triggers
+    )
+    assert sum(bool(t.context.get("superseded_by")) for t in run.triggers) == 3  # 2 on goals
     assert s["counts"]["routes"]["full"] == expected_full >= 8
     assert s["counts"]["routes"]["auto"] == expected_auto
     assert s["counts"]["status"] == {"aired": expected_full + expected_auto}
@@ -96,6 +105,7 @@ def test_routing_and_only(m0002: list[Case]) -> None:
     assert orch.route(_trigger(m0002, "momentum_shift")) == "full"
     assert orch.route(_trigger(m0002, "goal")) == "full"
     assert orch.route(_trigger(m0002, "shot_speed")) == "auto"
+    assert orch.route(_trigger(m0002, "shot_speed", superseded=True)) == "stored"
     limited = _orchestrator(m0002, only=["momentum_shift"])
     assert limited.route(_trigger(m0002, "momentum_shift")) == "full"
     assert limited.route(_trigger(m0002, "goal")) == "stored"

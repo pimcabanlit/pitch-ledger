@@ -64,7 +64,7 @@ def recompute_trigger(
         metrics, _ = rm.momentum(engine, team, period, start, onset, now, score, samples)
         return metrics
     if rule == "goal":
-        return rm.goal(evidence[0], home)
+        return rm.goal(evidence[0], home, upto)
     if rule == "sending_off":
         return rm.sending_off(evidence[0], home)
     if rule == "sending_off_impact":
@@ -87,7 +87,7 @@ def recompute_trigger(
         return rm.penalty(evidence[0])
     if rule == "player_form":
         period, start, end = _window(trigger, "window")
-        return rm.player_form(evidence, end - start)
+        return rm.player_form(evidence, end - start, upto)
     if rule == "pass_milestone":
         return rm.pass_milestone(evidence)
     if rule in ("brace", "hat_trick"):
