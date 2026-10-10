@@ -227,7 +227,7 @@ Menu names drift a little between versions of the web UI; when it differs, look 
    | 5. Insight pipeline | **Pie chart** | Category: `status`, Numeric: `insights` |
    | 6. Insights | Table | — |
    | 7. Feed health | **Time chart** | X: `window_start`, Y: `p50_ms`, `p95_ms` (pick match M0099 to see data) |
-   | 8. Ops alerts | Table | Empty until ops alerts are built |
+   | 8. Ops alerts | Table | Filled by `live --store adx` (and `store` after a replay). If you added this tile before 2026-10-10, paste the updated query from `infra/adx/dashboard.kql`: it shows each alert's latest state |
 
 6. **Arrange:** drag tile edges to resize; put tiles 1, 2 and 3 on top.
 7. **Auto refresh** (for live matches): ⋯ / Manage → **Auto refresh** → on, every 30 s (or the shortest offered).

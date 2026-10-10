@@ -63,7 +63,7 @@ def test_file_ledger_persists_and_resumes_ids(tmp_path: Path) -> None:
     insight = _fill(ledger)
     paths = ledger.flush()
     assert {p.name for p in paths} == {"triggers.jsonl", "insights.jsonl", "audits.jsonl",
-                                       "overlays.jsonl"}  # fmt: skip
+                                       "overlays.jsonl", "alerts.jsonl"}  # fmt: skip
     again = FileLedger(tmp_path / "ledger")
     assert again.get_insight(insight.insight_id) == insight
     assert again.triggers["M0002-T0001"] == _trigger()

@@ -3,6 +3,7 @@
 import { CheckCircle2, CircleAlert, ShieldCheck, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { OpsPanel } from "@/components/ops-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import {
   type InsightStatus,
   type InsightView,
   type MatchSummary,
+  type OpsAlert,
 } from "@/lib/api";
 import { useRealtime } from "@/lib/realtime";
 import { matchMinute, minuteLabel } from "@/lib/utils";
@@ -40,6 +42,7 @@ export function ProducerConsole() {
   const [matchId, setMatchId] = useState("");
   const [filter, setFilter] = useState<InsightStatus | "all">("pending");
   const [insights, setInsights] = useState<InsightView[]>([]);
+  const [alerts, setAlerts] = useState<OpsAlert[] | null>(null); // null: not loaded yet
   const [selected, setSelected] = useState<InsightDetail | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,6 +68,25 @@ export function ProducerConsole() {
 
   useEffect(loadInsights, [loadInsights]);
 
+  const loadAlerts = useCallback(() => {
+    if (!matchId) return;
+    api.alerts(matchId).then(setAlerts, (e) => setError(signInMessage(e)));
+  }, [matchId]);
+
+  useEffect(loadAlerts, [loadAlerts]);
+
+  const acknowledge = useCallback(
+    async (alertId: string) => {
+      try {
+        await api.acknowledge(alertId);
+        loadAlerts();
+      } catch (e) {
+        setError(signInMessage(e));
+      }
+    },
+    [loadAlerts],
+  );
+
   const open = useCallback(
     (insightId: string) =>
       api.insight(insightId).then(setSelected, (e) => setError(signInMessage(e))),
@@ -73,6 +95,7 @@ export function ProducerConsole() {
 
   const selectedId = selected?.insight.insight_id;
   const pushed = useRealtime(matchId || null, true, (signal) => {
+    if (signal.event === "alert_changed") return loadAlerts();
     if (signal.event !== "insight_changed") return;
     loadInsights();
     if (signal.insight_id && signal.insight_id === selectedId) open(signal.insight_id);
@@ -95,9 +118,9 @@ export function ProducerConsole() {
 
   useEffect(() => {
     if (pushed) return; // push tells us when something changes
-    const timer = setInterval(loadInsights, POLL_MS);
+    const timer = setInterval(() => (loadInsights(), loadAlerts()), POLL_MS);
     return () => clearInterval(timer);
-  }, [pushed, loadInsights]);
+  }, [pushed, loadInsights, loadAlerts]);
 
   const shown = insights.filter((v) => filter === "all" || v.status === filter);
 
@@ -106,7 +129,10 @@ export function ProducerConsole() {
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-xs text-slate-600">
           Match
-          <Select value={matchId} onChange={(e) => (setMatchId(e.target.value), setSelected(null))}>
+          <Select
+            value={matchId}
+            onChange={(e) => (setMatchId(e.target.value), setSelected(null), setAlerts(null))}
+          >
             {matches.map((m) => (
               <option key={m.match_id} value={m.match_id}>
                 {m.match_id} · {m.home.name} v {m.away.name}
@@ -136,6 +162,8 @@ export function ProducerConsole() {
           <CircleAlert className="h-4 w-4" aria-hidden /> {error}
         </p>
       )}
+
+      <OpsPanel alerts={alerts} onAcknowledge={acknowledge} onOpenInsight={open} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <Card>

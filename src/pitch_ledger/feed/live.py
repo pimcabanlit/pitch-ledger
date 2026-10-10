@@ -64,6 +64,7 @@ class StreamReport:
     batches: int = 0
     wall_s: float = 0.0
     max_behind_s: float = 0.0
+    fault: str | None = None
 
 
 def stream_match(
@@ -75,8 +76,14 @@ def stream_match(
     with_tracking: bool = True,
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    fault_at: float | None = None,
+    fault_pause_s: float = 12.0,
 ) -> StreamReport:
-    """Publish a match directory's rows at ``speed`` x match pace."""
+    """Publish a match directory's rows at ``speed`` x match pace.
+
+    ``fault_at`` (a match minute) stages a feed fault for the ops-alert demo: the first pass
+    from that minute is sent with an off-pitch start (a validation reject), then the feed
+    pauses for ``fault_pause_s`` wall seconds (a feed gap)."""
     if speed <= 0:
         raise ValueError("speed must be positive")
     files = read_match(match_dir, with_tracking=with_tracking)
@@ -86,10 +93,18 @@ def stream_match(
         minute = match_minute(row)
         return minute >= start_min and (end_min is None or minute < end_min)
 
-    seconds = feed_seconds(
-        [r for r in files.events if keep(r)], [r for r in files.tracking if keep(r)]
-    )
+    events = [r for r in files.events if keep(r)]
     report = StreamReport(files.match.match_id)
+    faulty: str | None = None
+    if fault_at is not None:
+        n = next((n for n, r in enumerate(events) if r["event_type"] == "pass"
+                  and match_minute(r) >= fault_at), None)  # fmt: skip
+        if n is None:
+            raise ValueError(f"no pass at or after minute {fault_at} to corrupt")
+        events[n] = {**events[n], "start_x": 140.0}  # off the 105 m pitch
+        faulty = events[n]["event_id"]
+        report.fault = f"{faulty} sent off the pitch, then a {fault_pause_s:g} s pause"
+    seconds = feed_seconds(events, [r for r in files.tracking if keep(r)])
     reference = json.loads((match_dir / MATCH_FILE).read_text("utf-8"))
     publisher.publish([FeedMessage("match", reference)])  # reference rows first
     if not seconds:
@@ -112,6 +127,10 @@ def stream_match(
             batch += seconds[i][1]
             i += 1
         publisher.publish(batch)
+        if faulty is not None and any(m.row.get("event_id") == faulty for m in batch):
+            sleep(fault_pause_s)  # the feed gap; the schedule resumes after it
+            t0 += fault_pause_s
+            faulty = None
         report.batches += 1
         report.events += sum(m.kind == "event" for m in batch)
         report.tracking += sum(m.kind == "tracking" for m in batch)

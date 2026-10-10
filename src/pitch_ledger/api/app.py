@@ -2,8 +2,8 @@
 
 Public (fan view): health, matches, a match, and the aired overlays of a match.
 Producer (Entra ID producer role, see ``auth``): every insight with its status, one insight
-with its audit trail and evidence, and the approve/block decision (rate-limited: an
-approval runs the Personalizer and Translator).
+with its audit trail and evidence, the approve/block decision (rate-limited: an approval
+runs the Personalizer and Translator), and the match's ops alerts with acknowledgement.
 
 Run: ``pitch-ledger api`` (Uvicorn).
 """
@@ -19,6 +19,7 @@ from pitch_ledger.agents.replay import decide_insight
 from pitch_ledger.api.auth import EntraVerifier, Producer, producer
 from pitch_ledger.api.repository import MatchRepository
 from pitch_ledger.api.schemas import (
+    AlertState,
     DecisionRequest,
     DecisionResult,
     EvidenceEvent,
@@ -38,13 +39,15 @@ from pitch_ledger.eventstore.rows import insight_status
 from pitch_ledger.feed.live import match_minute
 from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
 from pitch_ledger.infra_adapters.webpubsub import PushSettings, open_notifier
-from pitch_ledger.ledger import InMemoryLedger
+from pitch_ledger.ledger import FileLedger, InMemoryLedger
 from pitch_ledger.matchlab.io import MatchFiles
+from pitch_ledger.ops import OpsDesk
 from pitch_ledger.push import Notifier
-from pitch_ledger.schema import Overlay
+from pitch_ledger.schema import OpsAlert, Overlay
 
 MatchIdPath = Annotated[str, Path(pattern=r"^M\d{4}$")]
 InsightIdPath = Annotated[str, Path(pattern=r"^M\d{4}-I\d{4}$")]
+AlertIdPath = Annotated[str, Path(pattern=r"^M\d{4}-X\d{4}$")]
 Mode = Annotated[str | None, Query(pattern=r"^[a-z_]{3,20}$")]
 Language = Annotated[str | None, Query(pattern=r"^[a-z]{2,3}(-[A-Z]{2})?$")]
 
@@ -211,7 +214,8 @@ def create_app(
         assert match_dir is not None  # insight_of checked the match exists
         outcome = await decide_insight(match_dir, ledger, insight_id, who.producer_id,
                                        body.approve, body.reason,
-                                       provider=settings.api_decision_provider)  # fmt: skip
+                                       provider=settings.api_decision_provider,
+                                       notifier=push)  # fmt: skip
         decided = ledger.get_insight(insight_id) or view.insight
         signal = {"insight_id": insight_id, "status": insight_status(decided)}
         push.notify(decided.match_id, "producers", "insight_changed", signal)
@@ -220,5 +224,30 @@ def create_app(
         return DecisionResult(insight_id=insight_id, status=insight_status(decided),
                               audit_status=outcome.audit_status, overlays=outcome.overlays,
                               approved_by=decided.approved_by)  # fmt: skip
+
+    @app.get("/api/v1/matches/{match_id}/alerts", response_model=list[OpsAlert])
+    def alerts(
+        match_id: MatchIdPath,
+        who: Annotated[Producer, Depends(producer)],
+        state: AlertState = "all",
+    ) -> list[OpsAlert]:
+        """The match's ops alerts, newest first (``open``: not acknowledged yet)."""
+        match_files(match_id)
+        found = [a for a in repo.ledger(match_id).alerts(match_id)
+                 if state == "all" or a.acknowledged_by is None]  # fmt: skip
+        return sorted(found, key=lambda a: (a.raised_at, a.alert_id), reverse=True)
+
+    @app.post("/api/v1/alerts/{alert_id}/acknowledge", response_model=OpsAlert)
+    def acknowledge(alert_id: AlertIdPath, who: Annotated[Producer, Depends(producer)]) -> OpsAlert:
+        """Mark an alert as seen; the producer comes from the verified token."""
+        match_id = alert_id.split("-X")[0]
+        match_files(match_id)
+        ledger = repo.ledger(match_id)
+        alert = OpsDesk(ledger, notifier=push).acknowledge(alert_id, who.producer_id)
+        if alert is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"no alert {alert_id}")
+        if isinstance(ledger, FileLedger):
+            ledger.flush()
+        return alert
 
     return app

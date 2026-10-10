@@ -2,8 +2,8 @@
 
 ``export_match`` writes a whole match directory: raw events and tracking, the engine's
 team state every minute over its rolling 5-minute window, the detector's triggers and,
-after a replay, each insight's status. ``FeedHealthMeter`` turns feed deliveries into
-per-minute latency rows.
+after a replay, each insight's status and the ops alerts. ``FeedHealthMeter`` turns feed
+deliveries into per-minute latency rows.
 """
 
 import math
@@ -18,8 +18,9 @@ from pitch_ledger.agents.flow import airs
 from pitch_ledger.engine.detector import detect
 from pitch_ledger.engine.windows import MatchEngine, TeamWindow, match_minute
 from pitch_ledger.eventstore.port import EventStore
+from pitch_ledger.eventstore.tables import project
 from pitch_ledger.matchlab.io import TRIGGERS_JSONL, read_match, read_triggers
-from pitch_ledger.schema import Event, Insight, Match, TrackingSample, Trigger
+from pitch_ledger.schema import Event, Insight, Match, OpsAlert, TrackingSample, Trigger
 
 WINDOW_MS = 5 * 60_000
 STEP_MS = 60_000
@@ -91,6 +92,11 @@ def _chunks(rows: list[dict[str, Any]]) -> Iterable[list[dict[str, Any]]]:
         yield rows[start : start + CHUNK]
 
 
+def _ledger_lines(match_dir: Path, name: str) -> list[str]:
+    path = match_dir / "ledger" / f"{name}.jsonl"
+    return [x for x in path.read_text("utf-8").splitlines() if x] if path.exists() else []
+
+
 def export_match(
     match_dir: Path, store: EventStore, with_tracking: bool = True, recorded_at: float = 0.0
 ) -> dict[str, int]:
@@ -102,14 +108,8 @@ def export_match(
     else:
         tracking = [TrackingSample.model_validate(s) for s in files.tracking]
         triggers = detect(files.match, events, tracking)
-    insights_path = match_dir / "ledger" / "insights.jsonl"
-    insights = [
-        Insight.model_validate_json(line)
-        for line in (
-            insights_path.read_text("utf-8").splitlines() if insights_path.exists() else []
-        )
-        if line
-    ]
+    insights = [Insight.model_validate_json(x) for x in _ledger_lines(match_dir, "insights")]
+    alerts = [OpsAlert.model_validate_json(x) for x in _ledger_lines(match_dir, "alerts")]
     recorded = recorded_at or datetime.now(UTC).timestamp()
     tables: dict[str, list[dict[str, Any]]] = {
         "Events": files.events,
@@ -117,6 +117,7 @@ def export_match(
         "TeamState": team_state_rows(files.match, events),
         "Triggers": [trigger_row(t) for t in triggers],
         "InsightStatus": [insight_status_row(i, recorded) for i in insights],
+        "OpsAlerts": [project("OpsAlerts", a.model_dump(mode="json")) for a in alerts],
     }
     for table, rows in tables.items():
         for chunk in _chunks(rows):

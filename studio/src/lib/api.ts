@@ -117,11 +117,26 @@ export interface Realtime {
   group: string;
 }
 
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface OpsAlert {
+  alert_id: string;
+  match_id: string;
+  kind: string;
+  severity: AlertSeverity;
+  message: string;
+  refs: string[];
+  raised_at: string;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
+}
+
 export interface PushSignal {
-  event: "overlays_changed" | "insight_changed" | string;
+  event: "overlays_changed" | "insight_changed" | "alert_changed" | string;
   match_id: string;
   insight_id?: string;
   status?: InsightStatus;
+  alert_id?: string;
 }
 
 export class ApiError extends Error {
@@ -161,6 +176,9 @@ export const api = {
   insight: (id: string) => request<InsightDetail>(`/insights/${id}`),
   negotiate: (matchId: string, producer = false) =>
     request<Realtime>(`/realtime/negotiate${producer ? "/producer" : ""}?match_id=${matchId}`),
+  alerts: (matchId: string) => request<OpsAlert[]>(`/matches/${matchId}/alerts`),
+  acknowledge: (alertId: string) =>
+    request<OpsAlert>(`/alerts/${alertId}/acknowledge`, { method: "POST" }),
   decide: (id: string, approve: boolean, reason?: string) =>
     request<DecisionResult>(`/insights/${id}/decision`, {
       method: "POST",

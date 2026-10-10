@@ -3,7 +3,7 @@
 from collections import Counter
 
 from pitch_ledger.ledger.repository import IdKind
-from pitch_ledger.schema import AuditRecord, Insight, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, Trigger
 
 
 class InMemoryLedger:
@@ -13,6 +13,7 @@ class InMemoryLedger:
         self._insights: dict[str, Insight] = {}
         self._audits: list[AuditRecord] = []
         self._overlays: dict[str, Overlay] = {}
+        self._alerts: dict[str, OpsAlert] = {}
 
     def next_id(self, match_id: str, kind: IdKind) -> str:
         self._counters[(match_id, kind)] += 1
@@ -44,3 +45,12 @@ class InMemoryLedger:
 
     def overlays(self, insight_id: str | None = None) -> list[Overlay]:
         return [o for o in self._overlays.values() if insight_id in (None, o.insight_id)]
+
+    def put_alert(self, alert: OpsAlert) -> None:
+        self._alerts[alert.alert_id] = alert
+
+    def get_alert(self, alert_id: str) -> OpsAlert | None:
+        return self._alerts.get(alert_id)
+
+    def alerts(self, match_id: str | None = None) -> list[OpsAlert]:
+        return [a for a in self._alerts.values() if match_id in (None, a.match_id)]

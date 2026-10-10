@@ -18,6 +18,8 @@ from pitch_ledger.api.repository import MatchRepository
 from pitch_ledger.api.settings import ApiSettings
 from pitch_ledger.cli import main
 from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
+from pitch_ledger.ledger import FileLedger
+from pitch_ledger.ops import OpsDesk
 from pitch_ledger.push import NullNotifier, RecordingNotifier
 
 TENANT, AUDIENCE = "00000000-0000-0000-0000-00000000000a", "api://pitch-ledger"
@@ -68,6 +70,32 @@ def test_realtime_negotiate_and_decision_signals(data_dir: Path) -> None:
     client.post(f"/api/v1/insights/{insight_id}/decision", json={"approve": True})
     assert [(g, m["event"]) for g, m in push.sent] == [
         ("producers.M0002", "insight_changed"), ("fans.M0002", "overlays_changed")]  # fmt: skip
+
+
+def test_ops_alerts_listed_and_acknowledged_by_the_signed_in_producer(data_dir: Path) -> None:
+    ledger = FileLedger(data_dir / "M0002" / "ledger")
+    desk = OpsDesk(ledger)
+    desk.raise_alert("M0002", "feed_gap", "warning", "No feed message for 12 s", ["M0002-E000100"])
+    desk.raise_alert("M0002", "model_fallback", "info", "Template copy used", ["M0002-I0001"])
+    ledger.flush()
+    push = RecordingNotifier()
+    client = _client(data_dir, notifier=push)
+    listed = client.get("/api/v1/matches/M0002/alerts", params={"state": "open"}).json()
+    assert [a["alert_id"] for a in listed] == ["M0002-X0002", "M0002-X0001"]  # newest first
+    acked = client.post("/api/v1/alerts/M0002-X0001/acknowledge")
+    assert acked.status_code == 200 and acked.json()["acknowledged_by"] == "producer_local"
+    assert push.sent[-1] == ("producers.M0002", {"event": "alert_changed", "match_id": "M0002",
+        "alert_id": "M0002-X0001", "kind": "feed_gap", "severity": "warning",
+        "acknowledged": True})  # fmt: skip
+    open_now = client.get("/api/v1/matches/M0002/alerts?state=open").json()
+    assert [a["alert_id"] for a in open_now] == ["M0002-X0002"]
+    assert len(client.get("/api/v1/matches/M0002/alerts").json()) == 2  # all, by default
+    assert client.post("/api/v1/alerts/M0002-X0009/acknowledge").status_code == 404
+    assert client.post("/api/v1/alerts/M0002-I0001/acknowledge").status_code == 422
+    assert client.post("/api/v1/alerts/M0009-X0001/acknowledge").status_code == 404
+    closed = _client(data_dir, api_auth="entra", api_tenant_id=None)
+    assert closed.get("/api/v1/matches/M0002/alerts").status_code == 503
+    assert closed.post("/api/v1/alerts/M0002-X0002/acknowledge").status_code == 503
 
 
 def test_public_endpoints(data_dir: Path) -> None:

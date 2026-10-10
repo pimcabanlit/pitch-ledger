@@ -80,7 +80,7 @@ Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed l
 | Microsoft Foundry | Foundry | Models, content safety, evaluations, tracing | (c), (e) | Core |
 | Insight ledger | Cosmos DB (free tier) | System of record: insights, evidence, audits, approvals, overlays, ops alerts, viewer profiles. One container `ledger`, partition key `/match_id`; write-through adapter `infra_adapters/cosmos.py` | (c), (d) | Core |
 | Web PubSub | Web PubSub (Free tier), hub `studio` | Change signals to the Studio per match (`fans.<match>`, `producers.<match>`); clients re-read through the API | (d) | Core |
-| Studio app | Container Apps (web), Next.js (`studio/`) | Producer console (queue, audit trail, evidence, approve/block; ops alerts to come) + fan view with mode, language, club (player and metric pickers to come); calls `/api/v1` through a Next.js rewrite | (d), (e) | Core |
+| Studio app | Container Apps (web), Next.js (`studio/`) | Producer console (ops alerts, queue, audit trail, evidence, approve/block) + fan view with mode, language, club (player and metric pickers to come); calls `/api/v1` through a Next.js rewrite | (d), (e) | Core |
 | Match history (medallion) | Fabric Lakehouse | Bronze/Silver/Gold history | (b) | Stretch (needs Fabric) |
 | "Ask the match" | Fabric data agent + Foundry | Natural-language questions for analysts | (e) | Stretch (needs Fabric) |
 
@@ -121,16 +121,22 @@ The feed, queue, ledger and store are the same interfaces as everywhere else (Ev
 
 ## Ops alerts (producer console)
 
-| Alert | Raised by | Initial rule |
-| --- | --- | --- |
-| Feed gap | Engine | No feed message for 10 s during play |
-| Feed lag | Engine | p95 send-to-receive latency above 5 s over a minute |
-| Validation reject | Engine (validation rules) | Any rejected row; flags summarized per minute |
-| Insight blocked | Orchestrator (Auditor) | Auditor blocks a draft after the last round |
-| Trigger dead-lettered | Trigger queue | A trigger exceeds its delivery attempts |
-| Model fallback | Model manager | A template fallback was used or the call budget is spent |
+| Alert (`kind`) | Severity | Raised by | Rule |
+| --- | --- | --- | --- |
+| Feed gap (`feed_gap`) | warning | Live service, ingest | No feed message for 10 s while a period is being played; one alert per gap (half time is not a gap) |
+| Feed lag (`feed_lag`) | warning | Live service, ingest | p95 send-to-receive latency above 5 s over a wall-clock minute (the `FeedHealth` row) |
+| Validation reject (`validation_reject`) | warning | Live service, ingest validation | Rejected rows, summarized every tick; the row is dropped before the engine, the match folder and the store |
+| Validation flag (`validation_flag`) | info | Live service, ingest validation | Rows passed with a warning, summarized at most once a minute |
+| Insight blocked (`insight_blocked`) | warning | After each trigger (Auditor's `block` record) | The Auditor blocked a draft after its last round; it never airs |
+| Trigger dead-lettered (`trigger_dead_lettered`) | critical | Live worker, replay | A trigger failed every delivery attempt (3) |
+| Model fallback (`model_fallback`) | info; warning when the budget is spent | After each trigger and each producer decision (`fallback` records) | Template copy was used, or the model call budget ran out |
 
-Each alert is a record in the ledger (match, kind, severity, message, evidence references, raised time, acknowledged by), pushed through Web PubSub to an ops panel in the producer console, where the producer acknowledges it. Alerts are also appended to the `OpsAlerts` table for the dashboard and logged to Application Insights. Out-of-hours notification (Azure Monitor alert rules on the logs) is production path.
+- **Record:** each alert is an `ops alert` in the ledger (`M0002-X0001`: match, kind, severity, message, references to events, triggers, insights or audit records, raised time, acknowledged by and when), appended to the `OpsAlerts` table (a second row when acknowledged; the store only appends) and signalled to the match's producers (`alert_changed` through Web PubSub; the console re-reads). An alert with references is raised once: re-running a match or re-checking an insight adds nothing.
+- **Rules read what is already recorded:** blocked and fallback alerts come from the audit trail the agents wrote, so alerts never judge an insight a second time. Code: `pitch_ledger.ops` (`OpsDesk`, `review_insight`, `dead_lettered`, `FeedWatch`).
+- **Ingest validation in the live service:** every row goes through the row and sequence rules once the match reference has arrived. A feed joined mid-match (`stream --start-min`) cannot know the lineup or the previous sequence number, so it gets the rules that need no earlier rows; end-of-match checks run at full time of a complete match.
+- **Console:** an ops panel above the insight queue (open alerts first, severity, message, references; an insight reference opens that insight) where the producer acknowledges each alert; acknowledged alerts stay listed, dimmed. Without push it refreshes with the queue every 10 s.
+- **Demo:** `stream --fault-at MIN` sends one off-pitch row at that minute and then pauses the feed 12 s, so the live service raises a validation reject and a feed gap.
+- **Production path:** Application Insights logs and Azure Monitor alert rules for out-of-hours notification; Activator on the `OpsAlerts` table with Fabric.
 
 ## API (`/api/v1`)
 
@@ -145,6 +151,8 @@ FastAPI (`pitch_ledger.api`, `pitch-ledger api`); OpenAPI docs at `/api/v1/docs`
 | `GET /api/v1/matches/{id}/insights?status=` | producer | every insight with status (aired, pending, blocked) |
 | `GET /api/v1/insights/{id}` | producer | insight, audit trail, cited evidence events, overlays |
 | `POST /api/v1/insights/{id}/decision` | producer | approve or block; approval runs the Personalizer and Translator |
+| `GET /api/v1/matches/{id}/alerts?state=open\|all` | producer | the match's ops alerts, newest first |
+| `POST /api/v1/alerts/{id}/acknowledge` | producer | mark an alert as seen (identity from the token; the first acknowledgement stays) |
 
 - **Producer sign-in:** a Microsoft Entra ID access token for the API app registration with the `Producer` app role. The producer's identity (recorded as `approved_by`) comes from the verified token, never from the request. If the API's Entra settings are missing, producer endpoints refuse (fail closed); `PITCH_LEDGER_API_AUTH=dev` is a local-only stand-in.
 - **Controls:** request bodies reject unknown fields; IDs are pattern-checked before they reach a file path; CORS is limited to the Studio's origin; decisions are rate-limited per producer (they cost model calls); responses are dedicated schemas (fans never see ratings, audits or pending insights).

@@ -16,6 +16,7 @@ from pitch_ledger.schema.details import (
 )
 from pitch_ledger.schema.event import Event
 from pitch_ledger.schema.insight import Insight, InsightSubject
+from pitch_ledger.schema.ops import OpsAlert
 from pitch_ledger.schema.overlay import Overlay
 from pitch_ledger.schema.reference import Match, Player, Ratings, Team
 from pitch_ledger.schema.scenario import Effect, ExpectedDetection, Scenario, ScenarioTrigger
@@ -36,6 +37,7 @@ __all__ = [
     "InsightSubject",
     "Match",
     "NoDetails",
+    "OpsAlert",
     "Overlay",
     "PassDetails",
     "Player",

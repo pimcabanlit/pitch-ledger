@@ -363,6 +363,7 @@ def cmd_stream(args: argparse.Namespace) -> int:
             start_min=args.start_min,
             minutes=args.minutes,
             with_tracking=not args.no_tracking,
+            fault_at=args.fault_at,
         )
     except Exception as exc:  # provider or network error: report it plainly
         print(f"stream failed: {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -373,6 +374,8 @@ def cmd_stream(args: argparse.Namespace) -> int:
         f"{report.match_id}: {report.events} events, {report.tracking} tracking rows in "
         f"{report.batches} batches, {report.wall_s:.1f} s (max behind {report.max_behind_s:.1f} s)"
     )
+    if report.fault:
+        print(f"staged fault: {report.fault}")
     return 0
 
 
@@ -694,6 +697,10 @@ def build_parser() -> argparse.ArgumentParser:
     st.add_argument("--minutes", type=float, help="how many match minutes (default: to the end)")
     st.add_argument("--no-tracking", action="store_true", help="events only")
     st.add_argument("--feed", choices=feeds, help="feed adapter (default: settings, file)")
+    st.add_argument(
+        "--fault-at", type=float, metavar="MIN",
+        help="demo: send one bad row at this match minute, then pause 12 s",
+    )  # fmt: skip
     st.set_defaults(func=cmd_stream)
 
     ls = sub.add_parser("listen", help="read the live feed, land rows, report feed latency")

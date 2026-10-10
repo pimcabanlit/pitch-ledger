@@ -9,6 +9,7 @@ from pitch_ledger.agents.contracts import InsightDraft, ReviewVerdict
 from pitch_ledger.agents.flow import Services, decide, explain_and_audit, localize, template_insight
 from pitch_ledger.agents.model_manager import ModelManager, ModelSettings
 from pitch_ledger.ledger import InMemoryLedger
+from pitch_ledger.ops import OpsDesk, review_insight
 from pitch_ledger.schema import Insight, Trigger
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 from tests.agents.conftest import Case
@@ -86,6 +87,8 @@ def test_repeated_wrong_number_is_blocked_after_two_revisions(cases: list[Case])
     held = decide(insight, case.trigger, svc, "producer_demo")
     assert held.approved_by is None
     assert asyncio.run(localize(held, case.trigger, case.facts, svc)) == []
+    [alert] = review_insight(OpsDesk(svc.ledger), insight.insight_id)  # the producer is told
+    assert alert.kind == "insight_blocked" and alert.message.endswith("It will not air.")
 
 
 def test_unknown_metric_and_stray_evidence_are_findings(cases: list[Case]) -> None:

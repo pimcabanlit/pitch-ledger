@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pitch_ledger.schema import AuditRecord, Insight, Overlay
 
 InsightStatus = Literal["aired", "pending", "blocked"]
+AlertState = Literal["open", "all"]
 
 
 class TeamView(BaseModel):
