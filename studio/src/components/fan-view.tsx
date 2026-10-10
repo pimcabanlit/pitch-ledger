@@ -1,6 +1,7 @@
 "use client";
 
 import { Radio } from "lucide-react";
+import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -140,9 +141,15 @@ export function FanView({ params }: { params: Promise<{ id: string }> }) {
                   </span>
                   <div className="space-y-1">
                     <p className="text-sm leading-relaxed">{o.text}</p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Badge>{o.template.replaceAll("_", " ")}</Badge>
                       {team && <Badge>{team.short_name}</Badge>}
+                      <Link
+                        href={`/insights/${o.insight_id}`}
+                        className="text-xs text-sky-700 hover:underline"
+                      >
+                        How we know →
+                      </Link>
                     </div>
                   </div>
                 </Card>

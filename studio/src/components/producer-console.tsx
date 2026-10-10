@@ -1,8 +1,10 @@
 "use client";
 
 import { CheckCircle2, CircleAlert, ShieldCheck, XCircle } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { EvidenceTable } from "@/components/evidence-table";
 import { OpsPanel } from "@/components/ops-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -237,6 +239,11 @@ function InsightPanel({
           <Badge tone={detail.status}>{detail.status}</Badge>
           <Badge tone={auditTone(i.audit_status)}>audit: {i.audit_status}</Badge>
           {i.approved_by && <span>approved by {i.approved_by}</span>}
+          {detail.status === "aired" && (
+            <Link href={`/insights/${i.insight_id}`} className="ml-auto text-sky-700 hover:underline">
+              Open story →
+            </Link>
+          )}
         </div>
         <h2 className="text-lg font-semibold">{i.headline}</h2>
         <p className="text-sm leading-relaxed text-slate-700">{i.explanation}</p>
@@ -296,30 +303,7 @@ function InsightPanel({
 
         <section>
           <h3 className="mb-2 text-sm font-medium">Evidence events ({detail.evidence.length})</h3>
-          <div className="max-h-48 overflow-auto rounded border border-slate-100">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-slate-50 text-left text-slate-500">
-                <tr>
-                  <th className="px-2 py-1">Min</th>
-                  <th className="px-2 py-1">Event</th>
-                  <th className="px-2 py-1">Team</th>
-                  <th className="px-2 py-1">Player</th>
-                  <th className="px-2 py-1">Outcome</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.evidence.map((e) => (
-                  <tr key={e.event_id} className="border-t border-slate-100">
-                    <td className="px-2 py-1 font-mono">{e.minute.toFixed(1)}</td>
-                    <td className="px-2 py-1">{e.event_type}</td>
-                    <td className="px-2 py-1">{e.team_id}</td>
-                    <td className="px-2 py-1">{e.player_id}</td>
-                    <td className="px-2 py-1">{e.outcome}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <EvidenceTable evidence={detail.evidence} />
         </section>
 
         {preview.length > 0 && (
