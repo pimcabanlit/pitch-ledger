@@ -1,0 +1,7 @@
+.next
+node_modules
+.env
+.env.*
+next-env.d.ts
+tsconfig.tsbuildinfo
+Dockerfile

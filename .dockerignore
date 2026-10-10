@@ -1,0 +1,15 @@
+# Backend image context: only pyproject.toml, uv.lock, README.md, src/ and scenarios/ are used.
+.git
+.github
+.venv
+.env
+.env.*
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+data
+docs
+infra
+studio
+tests

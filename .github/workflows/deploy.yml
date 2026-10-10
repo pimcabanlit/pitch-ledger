@@ -1,0 +1,117 @@
+name: Deploy
+
+# After CI passes on main (or by hand): build both images and push them to GitHub
+# Container Registry, then deploy infra/main.bicep to Azure Container Apps.
+#
+# Azure sign-in is OpenID Connect: Azure trusts this workflow on main through a federated
+# credential, so no Azure secret is stored. The deploy job is skipped until the repository
+# variables AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID and AZURE_RESOURCE_GROUP
+# exist (docs/azure-setup.md, Deployment). ADX_CLUSTER_URI, API_AUDIENCE and, when those
+# services sit in other resource groups, DATA_RESOURCE_GROUP and FOUNDRY_RESOURCE_GROUP are
+# optional.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  images:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Tag
+        id: tag
+        run: echo "tag=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.tag.outputs.tag }}
+            ghcr.io/${{ github.repository }}:latest
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+      - name: Studio image
+        uses: docker/build-push-action@v6
+        with:
+          context: studio
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-studio:${{ steps.tag.outputs.tag }}
+            ghcr.io/${{ github.repository }}-studio:latest
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=studio
+          cache-to: type=gha,mode=max,scope=studio
+
+  deploy:
+    needs: images
+    if: vars.AZURE_CLIENT_ID != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OpenID Connect token for azure/login
+    env:
+      IMAGE_TAG: ${{ needs.images.outputs.tag }}
+      ADX_CLUSTER_URI: ${{ vars.ADX_CLUSTER_URI }}
+      API_AUDIENCE: ${{ vars.API_AUDIENCE }}
+      DATA_RESOURCE_GROUP: ${{ vars.DATA_RESOURCE_GROUP }}
+      FOUNDRY_RESOURCE_GROUP: ${{ vars.FOUNDRY_RESOURCE_GROUP }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.images.outputs.tag }}
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy
+        id: deploy
+        run: |
+          az deployment group create \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "pitch-ledger-${IMAGE_TAG}" \
+            --parameters infra/main.bicepparam \
+            --query properties.outputs --output json > outputs.json
+          url=$(jq -r .studioUrl.value outputs.json)
+          echo "studio_url=$url" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Studio: $url"
+            echo "Apps identity client ID (for the ADX roles): $(jq -r .identityClientId.value outputs.json)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Smoke test (cold start can take a minute)
+        env:
+          URL: ${{ steps.deploy.outputs.studio_url }}
+        run: |
+          for attempt in $(seq 1 18); do
+            if curl -fsS --max-time 30 "$URL/api/v1/health"; then exit 0; fi
+            sleep 10
+          done
+          echo "The Studio did not answer $URL/api/v1/health" >&2
+          exit 1

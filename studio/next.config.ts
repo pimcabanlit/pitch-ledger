@@ -5,6 +5,7 @@ import type { NextConfig } from "next";
 const backend = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
+  output: "standalone", // a self-contained server for the container image
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {
