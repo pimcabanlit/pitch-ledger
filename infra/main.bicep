@@ -87,8 +87,8 @@ var signInAuthority = producerAccess == 'role'
 @minValue(0)
 param minReplicas int = 0
 
-@description('Arguments of the live-service job.')
-param liveArgs array = ['--approve', '--inject-error', '--fresh', '--idle', '120']
+@description('Arguments of the live-service job (it stops after 10 idle minutes, so the feed can start well after it).')
+param liveArgs array = ['--approve', '--inject-error', '--fresh', '--idle', '600']
 
 @description('Arguments of the feed job (a match from the image and a pace).')
 param feedArgs array = ['data/M0002', '--speed', '25']

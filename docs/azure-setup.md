@@ -441,7 +441,7 @@ Until this is done, the jobs still run; their event-store writes are logged as f
 
 1. Open the Studio URL: six matches, no aired insights yet.
 2. Fill the ledger with one match: portal → **Container Apps jobs** → `pitch-ledger-replay` → **Run now**. It replays M0002 with Foundry (about 170 model calls, a few US cents), approves as `producer_demo` and plants the demo error. Refresh the fan view after a few minutes.
-3. Or the live path: **Run now** on `pitch-ledger-live`, wait about a minute, then **Run now** on `pitch-ledger-feed` (streams M0002 at 25×, about 4 minutes). Insights appear as the match plays.
+3. Or the live path: **Run now** on `pitch-ledger-live`, then **Run now** on `pitch-ledger-feed` (streams M0002 at 25×, about 4 minutes). The live job reads only messages published after it starts and stops after 10 idle minutes, so start it first and the feed within 10 minutes. Insights appear as the match plays.
 4. Logs: the job → **Execution history** → an execution → **Console logs**.
 
 The producer console answers "sign-in is not configured" until producer sign-in (below) is set up: producer endpoints refuse rather than open up.
