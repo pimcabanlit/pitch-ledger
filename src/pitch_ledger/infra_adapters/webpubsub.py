@@ -6,7 +6,6 @@ can only receive their match's fan signals. Sign-in: Microsoft Entra ID with the
 PubSub Service Owner* role, or a connection string. Sends fail open (logged).
 """
 
-import json
 import logging
 from typing import Any, Literal
 
@@ -61,7 +60,8 @@ class WebPubSubNotifier:
 
     def send(self, match_id: str, audience: Audience, event: str, data: dict[str, Any]) -> None:
         """Send one signal; raises on failure (``notify`` is the fail-open version)."""
-        message = json.dumps({"event": event, "match_id": match_id, **data})
+        # A dict, not a JSON string: the SDK serializes it (a string would be encoded twice).
+        message = {"event": event, "match_id": match_id, **data}
         self._client.send_to_group(
             group_name(match_id, audience), message, content_type="application/json"
         )

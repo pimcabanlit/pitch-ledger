@@ -15,10 +15,14 @@ class FakeClient:
         self.tokens: list[dict[str, Any]] = []
         self.fail = fail
 
-    def send_to_group(self, group: str, message: str, content_type: str) -> None:
+    def send_to_group(self, group: str, message: Any, content_type: str) -> None:
         if self.fail:
             raise RuntimeError("service unavailable")
-        self.sent.append((group, json.loads(message), content_type))
+        # Like the SDK: JSON content is serialized here, so what a client receives is
+        # json.dumps(message). A pre-encoded string would reach the client as a string.
+        received = json.loads(json.dumps(message))
+        assert isinstance(received, dict), "signal was JSON-encoded twice"
+        self.sent.append((group, received, content_type))
 
     def get_client_access_token(self, **kwargs: Any) -> dict[str, str]:
         self.tokens.append(kwargs)
