@@ -175,6 +175,7 @@ export interface TimelineEvent {
   y: number | null;
   end_x: number | null;
   end_y: number | null;
+  duration_ms: number | null; // ball travel time (passes, shots) or run time (carries)
   score_home: number;
   score_away: number;
   key: boolean;
