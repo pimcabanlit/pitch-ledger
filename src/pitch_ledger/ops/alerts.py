@@ -33,8 +33,8 @@ MAX_REFS = 50
 
 
 def minute_label(period: int, clock_ms: int) -> str:
-    """As the Studio shows it: 68.86 -> 68'."""
-    return f"{int(match_minute(period, clock_ms))}'"
+    """As the insight copy and the Studio write it: 68.86 -> 69'."""
+    return f"{round(match_minute(period, clock_ms), 1):.0f}'"
 
 
 def _clip(text: str) -> str:
