@@ -34,7 +34,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 3. `validation/`: row, sequence and match rules from the schema doc, returning structured reject/flag results.
 4. `matchlab/roster.py`: fixed fictional league (at least 4 clubs, full squads), committed as data.
 5. `matchlab/generator.py`: possession-based simulation producing events with coordinates, timing, pressure, outcomes driven by the pass-difficulty and xG models, team style profiles, score and possession bookkeeping, substitutions and cards.
-6. `matchlab/tracking.py`: 1 Hz player positions and speeds consistent with events.
+6. `matchlab/tracking.py`: 1 Hz player positions and speeds consistent with events. Refined 2026-10-10: timed runs put each actor on the ball at their event, and dead balls use set-piece shapes (`matchlab/set_pieces.py`).
 7. CLI: `generate`, `validate`, `realism`. Outputs JSONL (live feed format) and Parquet/CSV.
 8. Tests: schema round-trips, every validation rule has a passing and failing case, the baseline match passes validation and lands inside all realism bands, generation is reproducible from the seed.
 

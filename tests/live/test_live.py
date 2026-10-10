@@ -99,8 +99,8 @@ def test_live_run_ends_like_a_replay(match_dir: Path, tmp_path: Path) -> None:
     store.close()
 
     summary = report.as_dict()
-    assert summary["matches"]["M0002"]["triggers"] == len(_batch(match_dir)) == 56
-    assert summary["status"] == {"aired": 18, "pending": 0, "blocked": 0, "stored": 38}
+    assert summary["matches"]["M0002"]["triggers"] == len(_batch(match_dir)) == 54
+    assert summary["status"] == {"aired": 18, "pending": 0, "blocked": 0, "stored": 36}
     momentum = [i for i in ledger.insights("M0002") if i.insight_type.value == "momentum_shift"]
     assert [i.audit_status.value for i in momentum] == ["corrected"]  # planted error caught
     assert not summary["failures"]
@@ -108,7 +108,7 @@ def test_live_run_ends_like_a_replay(match_dir: Path, tmp_path: Path) -> None:
     assert {p.name for p in landed.iterdir()} == {"match.json", "events.jsonl", "tracking.jsonl",
                                                   "triggers.jsonl"}  # fmt: skip
     counts = {p.stem: len(p.read_text().splitlines()) for p in (tmp_path / "store").iterdir()}
-    assert counts["Triggers"] == 56 and counts["InsightStatus"] == 18
+    assert counts["Triggers"] == 54 and counts["InsightStatus"] == 18
     assert counts["TeamState"] == 190 and counts["Events"] == 2418
 
 

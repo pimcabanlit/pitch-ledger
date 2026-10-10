@@ -171,6 +171,8 @@ Shot speed is generated directly, because a shot's flight time is too short to d
 
 About 22 players × 5,700 s ≈ 125,000 rows per match. Enables distance covered, speed bands (high-speed running 19.8 to 25.2 km/h; sprinting above 25.2 km/h) and threshold alerts.
 
+Generated tracking follows the events: a player who acts in an event is at its location at the nearest sample (runs are timed, never faster than the player's top speed), and while the ball is dead before a restart players take positions the Laws of the Game allow: at a kick-off every player in their own half and opponents outside the centre circle; at a penalty only the taker and the goalkeeper (on the goal line) in the area and arc; at a goal kick opponents outside the area; at free kicks and corners opponents at least 9.15 m from the ball (a wall for a free kick near the area). Each half's first sample is the kick-off line-up.
+
 ## Derived metrics (computed in code, never by a language model)
 
 | Metric | Formula |
