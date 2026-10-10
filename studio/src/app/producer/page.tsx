@@ -1,4 +1,4 @@
-import { ProducerConsole } from "@/components/producer-console";
+import { ProducerArea } from "@/components/producer-sign-in";
 
 export default function ProducerPage() {
   return (
@@ -10,7 +10,7 @@ export default function ProducerPage() {
           air it in every mode and language, or block it.
         </p>
       </div>
-      <ProducerConsole />
+      <ProducerArea />
     </div>
   );
 }
