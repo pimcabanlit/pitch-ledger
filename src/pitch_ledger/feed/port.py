@@ -9,8 +9,8 @@ Each message body is one feed row exactly as in ``events.jsonl`` / ``tracking.js
 (docs/event-schema.md: same schema for live and batch); an adapter may pack several rows
 into one transport message (Event Hubs packs runs of tracking rows). Transport details
 travel beside the body: the row kind, and the wall-clock send time used to measure feed
-latency. A match starts with one ``match`` message carrying the reference rows (``match.json``: match, teams,
-players), so a consumer needs no shared files.
+latency. A match starts with one ``match`` message carrying the reference rows
+(``match.json``: match, teams, players), so a consumer needs no shared files.
 """
 
 from collections.abc import Iterator, Sequence
