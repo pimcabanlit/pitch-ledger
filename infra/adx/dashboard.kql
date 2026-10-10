@@ -51,9 +51,11 @@ FeedHealth
 | project window_start, messages, p50_ms, p95_ms, max_ms
 | order by window_start asc
 
-// Tile 8. Ops alerts (table, newest first)
+// Tile 8. Ops alerts (table, newest first). An acknowledgement appends a second row, so
+// take each alert's latest state.
 OpsAlerts
 | where match_id == _match_id
+| summarize arg_max(iff(isnotempty(acknowledged_by), 1, 0), *) by alert_id
 | project raised_at, severity, kind, message, acknowledged_by
 | order by raised_at desc
 | take 20

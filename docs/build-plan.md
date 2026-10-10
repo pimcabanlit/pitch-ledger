@@ -69,10 +69,10 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 2. Event-store adapter for the Azure Data Explorer free cluster (tables in the architecture doc; local-file fallback), written to by the engine and orchestrator.
    - Live service (`pitch-ledger live`, built 2026-10-09): feed -> engine (detector re-run on data so far, settled triggers numbered like a batch run) -> trigger queue -> agents -> ledger, writing the event store as it goes.
 3. FastAPI `/api/v1`: matches, insights, overlays, approvals (built 2026-10-09: public fan endpoints, producer endpoints behind Entra ID with fail-closed sign-in, rate-limited decisions); viewer preferences stay in the Studio for now.
-4. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors). Built 2026-10-09: fan view (mode, language, club; 5 s refresh) and producer console (queue, audit trail, metrics, evidence, approve/block) against the API in dev auth; Entra sign-in (MSAL) and the ops-alert panel to follow.
+4. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors). Built 2026-10-09: fan view (mode, language, club; 5 s refresh) and producer console (queue, audit trail, metrics, evidence, approve/block) against the API in dev auth; ops-alert panel built 2026-10-10; Entra sign-in (MSAL) to follow.
 5. Web PubSub live push (built 2026-10-09: change signals per match group, negotiate endpoints, Studio hook with polling fallback).
 6. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps.
-7. ADX dashboard (control room) over the event store, tile queries kept in the repo; ops-alert records raised by the engine, orchestrator, queue and model manager, shown and acknowledged in the producer console.
+7. ADX dashboard (control room) over the event store, tile queries kept in the repo; ops-alert records raised by the engine, orchestrator, queue and model manager, shown and acknowledged in the producer console (built 2026-10-10: feed gap and lag, validation at live ingest, blocked insights, dead letters, model fallbacks; `stream --fault-at` stages a fault for the demo).
 8. Managed identities, key auth disabled, content-safety policies, Application Insights and Foundry tracing.
 
 **Done when:** the public link replays a match end to end in Azure.

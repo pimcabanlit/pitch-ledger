@@ -111,7 +111,7 @@ uv run pitch-ledger replay data/M0002 --approve --inject-error   # agents -> dat
 uv run pitch-ledger evaluate              # scorecard -> data/scorecard.json; exit 1 if a gate fails (--match M0002, --sweep N)
 uv run pitch-ledger check-models          # model settings, Entra ID sign-in, one tiny call per deployment; exit 1 on a FAIL
 uv run pitch-ledger listen                # read the live feed into data/live/<match>/, report latency (--feed, --idle, --from-start)
-uv run pitch-ledger stream data/M0002 --speed 10   # publish a match to the live feed at 10x pace (--start-min, --minutes, --feed)
+uv run pitch-ledger stream data/M0002 --speed 10   # publish a match to the live feed at 10x pace (--start-min, --minutes, --feed, --fault-at MIN: demo ops alerts)
 uv run pitch-ledger store-schema > infra/adx/tables.kql   # KQL script for the event-store tables (keep the file in sync)
 uv run pitch-ledger store data/M0002     # write a match to the event store: data/store/*.jsonl, or ADX with --store adx
 uv run pitch-ledger check-store           # ADX settings, sign-in, roles, tables, one test write; exit 1 on a FAIL
@@ -125,7 +125,7 @@ cd studio && npx next typegen && npx tsc --noEmit && npm run lint && npm run bui
 uv run pitch-ledger replay data/M0002 --approve --ledger cosmos --queue servicebus   # cloud ledger and queue
 ```
 
-Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.
+Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `alerts.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.
 
 ## Definition of done for any change
 

@@ -270,6 +270,21 @@ An insight airs only when `approved_by` is set and `audit_status` is not `blocke
 
 A planted error (`inject_error`, actor `test`) is recorded as such, so the trail shows a deliberate test rather than a model mistake.
 
+**ops alert** (a pipeline problem for the producer; ledger and `OpsAlerts` table)
+
+| Field | Type | Example |
+| --- | --- | --- |
+| alert_id | string | M0002-X0002 |
+| match_id | string | M0002 |
+| kind | enum | `feed_gap`, `feed_lag`, `validation_reject`, `validation_flag`, `insight_blocked`, `trigger_dead_lettered`, `model_fallback` |
+| severity | enum | `info`, `warning`, `critical` |
+| message | string (≤ 500) | No feed message for 10.2 s during play (last at 20'). … |
+| refs | list | event, trigger, insight or audit IDs: ["M0002-E000485"] |
+| raised_at | datetime | 2026-10-24T14:21:07Z |
+| acknowledged_by, acknowledged_at | string, datetime | the producer from the verified token; null until acknowledged |
+
+Numbers in a message (seconds, latencies, counts, minutes) come from code, like every other figure. Rules and thresholds: docs/architecture.md, Ops alerts.
+
 **overlay** (one per audience and language)
 
 | Field | Type | Example |
@@ -327,13 +342,13 @@ The analytical copy for KQL queries and the control-room dashboard; Cosmos DB st
 | `TeamState` | team per whole minute of play: the engine's rolling 5-minute window (possession share, possessions, passes, pass accuracy, passes per possession, turnovers, own-half turnovers, PPDA, tempo, control) | `store` (live engine later) |
 | `Triggers` | detector trigger: rule, subject, metrics, evidence event IDs | `store` |
 | `InsightStatus` | insight status change: audit status, status (`aired`, `pending`, `blocked`), approver, model version | `store` (orchestrator later) |
-| `OpsAlerts` | ops alert: kind, severity, message, references, raised time, acknowledgement | orchestrator and engine (Phase 4) |
+| `OpsAlerts` | ops alert raised, and again when acknowledged: kind, severity, message, references, raised time, acknowledged by | `live` (feed, validation, worker), `store` (a replay's alerts) |
 | `FeedHealth` | match per wall-clock minute: messages received, p50 / p95 / max send-to-receive latency | `listen --store` |
 | `StoreCheck` | `check-store` test write | `check-store` |
 
 ## Validation rules
 
-Run at ingest before any agent sees an event. **Reject** stops the row and logs it; **flag** passes it with a warning.
+Run at ingest before any agent sees an event (`validate` for a match directory; the live service for every feed row). **Reject** stops the row and raises an ops alert; **flag** passes it with a warning (summarized in an ops alert). A feed joined mid-match gets only the rules that need no earlier rows (not the lineup or sequence rules).
 
 | Level | Rule | Action |
 | --- | --- | --- |
