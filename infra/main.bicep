@@ -2,7 +2,7 @@
 //
 // Creates: a Log Analytics workspace (daily cap), a Container Apps environment
 // (consumption, scale to zero), one user-assigned managed identity for every app and job,
-// its data-plane roles on the existing data services and Foundry, the API and Studio apps,
+// (optionally) its data-plane roles on the data services and Foundry, the API and Studio apps,
 // and three manually started jobs (live service, Match Lab feed, replay).
 //
 // The data services (Event Hubs, Service Bus, Cosmos DB, Web PubSub) and Foundry were
@@ -40,6 +40,9 @@ param foundryResourceGroup string = ''
 
 @description('Create the data services (a fresh environment only; leave false otherwise).')
 param createDataServices bool = false
+
+@description('Grant the apps identity its data roles here. Needs a deployer allowed to assign roles (Role Based Access Control Administrator); false: the owner grants them once with infra/grant-roles.sh.')
+param assignRoles bool = false
 
 param eventHubsNamespace string = 'pitch-ledger-feed'
 param eventHubName string = 'match-events'
@@ -128,7 +131,7 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' 
   tags: tags
 }
 
-module dataRoles 'modules/data-roles.bicep' = {
+module dataRoles 'modules/data-roles.bicep' = if (assignRoles) {
   name: 'data-roles'
   scope: resourceGroup(dataGroup)
   params: {
@@ -141,7 +144,7 @@ module dataRoles 'modules/data-roles.bicep' = {
   dependsOn: [dataServices]
 }
 
-module foundryRole 'modules/foundry-role.bicep' = {
+module foundryRole 'modules/foundry-role.bicep' = if (assignRoles) {
   name: 'foundry-role'
   scope: resourceGroup(foundryGroup)
   params: {
