@@ -130,8 +130,9 @@ def test_insight_story_traces_an_aired_insight_without_producer_identity(
     redrafts = [s for s in story["steps"] if s["action"] == "draft"]
     assert [s["unsupported_numbers"] for s in redrafts] == [[], []]
     assert story["steps"][-1]["agent"] == "producer"
-    assert story["trigger"]["rule_id"] == "momentum_shift" and len(story["evidence"]) == 32
-    assert sum(story["evidence_counts"].values()) == 32 and len(story["overlays"]) == 15
+    # passes and turnovers since the onset, plus the opponent's one shot in the spell
+    assert story["trigger"]["rule_id"] == "momentum_shift" and len(story["evidence"]) == 33
+    assert sum(story["evidence_counts"].values()) == 33 and len(story["overlays"]) == 15
 
     package = client.get(f"/api/v1/insights/{insight_id}/broadcast").json()
     assert package["format"] == "pitch-ledger.broadcast/1"

@@ -189,3 +189,87 @@ def test_tracking_rules(baseline: SimulatedMatch) -> None:
     assert len({t.subject.player_id for t in fast}) == len(fast)
     momentum = [t for t in triggers if t.rule_id == "momentum_shift"]
     assert momentum == []
+
+
+# Context metrics and prioritisation ----------------------------------------------------
+@pytest.fixture(scope="module")
+def demo_m0002() -> tuple[SimulatedMatch, list[TrackingSample], list[Trigger]]:
+    from pitch_ledger.matchlab.build import build_match
+
+    sim, tracking = build_match(MatchSpec(match_id="M0002", seed=4212,
+                                          scenario_id="late_collapse"))  # fmt: skip
+    return sim, tracking, detect(sim.match, sim.events, tracking)
+
+
+def test_every_trigger_recomputes_with_its_context(
+    demo_m0002: tuple[SimulatedMatch, list[TrackingSample], list[Trigger]],
+) -> None:
+    from pitch_ledger.engine.recompute import recompute_trigger
+
+    sim, tracking, triggers = demo_m0002
+    by_id = {e.event_id: e for e in sim.events}
+    for t in triggers:
+        assert recompute_trigger(t, sim.match, sim.events, tracking) == t.metrics, t.trigger_id
+        for i in t.evidence_event_ids:  # evidence exists and is not after the moment
+            assert (by_id[i].period, by_id[i].clock_ms) <= (t.period, t.clock_ms)
+    goal = next(t for t in triggers if t.rule_id == "goal")
+    assert {"player_goals", "team_shots", "team_xg", "opponent_xg", "shot_speed_kmh"} <= set(
+        goal.metrics
+    )
+    momentum = next(t for t in triggers if t.rule_id == "momentum_shift")
+    assert {"opponent_shots_after", "opponent_xg_after", "score_home"} <= set(momentum.metrics)
+
+
+def test_goal_from_a_regain_cites_the_ball_win(
+    demo_m0002: tuple[SimulatedMatch, list[TrackingSample], list[Trigger]],
+) -> None:
+    sim, _, triggers = demo_m0002
+    by_id = {e.event_id: e for e in sim.events}
+    quick = [t for t in triggers if t.rule_id == "goal" and "seconds_from_regain" in t.metrics]
+    assert quick, "the demo's hat-trick goal comes 5 s after a ball win"
+    for t in quick:
+        shot, regain = by_id[t.evidence_event_ids[0]], by_id[t.evidence_event_ids[-1]]
+        assert regain.team_id == shot.team_id and regain.possession_id == shot.possession_id
+        assert 0 <= (shot.clock_ms - regain.clock_ms) / 1000 <= 15
+        assert t.metrics["seconds_from_regain"] == round((shot.clock_ms - regain.clock_ms) / 1000)
+    scorers = [t.metrics["player_goals"] for t in triggers if t.rule_id == "goal"]
+    assert max(scorers) == 3  # the hat-trick
+
+
+def test_speed_alert_on_a_goal_is_folded_into_the_goal(
+    demo_m0002: tuple[SimulatedMatch, list[TrackingSample], list[Trigger]],
+) -> None:
+    _, _, triggers = demo_m0002
+    goals = {t.evidence_event_ids[0]: t for t in triggers if t.rule_id == "goal"}
+    speeds = [t for t in triggers if t.rule_id == "shot_speed"]
+    on_goals = [t for t in speeds if t.evidence_event_ids[0] in goals]
+    assert on_goals
+    for t in on_goals:
+        assert t.context["superseded_by"] == "goal"
+        goal = goals[t.evidence_event_ids[0]]
+        assert goal.metrics["shot_speed_kmh"] == t.metrics["shot_speed_kmh"]
+
+
+def test_slower_repeat_speed_alerts_are_folded(baseline: SimulatedMatch) -> None:
+    config = DetectorConfig(shot_speed_alert_kmh=60.0)  # many alerts
+    speeds = [t for t in detect(baseline.match, baseline.events, config=config)
+              if t.rule_id == "shot_speed"]  # fmt: skip
+    aired: dict[str, Trigger] = {}
+    for t in speeds:
+        player = t.subject.player_id or ""
+        prev = aired.get(player)
+        reason = t.context.get("superseded_by")
+        if reason == "cooldown":
+            assert prev is not None and prev.period == t.period
+            assert t.clock_ms - prev.clock_ms < config.shot_speed_cooldown_ms
+            assert t.metrics["shot_speed_kmh"] <= prev.metrics["shot_speed_kmh"]
+        elif reason is None:
+            aired[player] = t
+    assert any(t.context.get("superseded_by") == "cooldown" for t in speeds)
+
+
+def test_key_moments_are_never_folded(
+    demo_m0002: tuple[SimulatedMatch, list[TrackingSample], list[Trigger]],
+) -> None:
+    _, _, triggers = demo_m0002
+    assert all("superseded_by" not in t.context for t in triggers if t.rule_id != "shot_speed")

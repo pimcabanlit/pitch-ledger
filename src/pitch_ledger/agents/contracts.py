@@ -28,15 +28,20 @@ class Facts(_Model):
     subject_player_id: str | None = None
     focus_player_id: str | None = None
     """For player-focus copy about a team moment: the subject team's most involved player."""
+    signals: list[str] = Field(default_factory=list)
+    """Context chosen in code from the metrics (e.g. 'state: puts X ahead'): words a model
+    may use to say why the moment matters; every number in them is a metric."""
 
     def names(self) -> dict[str, str]:
-        """Template name placeholders: team, opp, player, home, away."""
+        """Template name placeholders: team, opp, player, home, away, and side (whether the
+        subject team is home or away)."""
         out = {
             "home": self.team_names[self.home_team_id],
             "away": self.team_names[self.away_team_id],
         }
         if self.subject_team_id:
             out["team"] = self.team_names[self.subject_team_id]
+            out["side"] = "home" if self.subject_team_id == self.home_team_id else "away"
         if self.opponent_team_id:
             out["opp"] = self.team_names[self.opponent_team_id]
         player = self.subject_player_id or self.focus_player_id
@@ -78,9 +83,11 @@ class ReviewVerdict(_Model):
 
 
 class PersonalizeRequest(_Model):
+    """Personalizer: the approved insight as on-screen copy for each mode, in one call."""
+
     task: Literal["personalize"] = "personalize"
     copy_key: str
-    mode: str
+    modes: list[str]
     headline: str
     explanation: str
     metrics: dict[str, int | float]
@@ -88,10 +95,12 @@ class PersonalizeRequest(_Model):
 
 
 class TranslateRequest(_Model):
+    """Translator: one mode's English copy into each target language, in one call."""
+
     task: Literal["translate"] = "translate"
     copy_key: str
     mode: str
-    language: str
+    languages: list[str]
     text: str
     metrics: dict[str, int | float]
     facts: Facts
@@ -99,6 +108,12 @@ class TranslateRequest(_Model):
 
 class CopyText(_Model):
     text: str
+
+
+class CopySet(_Model):
+    """Several copies in one reply, keyed by audience mode or by language."""
+
+    texts: dict[str, str]
 
 
 class PingRequest(_Model):

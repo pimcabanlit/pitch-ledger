@@ -4,9 +4,10 @@
    back at most twice; the insight ends ``approved``, ``corrected`` or ``blocked``.
 2. ``decide``: the producer (or the auto-approval rule for low-risk speed alerts)
    approves or holds an audited insight.
-3. ``localize_mode`` (one per audience mode, concurrently): the Personalizer writes the
-   mode in English and the Translator renders it in the other languages; every copy passes
-   a number check or falls back to template copy.
+3. ``personalize_modes`` then ``localize_mode`` (one per audience mode, concurrently): the
+   Personalizer writes every mode in English in one call, and the Translator renders each
+   mode in the other languages in one call; every copy passes the number and editorial
+   checks or falls back to template copy.
 4. ``publish``: the Overlay builder turns each copy into an overlay in the ledger.
 """
 
@@ -19,6 +20,8 @@ from itertools import product
 from pitch_ledger.agents import copy
 from pitch_ledger.agents.auditor import MAX_REVISIONS, Auditor, AuditResult
 from pitch_ledger.agents.contracts import ExplainRequest, Facts, InsightDraft
+from pitch_ledger.agents.copy_check import CheckedCopy
+from pitch_ledger.agents.editorial import is_style
 from pitch_ledger.agents.explainer import draft_insight, plant_error, template_draft
 from pitch_ledger.agents.model_manager import ModelManager, ModelUnavailable
 from pitch_ledger.agents.overlay_builder import build_overlay
@@ -187,6 +190,23 @@ async def explain_and_audit(trigger: Trigger, facts: Facts, svc: Services) -> In
             )
             break
         if round_no > MAX_REVISIONS:
+            if result.findings and all(is_style(f) for f in result.findings):
+                # Numbers and evidence pass; only the form does not. Air the template copy
+                # (same numbers, house style) rather than block a sound insight.
+                draft = template_draft(request)
+                svc.audit(
+                    insight_id, trigger, round_no, actor, "fallback", findings=result.findings,
+                    draft=draft,
+                )  # fmt: skip
+                again = await svc.auditor.check(draft, trigger)
+                svc.audit(insight_id, trigger, round_no, "auditor", "check", not again, again,
+                          draft)  # fmt: skip
+                if not again:
+                    status = AuditStatus.CORRECTED
+                    svc.audit(insight_id, trigger, round_no, "auditor", "correct", True)
+                    notes = f"Template copy after {round_no - 1} revision(s) for style"
+                    break
+                result = AuditResult(False, again, "check")
             svc.audit(insight_id, trigger, round_no, "auditor", "block", False, result.findings)
             notes = "Blocked: " + "; ".join(result.findings)
             break
@@ -265,6 +285,15 @@ def airs(insight: Insight) -> bool:
     return insight.approved_by is not None and insight.audit_status is not AuditStatus.BLOCKED
 
 
+async def personalize_modes(
+    insight: Insight, trigger: Trigger, facts: Facts, svc: Services
+) -> dict[str, CheckedCopy]:
+    """English copy for every audience mode, from one Personalizer call (failing modes are
+    asked again on their own, then fall back to the template)."""
+    metrics = dict(trigger.metrics)  # all recomputed by the Auditor
+    return await personalize(svc.models, copy.copy_key(trigger), svc.modes, insight, metrics, facts)
+
+
 async def localize_mode(
     insight: Insight,
     trigger: Trigger,
@@ -272,8 +301,11 @@ async def localize_mode(
     svc: Services,
     mode: str,
     use_models: bool = True,
+    english: CheckedCopy | None = None,
 ) -> list[CopyRow]:
-    """One audience mode: Personalizer writes English, Translator the other languages."""
+    """One audience mode: its English copy (``english``, from ``personalize_modes``; or a
+    Personalizer call for this mode alone) and one Translator call for the other
+    languages."""
     key = copy.copy_key(trigger)
     metrics = dict(trigger.metrics)  # all recomputed by the Auditor
     others = [lang for lang in svc.languages if lang != "en"]
@@ -283,15 +315,18 @@ async def localize_mode(
             CopyRow(mode, lang, copy.mode_text(key, mode, lang, values), "auto")
             for lang in ("en", *others)
         ]
-    english = await personalize(svc.models, key, mode, insight, metrics, facts)
-    done = await asyncio.gather(
-        *(translate(svc.models, key, mode, lang, english.text, metrics, facts) for lang in others)
+    if english is None:
+        english = (await personalize(svc.models, key, [mode], insight, metrics, facts))[mode]
+    done = (
+        await translate(svc.models, key, mode, others, english.text, metrics, facts)
+        if others
+        else {}
     )
     return [
         CopyRow(mode, "en", english.text, english.source, tuple(english.findings)),
         *(
-            CopyRow(mode, lang, c.text, c.source, tuple(c.findings))
-            for lang, c in zip(others, done, strict=True)
+            CopyRow(mode, lang, done[lang].text, done[lang].source, tuple(done[lang].findings))
+            for lang in others
         ),
     ]
 
@@ -327,7 +362,11 @@ async def localize(
     """Every audience mode in every language, as overlays (only for approved insights)."""
     if not airs(insight):
         return []
+    english = await personalize_modes(insight, trigger, facts, svc) if use_models else {}
     rows = await asyncio.gather(
-        *(localize_mode(insight, trigger, facts, svc, mode, use_models) for mode in svc.modes)
+        *(
+            localize_mode(insight, trigger, facts, svc, mode, use_models, english.get(mode))
+            for mode in svc.modes
+        )
     )
     return publish(insight, trigger, svc, (row for mode_rows in rows for row in mode_rows))

@@ -61,8 +61,7 @@ def test_replay_m0002_end_to_end_over_mcp(m0002_dir: Path, tmp_path: Path) -> No
         t.insight_type in FULL_FLOW and copy.supported(copy.copy_key(t)) for t in run.triggers
     )
     expected_auto = sum(
-        t.insight_type in AUTO_APPROVE and not t.context.get("superseded_by")
-        for t in run.triggers
+        t.insight_type in AUTO_APPROVE and not t.context.get("superseded_by") for t in run.triggers
     )
     assert sum(bool(t.context.get("superseded_by")) for t in run.triggers) == 3  # 2 on goals
     assert s["counts"]["routes"]["full"] == expected_full >= 8

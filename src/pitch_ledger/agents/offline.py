@@ -12,6 +12,7 @@ from agent_framework._tools import FunctionInvocationLayer
 
 from pitch_ledger.agents import copy
 from pitch_ledger.agents.contracts import (
+    CopySet,
     CopyText,
     ExplainRequest,
     InsightDraft,
@@ -30,7 +31,7 @@ def respond(payload: dict[str, Any]) -> str:
         draft = InsightDraft(
             headline=copy.headline(req.copy_key, values),
             explanation=copy.explanation(req.copy_key, values),
-            metric_keys=copy.used_metrics(req.copy_key, req.trigger.metrics),
+            metric_keys=copy.used_metrics(req.copy_key, req.trigger.metrics, values),
             evidence_event_ids=list(req.trigger.evidence_event_ids),
         )
         return draft.model_dump_json()
@@ -39,12 +40,13 @@ def respond(payload: dict[str, Any]) -> str:
     if task == "personalize":
         p = PersonalizeRequest.model_validate(payload)
         values = {**p.metrics, **p.facts.names()}
-        return CopyText(text=copy.mode_text(p.copy_key, p.mode, "en", values)).model_dump_json()
+        texts = {mode: copy.mode_text(p.copy_key, mode, "en", values) for mode in p.modes}
+        return CopySet(texts=texts).model_dump_json()
     if task == "translate":
         t = TranslateRequest.model_validate(payload)
         values = {**t.metrics, **t.facts.names()}
-        text = copy.mode_text(t.copy_key, t.mode, t.language, values)
-        return CopyText(text=text).model_dump_json()
+        texts = {lang: copy.mode_text(t.copy_key, t.mode, lang, values) for lang in t.languages}
+        return CopySet(texts=texts).model_dump_json()
     if task == "ping":
         return CopyText(text=str(payload.get("reply_with", "ok"))).model_dump_json()
     raise ValueError(f"offline model cannot handle task {task!r}")
