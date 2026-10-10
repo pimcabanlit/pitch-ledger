@@ -1,7 +1,7 @@
 "use client";
 
 import { Radio } from "lucide-react";
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -23,7 +23,10 @@ const PUSH_POLL_MS = 30000; // safety net while push is connected
 export function FanView({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [match, setMatch] = useState<MatchDetail | null>(null);
-  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  // Overlays with the selection they were fetched for: a slow reply for a selection the
+  // viewer has already left must not replace the current one.
+  const [result, setResult] = useState<{ key: string; rows: Overlay[] } | null>(null);
+  const latest = useRef("");
   const [mode, setMode] = useState<Mode>("casual");
   const [language, setLanguage] = useState("en");
   const [club, setClub] = useState("all");
@@ -33,11 +36,16 @@ export function FanView({ params }: { params: Promise<{ id: string }> }) {
     api.match(id).then(setMatch, (e: Error) => setError(e.message));
   }, [id]);
 
-  const load = useCallback(
-    () =>
-      api.overlays(id, mode, language).then(setOverlays, (e: Error) => setError(e.message)),
-    [id, mode, language],
-  );
+  const selection = `${mode}/${language}`;
+  const load = useCallback(() => {
+    latest.current = selection;
+    return api.overlays(id, mode, language).then(
+      (rows) => {
+        if (latest.current === selection) setResult({ key: selection, rows });
+      },
+      (e: Error) => setError(e.message),
+    );
+  }, [id, mode, language, selection]);
   const pushed = useRealtime(id, false, (signal) => {
     if (signal.event === "overlays_changed") load();
   });
@@ -48,13 +56,14 @@ export function FanView({ params }: { params: Promise<{ id: string }> }) {
     return () => clearInterval(timer);
   }, [load, pushed]);
 
+  const current = result?.key === selection ? result.rows : null; // null: loading
   const shown = useMemo(
     () =>
-      overlays
+      (current ?? [])
         .filter((o) => club === "all" || !o.data.team_id || o.data.team_id === club)
         .slice()
         .reverse(),
-    [overlays, club],
+    [current, club],
   );
 
   if (error) return <p className="text-sm text-rose-700">{error}</p>;
@@ -64,9 +73,9 @@ export function FanView({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className="space-y-4">
       <Card className="flex flex-wrap items-center justify-between gap-4 p-4">
-        <div className="flex items-center gap-4 text-lg font-semibold">
+        <div className="flex items-center gap-3 text-base font-semibold sm:gap-4 sm:text-lg">
           <span>{match.home.name}</span>
-          <span className="rounded-md bg-slate-900 px-3 py-1 font-mono text-white">
+          <span className="shrink-0 whitespace-nowrap rounded-md bg-slate-900 px-3 py-1 font-mono text-white">
             {match.score_home ?? 0} – {match.score_away ?? 0}
           </span>
           <span>{match.away.name}</span>
@@ -112,7 +121,9 @@ export function FanView({ params }: { params: Promise<{ id: string }> }) {
         </span>
       </div>
 
-      {shown.length === 0 ? (
+      {current === null ? (
+        <p className="text-sm text-slate-500">Loading insights…</p>
+      ) : shown.length === 0 ? (
         <p className="text-sm text-slate-500">No aired insights yet for this selection.</p>
       ) : (
         <ol className="space-y-2">
