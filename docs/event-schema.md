@@ -344,8 +344,21 @@ Numbers in a message (seconds, latencies, counts, minutes) come from code, like 
 | subject | object | {team_id: T02} |
 | metrics | object | {control_before: 49, control_after: 6, pass_accuracy_after: 47.4} — code-computed, rounded as displayed |
 | evidence_event_ids | list | the events the metrics are computed from (empty for tracking-only triggers) |
-| context | object | windows used, onset minute, detector, opponent |
+| context | object | windows used, onset minute, detector, opponent; `superseded_by` (`goal` or `cooldown`) when the detector folded a repeat alert into another moment (stored, not aired) |
 | auto_approve | boolean | true for speed alerts |
+
+**Context metrics** (each recomputed from the events up to the moment, like every metric, so the Auditor verifies them):
+
+| Rule | Context metrics |
+| --- | --- |
+| goal | `player_goals` (the scorer's goals so far), `team_shots`, `team_xg`, `opponent_xg` (so far), `shot_speed_kmh`; `seconds_from_regain` when the scoring move began with an open-play ball win (recovery, interception, tackle) 15 s or less before the shot, which then joins the evidence |
+| penalty_awarded, sending_off | `score_home`, `score_away` at the moment; sending_off also `minutes_left` (to 90) |
+| momentum_shift, sending_off_impact | `opponent_shots_after`, `opponent_xg_after` in the after-window (those shots join the evidence); momentum also the score at the moment |
+| player_form | `shots_previous` (the player's shots in the 15 minutes before the window, same half), `team_shot_share` (% of the team's non-penalty shots in the window) |
+| half_time_recap, full_time_recap | `on_target_home/away`; full time also `xg_second_half_home/away` |
+| shot_speed | `xg` |
+
+A shot-speed alert on a goal is superseded by the goal (which reports the speed); another by the same player within 10 minutes and no faster is superseded by the cooldown. Copy turns these into context words chosen in code (`agents/phrases.py`: an equaliser or a lead, a hat-trick, whether the opponent turned a spell into shots, what a penalty would change); a trigger without them still renders with less context.
 
 ## Event store tables (Azure Data Explorer, or local JSONL)
 
@@ -380,6 +393,7 @@ Run at ingest before any agent sees an event (`validate` for a match directory; 
 | Match | Exactly one period_start and one period_end per period | Reject |
 | Match | Totals within realism bands (below) | Flag |
 | Insight | Every number in an insight's text appears in `metrics` and recomputes from its evidence | Block insight |
+| Insight | Editorial form (`agents/editorial.py`): headline at most 10 words; explanation at most 2 sentences and 320 characters; on-screen text at most 140 characters (160 in es/fil); no clichés; no claims the data cannot back (seasons, records, history, injuries, causes, predictions); no repetition | Revise; template copy if only the form still fails |
 | Copy | Every number in each personalized or translated overlay text matches a recomputed trigger metric | Retry once, then template copy |
 
 Numbers are compared at the precision they are written with ("64" matches 64.3; "6.2" matches 6.2, not 6.3). In decimal-comma languages (Spanish) "79,3" is read as 79.3, and their copy uses no thousands separator; English and Filipino use a decimal point. Signs, units and percent marks are ignored; identifiers such as T02 are not numbers.
