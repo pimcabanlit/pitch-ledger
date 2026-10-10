@@ -14,8 +14,8 @@ export interface Dot {
   highlight?: boolean;
 }
 
-function Markings() {
-  const line = { fill: "none", stroke: "rgba(255,255,255,0.75)", strokeWidth: 0.3 };
+function Markings({ color = "rgba(255,255,255,0.75)" }: { color?: string }) {
+  const line = { fill: "none", stroke: color, strokeWidth: 0.3 };
   return (
     <g {...line}>
       <rect x={0} y={0} width={W} height={H} />
@@ -30,16 +30,28 @@ function Markings() {
           <g key={gx}>
             {box(16.5, 40.32)}
             {box(5.5, 18.32)}
-            <circle cx={gx + dir * 11} cy={H / 2} r={0.25} fill="rgba(255,255,255,0.75)" />
+            <circle cx={gx + dir * 11} cy={H / 2} r={0.25} fill={color} />
             <path d={`M ${gx + dir * 16.5} ${H / 2 - 7.3} A 9.15 9.15 0 0 ${dir === 1 ? 1 : 0} ${gx + dir * 16.5} ${H / 2 + 7.3}`} />
             <rect x={gx === 0 ? -1.8 : W} y={H / 2 - 3.66} width={1.8} height={7.32} strokeWidth={0.25} />
           </g>
         );
       })}
-      <circle cx={W / 2} cy={H / 2} r={0.25} fill="rgba(255,255,255,0.75)" />
+      <circle cx={W / 2} cy={H / 2} r={0.25} fill={color} />
     </g>
   );
 }
+
+/** A light pitch for charts (shot map, pass network): marks sit on a quiet surface. */
+export function ChartPitch({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <svg viewBox="-3 -3 111 74" className="block w-full rounded-md bg-slate-50" role="img" aria-label={label}>
+      <Markings color="#cbd5e1" />
+      {children}
+    </svg>
+  );
+}
+
+export { sy as svgY };
 
 export function Pitch({
   dots,

@@ -197,6 +197,44 @@ export interface TrackingWindow {
   frames: (number | null)[][];
 }
 
+export interface TeamMinute {
+  team_id: string;
+  period: number;
+  minute: number;
+  control: number | null; // 0-100 per team
+  possession_pct: number | null;
+  ppda: number | null;
+}
+
+export interface ShotPoint {
+  seq: number;
+  period: number;
+  clock_ms: number;
+  team_id: string;
+  player_id: string | null;
+  x: number; // broadcast frame
+  y: number;
+  xg: number;
+  outcome: string;
+  team_shots: number; // the team's shots so far, this one included
+  team_xg: number;
+}
+
+export interface Analytics {
+  team_state: TeamMinute[];
+  shots: ShotPoint[];
+}
+
+export interface PassNetwork {
+  team_id: string;
+  period: number;
+  from_ms: number;
+  to_ms: number;
+  passes: number;
+  nodes: { player_id: string; x: number; y: number; involvements: number }[];
+  edges: { a: string; b: string; passes: number }[];
+}
+
 export interface Realtime {
   url: string | null; // null: push is off, poll instead
   group: string;
@@ -261,6 +299,9 @@ export const api = {
   insight: (id: string) => request<InsightDetail>(`/insights/${id}`),
   story: (insightId: string) => request<InsightStory>(`/insights/${insightId}/story`),
   timeline: (matchId: string) => request<Timeline>(`/matches/${matchId}/timeline`),
+  analytics: (matchId: string) => request<Analytics>(`/matches/${matchId}/analytics`),
+  passNetwork: (matchId: string, team: string, period: number, endMs: number) =>
+    request<PassNetwork>(`/matches/${matchId}/pass-network?team=${team}&period=${period}&end_ms=${endMs}`),
   tracking: (matchId: string, period: number, fromS: number, toS: number) =>
     request<TrackingWindow>(`/matches/${matchId}/tracking?period=${period}&from_s=${fromS}&to_s=${toS}`),
   /** The broadcast package as JSON text (shown and downloaded as is). */
