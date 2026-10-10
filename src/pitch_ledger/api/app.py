@@ -20,7 +20,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from pitch_ledger.agents.replay import decide_insight
 from pitch_ledger.api.auth import EntraVerifier, Producer, producer
-from pitch_ledger.api.match_centre import MatchCentre, MatchData, Timeline, TrackingWindow
+from pitch_ledger.api.match_centre import (
+    Analytics,
+    MatchCentre,
+    MatchData,
+    PassNetwork,
+    Timeline,
+    TrackingWindow,
+)
 from pitch_ledger.api.repository import MatchRepository
 from pitch_ledger.api.schemas import (
     AlertState,
@@ -179,6 +186,25 @@ def create_app(
     ) -> TrackingWindow:
         """Player positions per second for up to five minutes of one period."""
         return centre_data(match_id).tracking_window(period, from_s, to_s)
+
+    @app.get("/api/v1/matches/{match_id}/analytics", response_model=Analytics)
+    def analytics(match_id: MatchIdPath) -> Analytics:
+        """Team state per minute and every shot with xG (the browser shows them up to its clock)."""
+        return centre_data(match_id).analytics()
+
+    @app.get("/api/v1/matches/{match_id}/pass-network", response_model=PassNetwork)
+    def pass_network(
+        match_id: MatchIdPath,
+        team: Annotated[str, Query(pattern=r"^T\d{2}$")],
+        period: Annotated[int, Query(ge=1, le=2)],
+        end_ms: Annotated[int, Query(ge=0)],
+        window_s: Annotated[int, Query(ge=60, le=2700)] = 600,
+    ) -> PassNetwork:
+        """One team's completed passes in the window before ``end_ms`` (same half)."""
+        data = centre_data(match_id)
+        if team not in (data.files.match.home_team_id, data.files.match.away_team_id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"{team} is not in {match_id}")
+        return data.pass_network(team, period, end_ms, window_s)
 
     def aired(insight_id: str) -> tuple[InMemoryLedger, InsightView]:
         """An insight the public may see: aired only (pending and blocked stay internal)."""

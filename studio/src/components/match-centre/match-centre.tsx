@@ -5,7 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Caption } from "@/components/match-centre/caption";
+import { ControlChart, type Side } from "@/components/match-centre/control-chart";
 import { Feed, type FeedItem } from "@/components/match-centre/feed";
+import { PassNetwork } from "@/components/match-centre/pass-network";
 import { Pitch, type Dot } from "@/components/match-centre/pitch";
 import {
   axisFromMinute,
@@ -19,9 +21,19 @@ import {
   useReplayClock,
   useTracking,
 } from "@/components/match-centre/replay";
+import { ShotMap } from "@/components/match-centre/shot-map";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
-import { api, LANGUAGES, MODES, type MatchDetail, type Mode, type Overlay, type Timeline } from "@/lib/api";
+import {
+  api,
+  LANGUAGES,
+  MODES,
+  type Analytics,
+  type MatchDetail,
+  type Mode,
+  type Overlay,
+  type Timeline,
+} from "@/lib/api";
 import { useRealtime } from "@/lib/realtime";
 import { minuteLabel } from "@/lib/utils";
 
@@ -40,19 +52,38 @@ export function MatchCentre({ params }: { params: Promise<{ id: string }> }) {
   const search = useSearchParams();
   const [match, setMatch] = useState<MatchDetail | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api.match(id).then(setMatch, (e: Error) => setError(e.message));
     api.timeline(id).then(setTimeline, (e: Error) => setError(e.message));
+    api.analytics(id).then(setAnalytics, () => setAnalytics(null)); // charts are optional
   }, [id]);
 
   if (error) return <p className="text-sm text-rose-700">{error}</p>;
   if (!match || !timeline) return <p className="text-sm text-slate-500">Loading the match…</p>;
-  return <Centre match={match} timeline={timeline} startMinute={Number(search.get("t") ?? "") || null} />;
+  return (
+    <Centre
+      match={match}
+      timeline={timeline}
+      analytics={analytics}
+      startMinute={Number(search.get("t") ?? "") || null}
+    />
+  );
 }
 
-function Centre({ match, timeline, startMinute }: { match: MatchDetail; timeline: Timeline; startMinute: number | null }) {
+function Centre({
+  match,
+  timeline,
+  analytics,
+  startMinute,
+}: {
+  match: MatchDetail;
+  timeline: Timeline;
+  analytics: Analytics | null;
+  startMinute: number | null;
+}) {
   const axis = useMemo(() => buildAxis(timeline), [timeline]);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(10);
@@ -156,6 +187,15 @@ function Centre({ match, timeline, startMinute }: { match: MatchDetail; timeline
   }, [tick, insightsOnly, insights, timeline, times, keep, nameOf, colorOf, teams]);
 
   const moments = insights.filter((i) => i.overlay.template !== "speed_badge");
+  const sides: Side[] = [match.home, match.away].map((team) => ({
+    team_id: team.team_id,
+    short_name: team.short_name,
+    color: team.primary_color,
+  }));
+  const markers = insights
+    .filter((i) => i.overlay.template === "momentum_bar")
+    .map((i) => ({ t: i.t, color: colorOf(i.overlay.data.team_id as string | null), label: i.overlay.text }));
+  const numberOf = (pid: string) => String(players.get(pid)?.shirt_number ?? "");
   const jump = (to: number) => setT(Math.max(0, Math.min(axis.total, to)));
   const subject = (o: Overlay) =>
     o.data.player_id ? nameOf(o.data.player_id as string) : teams[o.data.team_id as string]?.name ?? "";
@@ -295,6 +335,30 @@ function Centre({ match, timeline, startMinute }: { match: MatchDetail; timeline
           </div>
         </Card>
       </div>
+
+      {analytics && (
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <Card className="p-4">
+            <ControlChart axis={axis} t={t} rows={analytics.team_state} sides={sides} markers={markers} />
+          </Card>
+          <Card className="p-4">
+            <ShotMap axis={axis} t={t} shots={analytics.shots} sides={sides} nameOf={nameOf} />
+          </Card>
+          {sides.map((side, i) => (
+            <Card key={side.team_id} className="p-4">
+              <PassNetwork
+                matchId={match.match_id}
+                side={side}
+                isHome={i === 0}
+                period={period}
+                clockMs={clockMs}
+                nameOf={nameOf}
+                numberOf={numberOf}
+              />
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
