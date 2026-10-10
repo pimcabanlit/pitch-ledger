@@ -23,6 +23,7 @@ dependencies = [
     "fastapi>=0.143.0",
     "uvicorn>=0.54.0",
     "pyjwt>=2.15.1",
+    "azure-messaging-webpubsubservice>=1.3.0",
 ]
 
 [project.scripts]

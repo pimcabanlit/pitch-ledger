@@ -4,7 +4,7 @@ How the Azure side of Pitch Ledger was set up, how to check it, and what went wr
 
 No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<tenant-id>`.
 
-## Current state (2026-10-09)
+## Current state (2026-10-10)
 
 | Item | Value | Notes |
 | --- | --- | --- |
@@ -21,9 +21,10 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | Roles on the namespace | **Azure Event Hubs Data Sender** and **Data Receiver** → `pitch-ledger-dev` | Verified by a live `stream` + `listen` run (2026-10-09) |
 | Ledger | Cosmos DB for NoSQL `pitch-ledger-cosmos` (free tier, throughput capped), database `pitchledger`, container `ledger` (`/match_id`) | Built-in Data Contributor (data plane) → `pitch-ledger-dev`; `check-ledger` passes (2026-10-09) |
 | Trigger queue | Service Bus `pitch-ledger-bus` (Basic), queue `triggers` (max delivery 3, lock 5 min) | Data Sender and Data Receiver → `pitch-ledger-dev`; `check-queue` passes (2026-10-09) |
+| Live push | Web PubSub `pitch-ledger-push` (Free), hub `studio` | **Web PubSub Service Owner** → `pitch-ledger-dev`; `check-push` and a client round trip pass (2026-10-10) |
 | Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` is **Ingestor** and **Viewer**; tables created from `infra/adx/tables.kql`; `check-store` passes (2026-10-09) |
 
-Not provisioned yet: Web PubSub, Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
+Not provisioned yet: Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
 
 Not available: **Microsoft Fabric**. The free trial isn't offered to this account (2026-10-09). The live feed uses Azure Event Hubs, the event store is the Azure Data Explorer free cluster with an ADX dashboard, and ops alerts live in the producer console. Fabric is a documented future upgrade (docs/architecture.md).
 
@@ -316,6 +317,38 @@ The queue name defaults to `triggers` (`PITCH_LEDGER_SERVICEBUS_QUEUE`). `*.serv
 
 `uv run pitch-ledger replay data/M0002 --approve --inject-error --ledger cosmos --queue servicebus` runs the agents with the ledger in Cosmos DB and the triggers through Service Bus (the flags override the settings).
 
+## Live push: Azure Web PubSub (Free tier)
+
+Sends small "something changed" signals to the Studio so the fan view and the producer console update at once instead of polling. **Cost:** the Free tier (Free_F1) has no charge: 20 concurrent connections and 20,000 messages a day, plenty for the demo. It's limited to one Free unit per subscription.
+
+### 1. Create the resource
+
+1. Azure portal → **Create a resource** → search **Web PubSub Service** → Create.
+2. Resource group: the Pitch Ledger one. Name: `pitch-ledger-push` (globally unique). Region: **East US**. Pricing tier: **Free**. Review + create → Create.
+3. No hub needs creating: the hub `studio` exists as soon as it's used.
+
+### 2. Role for the app
+
+On the resource → Access control (IAM) → Add role assignment → **Web PubSub Service Owner** → member `pitch-ledger-dev`. This lets the server send to groups and sign client URLs. Allow 5–10 minutes.
+
+### 3. Settings and check
+
+```
+PITCH_LEDGER_PUSH=webpubsub
+PITCH_LEDGER_WEBPUBSUB_ENDPOINT=https://pitch-ledger-push.webpubsub.azure.com
+```
+
+The endpoint is on the resource's Overview page (Host name, with `https://`). Cloud sessions: allow **`*.webpubsub.azure.com`** in the environment's network access. Then `uv run pitch-ledger check-push` signs a client URL and sends one test signal.
+
+Browsers connect straight to Web PubSub with a short-lived URL from `GET /api/v1/realtime/negotiate?match_id=…` (fans; `/negotiate/producer` needs producer sign-in). Each URL joins one group: `fans.<match>` or `producers.<match>`.
+
+### Verified (2026-10-10, from a Claude Code cloud session)
+
+- `check-push`: client URL signed by the service; test signal accepted by hub `studio`.
+- Client round trip (a WebSocket client on the signed URL, the app's notifier sending): `fans.M0012` got `overlays_changed` and `producers.M0012` got `insight_changed` about 55 ms after the send. A decoy sent to the other audience's group first never arrived, so groups isolate fans from producer signals.
+- Through the API (`PITCH_LEDGER_API_AUTH=dev`, file ledger): fan and producer sockets from `/realtime/negotiate`, then `POST /insights/<id>/decision` approve: the producer socket got `insight_changed` 0.21 s and the fan socket `overlays_changed` 0.27 s after the call.
+- Studio in Chromium: the fan view showed **live**, connected to `wss://pitch-ledger-push.webpubsub.azure.com/client/hubs/studio`, and showed the newly aired overlay 0.6 s after approval (it polls only every 30 s while live).
+
 ## API sign-in for producers (needed with the Studio app)
 
 Not set up yet; do this when the Studio producer console is built. Until then run the API with `PITCH_LEDGER_API_AUTH=dev` on your own machine only.
@@ -348,6 +381,7 @@ Each problem below blocked the first live run. Read the error, find the matching
 | 11 | New settings (feed, ADX) were saved but missing in the next session | The values didn't reach this session's environment (same pattern as lesson 1) | After editing, start a new session and check the variable *names* are present before testing; make sure you edit the environment this session uses |
 | 12 | `stream` to Event Hubs fails with *"The request was terminated because the entity is being throttled"* (50002) | Basic with 1 throughput unit accepts about 1,000 messages a second; 60x replay is about 1,380 | Replay at 40x or less (25x is comfortable), or add throughput units (cost) |
 | 13 | `studio/src/lib/` missing in CI ("Cannot find module '@/lib/api'") | The Python `.gitignore` rule `lib/` also matched the Studio's source folder, so it was never committed | An exception `!studio/src/lib/`; check a fresh clone when adding folders with common names |
+| 14 | A client received each push signal as a quoted string, so the Studio ignored it; `check-push` still passed | The adapter sent `json.dumps(...)` with `content_type="application/json"`, and the SDK serializes JSON content again (double encoding). The fake client in the tests decoded once and hid it | Send the dict, not a string; the fake now serializes like the SDK and fails on a string. Verify push with a real client round trip, not only a send |
 
 How to read the error codes:
 
@@ -379,6 +413,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
 - [x] Event Hubs: namespace `pitch-ledger-feed`, hub `match-events`, Data Sender and Data Receiver roles; verified with `listen` + `stream` (2026-10-09).
 - [ ] Event Hubs: delete the namespace after judging (Nov 20).
+- [x] Web PubSub: `pitch-ledger-push` (Free), Web PubSub Service Owner role, settings; `check-push`, client round trip and Studio live update verified (2026-10-10).
 - [x] Feed settings and `ADX_CLUSTER_URI` / `ADX_DATABASE` in the cloud environment; `listen` + `stream` pass with them (1,341/1,341 messages, p50 2.3 s from the cloud session).
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
 - [x] ADX tables created; `check-store` passes (streaming write readable after 3.5 s); M0002 loaded (`store --store adx`, 129,781 rows in 23 s); live `listen --store adx` verified with test match M0099 (1,343 rows, feed health).

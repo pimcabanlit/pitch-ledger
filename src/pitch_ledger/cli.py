@@ -561,7 +561,13 @@ def cmd_live(args: argparse.Namespace) -> int:
         f"live: feed {feed.describe()}; queue {services.describe_queue()}; ledger "
         f"{services.describe_ledger()}; store {args.store or 'off'}; out {out}"
     )
-    service = LiveService(subscriber, trigger_queue, ledger, store, out, options)
+    from pitch_ledger.infra_adapters.webpubsub import PushSettings, open_notifier
+
+    push = PushSettings()
+    print(f"  push: {push.describe()}")
+    service = LiveService(
+        subscriber, trigger_queue, ledger, store, out, options, notifier=open_notifier(push)
+    )
     try:
         report = asyncio.run(service.run())
     finally:
@@ -586,6 +592,15 @@ def cmd_live(args: argparse.Namespace) -> int:
           f"p50 {w['p50']} s, max {w['max']} s; model calls {u.get('calls', 0)}; "
           f"failures {len(summary['failures'])}")  # fmt: skip
     return 0 if not summary["failures"] else 1
+
+
+def cmd_check_push(args: argparse.Namespace) -> int:
+    from pitch_ledger.infra_adapters.webpubsub import PushSettings, check_push
+
+    checks = check_push(PushSettings())
+    for check in checks:
+        print(f"[{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+    return 0 if all(c.ok for c in checks) else 1
 
 
 def cmd_api(args: argparse.Namespace) -> int:
@@ -725,6 +740,9 @@ def build_parser() -> argparse.ArgumentParser:
     lv.add_argument("--idle", type=float, default=30.0, help="stop after this many idle seconds")
     lv.add_argument("--from-start", action="store_true", help="read retained feed messages too")
     lv.set_defaults(func=cmd_live)
+
+    ckp = sub.add_parser("check-push", help="check Web PubSub settings, sign-in and a send")
+    ckp.set_defaults(func=cmd_check_push)
 
     api = sub.add_parser("api", help="serve the /api/v1 API (Uvicorn)")
     api.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")

@@ -16,6 +16,7 @@ from pitch_ledger.ledger import InMemoryLedger
 from pitch_ledger.live.engine import LiveMatch
 from pitch_ledger.live.service import LiveOptions, LiveService
 from pitch_ledger.matchlab.io import read_match
+from pitch_ledger.push import RecordingNotifier
 from pitch_ledger.schema import Event, TrackingSample, Trigger
 
 
@@ -75,8 +76,12 @@ def test_live_run_ends_like_a_replay(match_dir: Path, tmp_path: Path) -> None:
     ledger, store = InMemoryLedger(), FileEventStore(tmp_path / "store")
     options = LiveOptions(approve=True, inject_first_momentum=True, provider="offline",
                           tick_s=0.05, idle_s=0.5)  # fmt: skip
-    service = LiveService(feed, InMemoryTriggerQueue(), ledger, store, tmp_path / "live", options)
+    push = RecordingNotifier()
+    service = LiveService(feed, InMemoryTriggerQueue(), ledger, store, tmp_path / "live", options,
+                          notifier=push)  # fmt: skip
     report = asyncio.run(service.run())
+    groups = [g for g, _ in push.sent]
+    assert groups.count("producers.M0002") == 18 and groups.count("fans.M0002") == 18
     store.close()
 
     summary = report.as_dict()

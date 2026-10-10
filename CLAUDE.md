@@ -117,6 +117,7 @@ uv run pitch-ledger store data/M0002     # write a match to the event store: dat
 uv run pitch-ledger check-store           # ADX settings, sign-in, roles, tables, one test write; exit 1 on a FAIL
 uv run pitch-ledger check-ledger          # Cosmos DB settings, sign-in, one document written, read, deleted
 uv run pitch-ledger check-queue           # Service Bus settings, sign-in, one probe trigger sent and received
+uv run pitch-ledger check-push            # Web PubSub settings, sign-in (signed client URL), one test signal
 PITCH_LEDGER_API_AUTH=dev uv run pitch-ledger api   # /api/v1 on 127.0.0.1:8000 (docs at /api/v1/docs); dev = local producer
 uv run pitch-ledger live --store adx --approve   # live service: feed -> engine -> queue -> agents -> ledger (--feed, --queue, --ledger, --provider, --inject-error, --fresh)
 cd studio && npm install && npm run dev  # Studio on http://localhost:3000 (fan view, producer console); needs the API

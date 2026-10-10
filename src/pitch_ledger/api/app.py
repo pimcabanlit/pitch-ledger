@@ -30,14 +30,17 @@ from pitch_ledger.api.schemas import (
     MatchSummary,
     Me,
     PlayerView,
+    Realtime,
     team_view,
 )
 from pitch_ledger.api.settings import ApiSettings
 from pitch_ledger.eventstore.rows import insight_status
 from pitch_ledger.feed.live import match_minute
 from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
+from pitch_ledger.infra_adapters.webpubsub import PushSettings, open_notifier
 from pitch_ledger.ledger import InMemoryLedger
 from pitch_ledger.matchlab.io import MatchFiles
+from pitch_ledger.push import Notifier
 from pitch_ledger.schema import Overlay
 
 MatchIdPath = Annotated[str, Path(pattern=r"^M\d{4}$")]
@@ -67,6 +70,7 @@ def create_app(
     settings: ApiSettings | None = None,
     repository: MatchRepository | None = None,
     verifier: EntraVerifier | None = None,
+    notifier: Notifier | None = None,
 ) -> FastAPI:
     settings = settings or ApiSettings()
     repo = repository or MatchRepository(settings.data_dir, LedgerQueueSettings())
@@ -83,6 +87,7 @@ def create_app(
         allow_headers=["Authorization", "Content-Type"],
     )
     limiter = RateLimiter(settings.api_decisions_per_minute)
+    push: Notifier = notifier or open_notifier(PushSettings())
 
     def match_files(match_id: str) -> MatchFiles:
         files = repo.files(match_id)
@@ -143,6 +148,20 @@ def create_app(
                  and (language is None or o.language == language)]  # fmt: skip
         return sorted(found, key=lambda o: (o.period, o.trigger_clock_ms, o.overlay_id))
 
+    @app.get("/api/v1/realtime/negotiate", response_model=Realtime)
+    def negotiate(match_id: Annotated[str, Query(pattern=r"^M\d{4}$")]) -> Realtime:
+        """A WebSocket URL that receives the match's fan signals (push off: no URL; poll)."""
+        match_files(match_id)
+        return Realtime(url=push.client_url(match_id, "fans"), group="fans")
+
+    @app.get("/api/v1/realtime/negotiate/producer", response_model=Realtime)
+    def negotiate_producer(
+        match_id: Annotated[str, Query(pattern=r"^M\d{4}$")],
+        who: Annotated[Producer, Depends(producer)],
+    ) -> Realtime:
+        match_files(match_id)
+        return Realtime(url=push.client_url(match_id, "producers"), group="producers")
+
     @app.get("/api/v1/me", response_model=Me)
     def me(who: Annotated[Producer, Depends(producer)]) -> Me:
         return Me(producer_id=who.producer_id, name=who.name, auth=settings.api_auth)
@@ -194,6 +213,10 @@ def create_app(
                                        body.approve, body.reason,
                                        provider=settings.api_decision_provider)  # fmt: skip
         decided = ledger.get_insight(insight_id) or view.insight
+        signal = {"insight_id": insight_id, "status": insight_status(decided)}
+        push.notify(decided.match_id, "producers", "insight_changed", signal)
+        if signal["status"] == "aired":
+            push.notify(decided.match_id, "fans", "overlays_changed", signal)
         return DecisionResult(insight_id=insight_id, status=insight_status(decided),
                               audit_status=outcome.audit_status, overlays=outcome.overlays,
                               approved_by=decided.approved_by)  # fmt: skip

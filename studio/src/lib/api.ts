@@ -112,6 +112,18 @@ export interface DecisionResult {
   approved_by: string | null;
 }
 
+export interface Realtime {
+  url: string | null; // null: push is off, poll instead
+  group: string;
+}
+
+export interface PushSignal {
+  event: "overlays_changed" | "insight_changed" | string;
+  match_id: string;
+  insight_id?: string;
+  status?: InsightStatus;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -147,6 +159,8 @@ export const api = {
     request<Overlay[]>(`/matches/${id}/overlays?mode=${mode}&language=${language}`),
   insights: (id: string) => request<InsightView[]>(`/matches/${id}/insights`),
   insight: (id: string) => request<InsightDetail>(`/insights/${id}`),
+  negotiate: (matchId: string, producer = false) =>
+    request<Realtime>(`/realtime/negotiate${producer ? "/producer" : ""}?match_id=${matchId}`),
   decide: (id: string, approve: boolean, reason?: string) =>
     request<DecisionResult>(`/insights/${id}/decision`, {
       method: "POST",

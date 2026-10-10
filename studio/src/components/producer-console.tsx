@@ -15,9 +15,11 @@ import {
   type InsightView,
   type MatchSummary,
 } from "@/lib/api";
+import { useRealtime } from "@/lib/realtime";
 import { matchMinute, minuteLabel } from "@/lib/utils";
 
 const FILTERS: (InsightStatus | "all")[] = ["pending", "aired", "blocked", "all"];
+const POLL_MS = 10000; // without push
 
 function signInMessage(error: unknown): string {
   if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
@@ -63,8 +65,18 @@ export function ProducerConsole() {
 
   useEffect(loadInsights, [loadInsights]);
 
-  const open = (insightId: string) =>
-    api.insight(insightId).then(setSelected, (e) => setError(signInMessage(e)));
+  const open = useCallback(
+    (insightId: string) =>
+      api.insight(insightId).then(setSelected, (e) => setError(signInMessage(e))),
+    [],
+  );
+
+  const selectedId = selected?.insight.insight_id;
+  const pushed = useRealtime(matchId || null, true, (signal) => {
+    if (signal.event !== "insight_changed") return;
+    loadInsights();
+    if (signal.insight_id && signal.insight_id === selectedId) open(signal.insight_id);
+  });
 
   const decide = async (approve: boolean) => {
     if (!selected) return;
@@ -81,6 +93,12 @@ export function ProducerConsole() {
     }
   };
 
+  useEffect(() => {
+    if (pushed) return; // push tells us when something changes
+    const timer = setInterval(loadInsights, POLL_MS);
+    return () => clearInterval(timer);
+  }, [pushed, loadInsights]);
+
   const shown = insights.filter((v) => filter === "all" || v.status === filter);
 
   return (
@@ -96,6 +114,9 @@ export function ProducerConsole() {
             ))}
           </Select>
         </label>
+        <span className={`text-xs ${pushed ? "text-emerald-700" : "text-slate-500"}`}>
+          {pushed ? "● live" : `○ updates every ${POLL_MS / 1000} s`}
+        </span>
         <div className="flex gap-1">
           {FILTERS.map((f) => (
             <Button
