@@ -180,6 +180,35 @@ def test_match_centre_timeline_and_tracking_use_one_broadcast_frame(data_dir: Pa
     assert client.get("/api/v1/matches/M0002/tracking?period=3").status_code == 422
 
 
+def test_match_centre_analytics_and_pass_network_come_from_the_engine(data_dir: Path) -> None:
+    from pitch_ledger.engine.metrics import shot_xg
+    from pitch_ledger.schema import Event
+
+    client = _client(data_dir)
+    data = client.get("/api/v1/matches/M0002/analytics").json()
+    events = [Event.model_validate(json.loads(line)) for line in
+              (data_dir / "M0002" / "events.jsonl").read_text().splitlines()]  # fmt: skip
+    shots = [e for e in events if e.event_type.value == "shot"]
+    assert [s["xg"] for s in data["shots"]] == [round(shot_xg(e), 2) for e in shots]
+    home = [s for s in data["shots"] if s["team_id"] == "T01"]
+    assert home[-1]["team_shots"] == len(home)
+    assert home[-1]["team_xg"] == round(sum(shot_xg(e) for e in shots if e.team_id == "T01"), 2)
+    assert sum(s["outcome"] == "goal" for s in data["shots"]) == 5
+    minutes = [m for m in data["team_state"] if m["team_id"] == "T02" and m["minute"] == 69.0]
+    assert minutes and 0 <= minutes[0]["control"] <= 100  # whole numbers, as insights quote them
+
+    params = {"team": "T02", "period": 2, "end_ms": 1431700, "window_s": 600}
+    net = client.get("/api/v1/matches/M0002/pass-network", params=params).json()
+    window = [e for e in events if e.team_id == "T02" and e.period == 2
+              and 831700 < e.clock_ms <= 1431700 and e.event_type.value == "pass"
+              and e.outcome is not None and e.outcome.value == "complete"
+              and e.receiver_player_id and e.details.set_piece != "throw_in"]  # type: ignore[union-attr]  # fmt: skip
+    assert net["passes"] == len(window) == sum(edge["passes"] for edge in net["edges"])
+    assert all(node["player_id"].startswith("T02-") for node in net["nodes"])
+    bad = {**params, "team": "T05"}
+    assert client.get("/api/v1/matches/M0002/pass-network", params=bad).status_code == 404
+
+
 def test_public_endpoints(data_dir: Path) -> None:
     client = _client(data_dir)
     assert client.get("/api/v1/health").json()["matches"] == 1
