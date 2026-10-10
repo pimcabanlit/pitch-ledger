@@ -80,8 +80,8 @@ param studioClientId string = ''
 param producerAccess string = 'any_account'
 
 var signInAuthority = producerAccess == 'role'
-  ? '${environment().authentication.loginEndpoint}${tenant().tenantId}'
-  : '${environment().authentication.loginEndpoint}common'
+  ? '${az.environment().authentication.loginEndpoint}${tenant().tenantId}'
+  : '${az.environment().authentication.loginEndpoint}common'
 
 @description('Minimum replicas of the API and Studio (0 = scale to zero, inside the free grant).')
 @minValue(0)
