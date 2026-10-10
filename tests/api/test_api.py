@@ -307,3 +307,52 @@ def test_rate_limiter_window() -> None:
         limiter.check("p", now=2)
     limiter.check("p", now=61.5)  # the first call left the window
     limiter.check("other", now=2)  # per producer
+
+
+def test_any_account_access_lets_any_signed_in_microsoft_account_produce(
+    data_dir: Path, keys: tuple[Any, Any]
+) -> None:
+    """The public demo: judges sign in with their own work or personal account."""
+    private, public = keys
+    verifier = EntraVerifier(None, AUDIENCE, "Producer", jwks=FakeJwks(public), any_account=True)
+    client = _client(data_dir, verifier, api_auth="entra")
+    other = "11111111-2222-3333-4444-555555555555"
+    personal = "9188040d-6c67-4c5b-b112-36a304b66dad"  # the consumer (personal account) tenant
+    for tid in (other, personal, TENANT):
+        token = _token(private, iss=f"https://login.microsoftonline.com/{tid}/v2.0", tid=tid,
+                       roles=[], oid=f"oid-{tid[:4]}", name=None,
+                       preferred_username="judge@example.com")  # fmt: skip
+        me = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"}).json()
+        assert me["producer_id"] == f"oid-{tid[:4]}" and me["name"] == "judge@example.com"
+    spoofed = _token(private, iss=f"https://login.microsoftonline.com/{other}/v2.0", tid=TENANT)
+    assert (
+        client.get("/api/v1/me", headers={"Authorization": f"Bearer {spoofed}"}).status_code == 401
+    )
+    no_tid = _token(private)  # issuer present, tenant claim missing
+    assert (
+        client.get("/api/v1/me", headers={"Authorization": f"Bearer {no_tid}"}).status_code == 401
+    )
+    wrong_aud = _token(private, aud="api://other", tid=TENANT)
+    assert (
+        client.get("/api/v1/me", headers={"Authorization": f"Bearer {wrong_aud}"}).status_code
+        == 401
+    )
+
+
+def test_role_access_still_requires_our_tenant_and_the_role(keys: tuple[Any, Any]) -> None:
+    private, public = keys
+    verifier = EntraVerifier(TENANT, AUDIENCE, "Producer", jwks=FakeJwks(public))
+    other = "11111111-2222-3333-4444-555555555555"
+    foreign = _token(private, iss=f"https://login.microsoftonline.com/{other}/v2.0", tid=other)
+    with pytest.raises(HTTPException) as caught:
+        verifier.verify(foreign)
+    assert caught.value.status_code == 401
+    with pytest.raises(ValueError):
+        EntraVerifier(None, AUDIENCE, "Producer", jwks=FakeJwks(public))
+
+
+def test_any_account_settings_build_a_verifier_without_a_tenant(tmp_path: Path) -> None:
+    settings = ApiSettings(data_dir=tmp_path, api_auth="entra", api_audience="aud-id",
+                           api_tenant_id=None, api_producers="any_account")  # fmt: skip
+    app = create_app(settings)
+    assert app.state.verifier is not None and app.state.verifier.any_account
