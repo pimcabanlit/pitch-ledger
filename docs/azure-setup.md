@@ -362,7 +362,7 @@ What gets created (`infra/main.bicep`), all in your Pitch Ledger resource group:
 | Container app | `pitch-ledger-api` | `/api/v1`, reachable only from the Studio inside the environment |
 | Container Apps jobs | `pitch-ledger-live`, `pitch-ledger-feed`, `pitch-ledger-replay` | Started by hand: live service, Match Lab feed (streams a match to Event Hubs), replay |
 
-The deploy also gives `pitch-ledger-apps` the same data-plane roles `pitch-ledger-dev` has (Event Hubs, Service Bus, Cosmos DB, Web PubSub, Foundry User). It never changes the data services themselves.
+`pitch-ledger-apps` gets the same data-plane roles `pitch-ledger-dev` has (Event Hubs, Service Bus, Cosmos DB, Web PubSub, Foundry User), granted once by you with `infra/grant-roles.sh` (step 4). The deploy never changes the data services themselves.
 
 **How a deploy runs:** when CI passes on `main`, the **Deploy** workflow builds two images (`ghcr.io/pimcabanlit/pitch-ledger` and `…/pitch-ledger-studio`), pushes them to GitHub Container Registry, signs in to Azure and runs the Bicep. Azure trusts the workflow through a *federated credential* (a rule that says "tokens from this repo's `main` branch may act as this app"), so no Azure password is stored anywhere.
 
@@ -393,12 +393,13 @@ A separate identity from `pitch-ledger-dev`, so the app that runs the code can't
 3. Organization `pimcabanlit`, Repository `pitch-ledger`, Entity type **Branch**, GitHub branch name `main`.
 4. Name `github-main` → **Add**.
 
-### 4. Roles for the deploy app (resource group)
+### 4. Roles: Contributor for the deploy app, data roles for the apps identity
 
-1. Portal → **Resource groups** → your Pitch Ledger resource group → **Access control (IAM) → Add → Add role assignment**.
-2. Role **Contributor** (tab *Privileged administrator roles*) → Next → **Select members** → `pitch-ledger-deploy` → Review + assign. This lets it create the Container Apps resources.
-3. Add another role assignment: **Role Based Access Control Administrator** → member `pitch-ledger-deploy` → on the **Conditions** tab choose **Allow user to assign all roles except privileged administrative roles Owner, UAA, RBAC (Recommended)** → Review + assign. This lets it give `pitch-ledger-apps` its data roles, and nothing more powerful.
-4. If Foundry (`inside-the-game`) or the data services are in a **different** resource group, repeat steps 2 and 3 on that group too (the role grants run as a small deployment there, which needs Contributor), and see step 5.
+1. Portal → **Resource groups** → your Pitch Ledger resource group (`inside-the-game`) → **Access control (IAM) → Add → Add role assignment**.
+2. Tab **Privileged administrator roles** → **Contributor** → Next → **Select members** → `pitch-ledger-deploy` → Review + assign. This lets it create the Container Apps resources.
+3. Grant the apps identity its data roles: in the portal's top bar click **Cloud Shell** (`>_`), choose **Bash** (and *No storage account required* the first time), then paste the contents of `infra/grant-roles.sh` and press Enter. It creates the managed identity `pitch-ledger-apps`, grants it Event Hubs Data Sender and Receiver, Service Bus Data Sender and Receiver, Web PubSub Service Owner, Foundry User and the Cosmos DB Built-in Data Contributor role, then prints each service's resource group and the identity's client ID. Every line should start with `OK`.
+
+Why not let the deploy grant those roles: on this subscription your Owner role carries a condition that forbids handing out role-assignment rights (lesson 15), so the deploy identity stays at Contributor and `assignRoles` stays `false`.
 
 ### 5. Repository variables (GitHub)
 
@@ -478,6 +479,7 @@ Each problem below blocked the first live run. Read the error, find the matching
 | 12 | `stream` to Event Hubs fails with *"The request was terminated because the entity is being throttled"* (50002) | Basic with 1 throughput unit accepts about 1,000 messages a second; 60x replay is about 1,380 | Replay at 40x or less (25x is comfortable), or add throughput units (cost) |
 | 13 | `studio/src/lib/` missing in CI ("Cannot find module '@/lib/api'") | The Python `.gitignore` rule `lib/` also matched the Studio's source folder, so it was never committed | An exception `!studio/src/lib/`; check a fresh clone when adding folders with common names |
 | 14 | A client received each push signal as a quoted string, so the Studio ignored it; `check-push` still passed | The adapter sent `json.dumps(...)` with `content_type="application/json"`, and the SDK serializes JSON content again (double encoding). The fake client in the tests decoded once and hid it | Send the dict, not a string; the fake now serializes like the SDK and fails on a string. Verify push with a real client round trip, not only a send |
+| 15 | Granting **Role Based Access Control Administrator** fails: the portal doesn't list it, and the CLI says *"has an authorization with ABAC condition that is not fulfilled"* | The subscription owner's Owner role comes with a condition that blocks assigning Owner, User Access Administrator and RBAC Administrator (a default on new subscriptions) | Don't delegate role assignment: the deploy app gets Contributor only, and the owner grants the apps identity's data roles once with `infra/grant-roles.sh` |
 
 How to read the error codes:
 
