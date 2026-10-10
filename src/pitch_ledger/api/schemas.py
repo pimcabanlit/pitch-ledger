@@ -86,6 +86,103 @@ class Me(BaseModel):
     auth: str
 
 
+StageKey = Literal["detected", "analyzed", "explained", "audited", "approved", "published"]
+StepRole = Literal["agent", "test", "producer"]
+
+
+class StoryStage(BaseModel):
+    """One step of the pipeline, with a detail line derived from the ledger."""
+
+    key: StageKey
+    label: str
+    done: bool
+    detail: str
+    at: datetime | None = None  # wall clock, when the ledger recorded it
+
+
+class StoryStep(BaseModel):
+    """One audit-trail entry, public form: producers appear as "producer"."""
+
+    audit_id: str
+    round: int
+    agent: str
+    role: StepRole
+    action: str
+    passed: bool | None
+    findings: list[str]
+    headline: str | None
+    explanation: str | None
+    unsupported_numbers: list[str]  # numbers in the draft that no computed metric supports
+    recorded_at: datetime | None
+
+
+class StoryWindow(BaseModel):
+    label: str
+    start_minute: float
+    end_minute: float
+
+
+class StoryTrigger(BaseModel):
+    trigger_id: str
+    rule_id: str
+    minute: float
+    detector: str | None
+    metrics: dict[str, int | float]
+    windows: list[StoryWindow]
+
+
+class InsightStory(BaseModel):
+    """An aired insight traced end to end: detection, numbers, agents, approval, overlays."""
+
+    match: MatchSummary
+    insight: Insight  # approved_by is "producer" or the auto-approval rule, never an identity
+    status: InsightStatus
+    minute: float
+    trigger: StoryTrigger | None
+    stages: list[StoryStage]
+    steps: list[StoryStep]
+    evidence: list[EvidenceEvent]
+    evidence_counts: dict[str, int]
+    overlays: list[Overlay]
+
+
+class BroadcastGraphic(BaseModel):
+    mode: str
+    language: str
+    template: str
+    display_ms: int
+    priority: int
+    text: str
+    data: dict[str, Any]
+
+
+class BroadcastAudit(BaseModel):
+    status: str
+    drafts: int
+    revisions: int
+    approval: str | None
+    model_version: str
+
+
+class BroadcastPackage(BaseModel):
+    """One aired insight as a structured broadcast event (a graphics system would read this)."""
+
+    format: Literal["pitch-ledger.broadcast/1"] = "pitch-ledger.broadcast/1"
+    insight_id: str
+    match_id: str
+    period: int
+    clock_ms: int
+    match_minute: float
+    insight_type: str
+    team_id: str | None
+    player_id: str | None
+    headline: str
+    metrics: dict[str, int | float]
+    evidence_event_ids: list[str]
+    graphics: list[BroadcastGraphic]
+    audit: BroadcastAudit
+
+
 class Realtime(BaseModel):
     url: str | None  # None: push is off, poll instead
     group: str

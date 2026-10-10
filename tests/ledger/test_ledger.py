@@ -74,6 +74,16 @@ def test_file_ledger_persists_and_resumes_ids(tmp_path: Path) -> None:
     assert fresh.insights() == [] and fresh.next_id("M0002", "I") == "M0002-I0001"
 
 
+def test_audit_records_written_before_timestamps_still_load(tmp_path: Path) -> None:
+    root = tmp_path / "ledger"
+    root.mkdir()
+    old = ('{"audit_id": "M0002-A0001", "match_id": "M0002", "insight_id": "M0002-I0001", '
+           '"round": 1, "actor": "auditor", "action": "approve", "passed": true}')  # fmt: skip
+    (root / "audits.jsonl").write_text(old + "\n")
+    [record] = FileLedger(root).audits()
+    assert record.recorded_at is None and record.action == "approve"
+
+
 def test_queue_retries_then_dead_letters() -> None:
     queue = InMemoryTriggerQueue(max_deliveries=3)
     queue.send(_trigger(1))

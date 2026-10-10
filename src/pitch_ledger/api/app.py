@@ -1,6 +1,7 @@
 """FastAPI app: ``/api/v1``.
 
-Public (fan view): health, matches, a match, and the aired overlays of a match.
+Public (fan view): health, matches, a match, the aired overlays of a match, and the story
+and broadcast package of an aired insight (no producer identity).
 Producer (Entra ID producer role, see ``auth``): every insight with its status, one insight
 with its audit trail and evidence, the approve/block decision (rate-limited: an approval
 runs the Personalizer and Translator), and the match's ops alerts with acknowledgement.
@@ -20,12 +21,13 @@ from pitch_ledger.api.auth import EntraVerifier, Producer, producer
 from pitch_ledger.api.repository import MatchRepository
 from pitch_ledger.api.schemas import (
     AlertState,
+    BroadcastPackage,
     DecisionRequest,
     DecisionResult,
-    EvidenceEvent,
     Health,
     InsightDetail,
     InsightStatus,
+    InsightStory,
     InsightView,
     MatchDetail,
     MatchSummary,
@@ -35,6 +37,7 @@ from pitch_ledger.api.schemas import (
     team_view,
 )
 from pitch_ledger.api.settings import ApiSettings
+from pitch_ledger.api.story import build_broadcast, build_story, evidence_events
 from pitch_ledger.eventstore.rows import insight_status
 from pitch_ledger.feed.live import match_minute
 from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
@@ -151,6 +154,29 @@ def create_app(
                  and (language is None or o.language == language)]  # fmt: skip
         return sorted(found, key=lambda o: (o.period, o.trigger_clock_ms, o.overlay_id))
 
+    def aired(insight_id: str) -> tuple[InMemoryLedger, InsightView]:
+        """An insight the public may see: aired only (pending and blocked stay internal)."""
+        ledger, view = insight_of(insight_id)
+        if view.status != "aired":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"no aired insight {insight_id}")
+        return ledger, view
+
+    @app.get("/api/v1/insights/{insight_id}/story", response_model=InsightStory)
+    def story(insight_id: InsightIdPath) -> InsightStory:
+        """An aired insight traced end to end: detection, numbers, agents, approval, overlays."""
+        ledger, view = aired(insight_id)
+        files = match_files(view.insight.match_id)
+        trigger = ledger.get_trigger(view.insight.trigger_id or "")
+        return build_story(summary(files), view.insight, trigger, ledger.audits(insight_id),
+                           ledger.overlays(insight_id),
+                           {e["event_id"]: e for e in files.events})  # fmt: skip
+
+    @app.get("/api/v1/insights/{insight_id}/broadcast", response_model=BroadcastPackage)
+    def broadcast(insight_id: InsightIdPath) -> BroadcastPackage:
+        """The aired insight as a structured broadcast event (every mode and language)."""
+        ledger, view = aired(insight_id)
+        return build_broadcast(view.insight, ledger.audits(insight_id), ledger.overlays(insight_id))
+
     @app.get("/api/v1/realtime/negotiate", response_model=Realtime)
     def negotiate(match_id: Annotated[str, Query(pattern=r"^M\d{4}$")]) -> Realtime:
         """A WebSocket URL that receives the match's fan signals (push off: no URL; poll)."""
@@ -187,18 +213,7 @@ def create_app(
     ) -> InsightDetail:
         ledger, view = insight_of(insight_id)
         events = {e["event_id"]: e for e in match_files(view.insight.match_id).events}
-        cited = [events[eid] for eid in view.insight.evidence_event_ids if eid in events]
-        evidence = [
-            EvidenceEvent(
-                event_id=e["event_id"],
-                minute=round(match_minute(e), 2),
-                event_type=e["event_type"],
-                team_id=e["team_id"],
-                player_id=e["player_id"],
-                outcome=e["outcome"],
-            )
-            for e in cited
-        ]
+        evidence = evidence_events(events, view.insight.evidence_event_ids)
         return InsightDetail(**view.model_dump(), audits=ledger.audits(insight_id),
                              evidence=evidence, overlays=ledger.overlays(insight_id))  # fmt: skip
 
