@@ -123,6 +123,9 @@ uv run pitch-ledger live --store adx --approve   # live service: feed -> engine 
 cd studio && npm install && npm run dev  # Studio on http://localhost:3000 (fan view, producer console); needs the API
 cd studio && npx next typegen && npx tsc --noEmit && npm run lint && npm run build   # Studio checks (CI job "studio")
 uv run pitch-ledger replay data/M0002 --approve --ledger cosmos --queue servicebus   # cloud ledger and queue
+docker build -t pitch-ledger . && docker build -t pitch-ledger-studio studio   # the two images (Deploy workflow builds and pushes them)
+az bicep build --file infra/main.bicep && az bicep lint --file infra/main.bicep   # infra check (CI job "infra")
+az deployment group create -g <resource-group> --parameters infra/main.bicepparam   # deploy by hand (normally the Deploy workflow)
 ```
 
 Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `alerts.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.

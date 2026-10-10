@@ -24,7 +24,7 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | Live push | Web PubSub `pitch-ledger-push` (Free), hub `studio` | **Web PubSub Service Owner** → `pitch-ledger-dev`; `check-push` and a client round trip pass (2026-10-10) |
 | Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` is **Ingestor** and **Viewer**; tables created from `infra/adx/tables.kql`; `check-store` passes (2026-10-09) |
 
-Not provisioned yet: Container Apps, Key Vault, Application Insights. They come in Phase 4 with Bicep under `infra/`.
+Being set up (2026-10-10): **Container Apps** from `infra/main.bicep`, deployed by GitHub Actions (see Deployment below). Not needed: Key Vault (every service is reached with a managed identity, so there are no secrets to store). Not yet: Application Insights (container logs go to Log Analytics).
 
 Not available: **Microsoft Fabric**. The free trial isn't offered to this account (2026-10-09). The live feed uses Azure Event Hubs, the event store is the Azure Data Explorer free cluster with an ADX dashboard, and ops alerts live in the producer console. Fabric is a documented future upgrade (docs/architecture.md).
 
@@ -349,6 +349,102 @@ Browsers connect straight to Web PubSub with a short-lived URL from `GET /api/v1
 - Through the API (`PITCH_LEDGER_API_AUTH=dev`, file ledger): fan and producer sockets from `/realtime/negotiate`, then `POST /insights/<id>/decision` approve: the producer socket got `insight_changed` 0.21 s and the fan socket `overlays_changed` 0.27 s after the call.
 - Studio in Chromium: the fan view showed **live**, connected to `wss://pitch-ledger-push.webpubsub.azure.com/client/hubs/studio`, and showed the newly aired overlay 0.6 s after approval (it polls only every 30 s while live).
 
+## Deployment: Azure Container Apps (GitHub Actions + Bicep)
+
+What gets created (`infra/main.bicep`), all in your Pitch Ledger resource group:
+
+| Resource | Name | Why |
+| --- | --- | --- |
+| Log Analytics workspace | `pitch-ledger-logs` | Container logs; capped at 0.1 GB a day, 30-day retention |
+| Container Apps environment | `pitch-ledger-env` | Consumption plan (pay per use, scale to zero) |
+| Managed identity | `pitch-ledger-apps` | How every app and job signs in to Azure: no keys, no secrets |
+| Container app | `pitch-ledger-studio` | The public website (fan view, producer console) |
+| Container app | `pitch-ledger-api` | `/api/v1`, reachable only from the Studio inside the environment |
+| Container Apps jobs | `pitch-ledger-live`, `pitch-ledger-feed`, `pitch-ledger-replay` | Started by hand: live service, Match Lab feed (streams a match to Event Hubs), replay |
+
+The deploy also gives `pitch-ledger-apps` the same data-plane roles `pitch-ledger-dev` has (Event Hubs, Service Bus, Cosmos DB, Web PubSub, Foundry User). It never changes the data services themselves.
+
+**How a deploy runs:** when CI passes on `main`, the **Deploy** workflow builds two images (`ghcr.io/pimcabanlit/pitch-ledger` and `…/pitch-ledger-studio`), pushes them to GitHub Container Registry, signs in to Azure and runs the Bicep. Azure trusts the workflow through a *federated credential* (a rule that says "tokens from this repo's `main` branch may act as this app"), so no Azure password is stored anywhere.
+
+**Cost:** Container Apps on the Consumption plan has a monthly free grant (180,000 vCPU-seconds, 360,000 GiB-seconds, 2 million requests); with scale to zero the apps stay inside it. Log Analytics: the first 5 GB a month are free and the cap keeps it under about 3 GB. Public images on GHCR are free. GitHub Actions: a private repo gets 2,000 free minutes a month; a deploy takes about 8. The first visitor after an idle spell waits about 10–30 s while the apps start.
+
+Do these steps once, in order. Each is small.
+
+### 1. Register two resource providers (subscription)
+
+A resource provider is Azure's switch for a service family; a new subscription has some off.
+
+1. Portal → **Subscriptions** → your subscription → **Settings → Resource providers**.
+2. Search `Microsoft.App` → select it → **Register**. Wait until the status says *Registered* (a minute or two).
+3. Do the same for `Microsoft.OperationalInsights`.
+
+### 2. An app registration for deployments
+
+A separate identity from `pitch-ledger-dev`, so the app that runs the code can't change infrastructure.
+
+1. **Microsoft Entra ID → App registrations → New registration**.
+2. Name `pitch-ledger-deploy`, *Accounts in this organizational directory only* → **Register**.
+3. On its Overview page, copy the **Application (client) ID** (you'll paste it into GitHub in step 5). Don't create a client secret.
+
+### 3. Let GitHub Actions sign in as it (federated credential)
+
+1. In `pitch-ledger-deploy` → **Certificates & secrets → Federated credentials → Add credential**.
+2. Scenario: **GitHub Actions deploying Azure resources**.
+3. Organization `pimcabanlit`, Repository `pitch-ledger`, Entity type **Branch**, GitHub branch name `main`.
+4. Name `github-main` → **Add**.
+
+### 4. Roles for the deploy app (resource group)
+
+1. Portal → **Resource groups** → your Pitch Ledger resource group → **Access control (IAM) → Add → Add role assignment**.
+2. Role **Contributor** (tab *Privileged administrator roles*) → Next → **Select members** → `pitch-ledger-deploy` → Review + assign. This lets it create the Container Apps resources.
+3. Add another role assignment: **Role Based Access Control Administrator** → member `pitch-ledger-deploy` → on the **Conditions** tab choose **Allow user to assign all roles except privileged administrative roles Owner, UAA, RBAC (Recommended)** → Review + assign. This lets it give `pitch-ledger-apps` its data roles, and nothing more powerful.
+4. If Foundry (`inside-the-game`) or the data services are in a **different** resource group, repeat steps 2 and 3 on that group too (the role grants run as a small deployment there, which needs Contributor), and see step 5.
+
+### 5. Repository variables (GitHub)
+
+These are identifiers, not secrets, so they go in *variables*.
+
+1. GitHub → the repo → **Settings → Secrets and variables → Actions → Variables** tab → **New repository variable**.
+2. Add each:
+
+   | Name | Value |
+   | --- | --- |
+   | `AZURE_CLIENT_ID` | `pitch-ledger-deploy`'s Application (client) ID (step 2) |
+   | `AZURE_TENANT_ID` | Entra ID → Overview → Tenant ID |
+   | `AZURE_SUBSCRIPTION_ID` | Subscriptions → your subscription → Subscription ID |
+   | `AZURE_RESOURCE_GROUP` | your Pitch Ledger resource group's name |
+   | `ADX_CLUSTER_URI` | the same value as the `ADX_CLUSTER_URI` setting (optional: without it the jobs skip the event store) |
+   | `FOUNDRY_RESOURCE_GROUP` | only if Foundry is in another resource group |
+   | `DATA_RESOURCE_GROUP` | only if Event Hubs, Service Bus, Cosmos DB and Web PubSub are in another resource group |
+
+### 6. First run, then make the two images public
+
+The first run creates the image packages on GitHub; they start private, and Container Apps can only pull public ones (your choice: public images, no registry password).
+
+1. GitHub → **Actions → Deploy → Run workflow** (branch `main`). The *images* job pushes both images. The *deploy* job may fail pulling the images: that's expected the first time.
+2. GitHub → your profile → **Packages** → `pitch-ledger` → **Package settings** → *Danger Zone* → **Change visibility → Public**. Do the same for `pitch-ledger-studio`. (The repo itself stays private.)
+3. **Actions → Deploy → Run workflow** again. When it's green, the run summary shows the **Studio URL** and the **apps identity client ID**.
+
+### 7. Event-store roles for the managed identity (ADX query editor)
+
+The ADX free cluster isn't an Azure resource, so Bicep can't grant this. In the free cluster's query editor, with the client ID from the run summary:
+
+```
+.add database ['matchdata'] ingestors ('aadapp=<apps identity client ID>;<tenant-id>') 'pitch-ledger-apps'
+.add database ['matchdata'] viewers ('aadapp=<apps identity client ID>;<tenant-id>') 'pitch-ledger-apps'
+```
+
+Until this is done, the jobs still run; their event-store writes are logged as failed and skipped.
+
+### 8. Try it
+
+1. Open the Studio URL: six matches, no aired insights yet.
+2. Fill the ledger with one match: portal → **Container Apps jobs** → `pitch-ledger-replay` → **Run now**. It replays M0002 with Foundry (about 170 model calls, a few US cents), approves as `producer_demo` and plants the demo error. Refresh the fan view after a few minutes.
+3. Or the live path: **Run now** on `pitch-ledger-live`, wait about a minute, then **Run now** on `pitch-ledger-feed` (streams M0002 at 25×, about 4 minutes). Insights appear as the match plays.
+4. Logs: the job → **Execution history** → an execution → **Console logs**.
+
+The producer console answers "sign-in is not configured" until producer sign-in (below) is set up: producer endpoints refuse rather than open up.
+
 ## API sign-in for producers (needed with the Studio app)
 
 Not set up yet; do this when the Studio producer console is built. Until then run the API with `PITCH_LEDGER_API_AUTH=dev` on your own machine only.
@@ -409,7 +505,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [ ] Remove the Azure AI Administrator role from `pitch-ledger-dev` (least privilege).
 - [ ] Put a calendar reminder a week before the client secret expires.
 - [ ] Confirm a budget alert exists on the subscription.
-- [ ] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User. Turn off key auth on the Foundry resource. Put all resources in Bicep under `infra/`.
+- [ ] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User. Turn off key auth on the Foundry resource. Put all resources in Bicep under `infra/`. (2026-10-10: `infra/main.bicep` and the Deploy workflow written; do the Deployment steps above.)
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
 - [x] Event Hubs: namespace `pitch-ledger-feed`, hub `match-events`, Data Sender and Data Receiver roles; verified with `listen` + `stream` (2026-10-09).
 - [ ] Event Hubs: delete the namespace after judging (Nov 20).

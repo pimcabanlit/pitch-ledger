@@ -47,7 +47,7 @@ flowchart TB
     studio -- approvals, acknowledgements --> orch
 ```
 
-Across every service: Microsoft Entra ID (managed identities, producer sign-in), Key Vault, Application Insights / Log Analytics, GitHub Actions, Cost Management budget alerts.
+Across every service: Microsoft Entra ID (managed identities, producer sign-in), Log Analytics (Application Insights to come), GitHub Actions, Cost Management budget alerts; Key Vault only if a secret ever appears (none today: every service is reached with a managed identity).
 
 ## How one moment flows
 
@@ -182,6 +182,16 @@ Failure handling: a model error retries once, then falls back to a plain templat
 - **Observability:** Application Insights, Log Analytics, Foundry tracing from event to overlay; ADX dashboard for match and pipeline health; ops alerts in the producer console.
 - **Cost controls:** token caps per agent, small model for rewrites, budget alerts, scale-to-zero, Azure Data Explorer free cluster, Event Hubs on the Basic tier.
 
+## Deployment (Azure Container Apps)
+
+- **Images:** two, built by the Deploy workflow and pushed to GitHub Container Registry (public): `pitch-ledger` (Python: API, live service, Match Lab feed, replay; the six demo matches are generated into the image at build time, so they match the repo's seeds) and `pitch-ledger-studio` (Next.js standalone server). Both run as non-root users.
+- **Apps:** `pitch-ledger-studio` (external HTTPS ingress) forwards `/api/v1/*` to `pitch-ledger-api` by its in-environment name; the API has internal ingress only. Both scale to zero (Consumption plan, inside the free grant; the first request after idle waits for a cold start). The API runs one replica (the decision rate limit is per process).
+- **Jobs (manual):** `pitch-ledger-live` (the live service: Event Hubs → engine → Service Bus → agents → Cosmos DB, ADX and Web PubSub), `pitch-ledger-feed` (streams a match from the image to Event Hubs) and `pitch-ledger-replay`. Started from the portal or `az containerapp job start`; a Studio button to start a replay is a later step.
+- **Identity:** one user-assigned managed identity for every app and job, with the data-plane roles only (Event Hubs Data Sender and Receiver, Service Bus Data Sender and Receiver, Cosmos DB Built-in Data Contributor, Web PubSub Service Owner, Foundry User; ADX Ingestor and Viewer by KQL). No keys, connection strings or Key Vault secrets.
+- **Infrastructure as code:** `infra/main.bicep` (Log Analytics with a daily cap, environment, identity, role grants, apps, jobs) references the hand-made data services and never changes them; `infra/modules/data-services.bicep` declares them for a fresh environment (`createDataServices=true`). CI compiles and lints the Bicep on every push.
+- **Pipeline:** CI green on `main` → Deploy workflow: build and push both images (tagged with the commit SHA) → `az deployment group create` signed in by OpenID Connect (a federated credential on a deploy-only app registration: Contributor plus a constrained RBAC Administrator on the resource group) → smoke test of `/api/v1/health` through the Studio.
+- **Known limits:** match details (score, last minute) come from the match files in the image, so during a live run the fan view's header shows the final score while insights arrive live; the live service runs per match as a job rather than as an always-on app.
+
 ## Future upgrade: Microsoft Fabric
 
 Fabric Real-Time Intelligence was the original plan; its trial is not available to this account (2026-10-09). Every piece used today has a direct Fabric counterpart, and the adapters keep the move small:
@@ -206,11 +216,13 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 | Event Hubs | Basic tier, 1 throughput unit: about $11/month plus about $0.03 per million events (check the pricing page). Created 2026-10-09 (`pitch-ledger-feed`); recurring, delete it after judging (Nov 20) |
 | Azure Data Explorer | Free cluster: no Azure cost, no SLA |
 | Fabric | Future upgrade (trial not available) |
-| Container Apps | Consumption plan free grant; scale to zero |
+| Container Apps | Consumption plan free grant (180k vCPU-s, 360k GiB-s, 2M requests a month); apps scale to zero, jobs run only when started. Always-on replicas would cost about $25–35/month (`minReplicas`) |
+| Log Analytics | Container logs; 0.1 GB daily cap and 30-day retention keep it inside the 5 GB monthly free allowance |
 | Cosmos DB | Lifetime free tier (1000 RU/s, 25 GB), account throughput capped at the free amount |
 | Service Bus | Basic tier: no base fee, about $0.05 per million operations (check the pricing page); a match is a few hundred operations |
 | Web PubSub | Free tier (20 connections, 20k messages/day) |
-| Container images | GitHub Container Registry (free for public images) instead of Azure Container Registry |
+| Container images | GitHub Container Registry, public images (free; the repo stays private) instead of Azure Container Registry |
+| GitHub Actions | 2,000 free minutes a month for a private repo; a deploy is about 8 minutes |
 | Models | Main cost; token caps, small model for rewrites, develop locally first |
 | Guardrail | Budget alerts at $25 and $50 |
 

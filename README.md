@@ -29,4 +29,6 @@ uv run pytest
 
 **Studio** (`studio/`, Next.js): the fan view follows a match's aired insights by audience mode, language and club; the producer console shows ops alerts (feed gaps and lag, rejected rows, blocked insights, dead letters, model fallbacks) to acknowledge, and lists insights with their audit trail and evidence to approve or block. Run the API (`PITCH_LEDGER_API_AUTH=dev uv run pitch-ledger api`), then `cd studio && npm install && npm run dev` and open http://localhost:3000.
 
+**Azure:** `infra/main.bicep` deploys the Studio, the API and the live, feed and replay jobs to Azure Container Apps with one managed identity and no secrets; the Deploy workflow builds the images and deploys after CI passes on `main` (setup: `docs/azure-setup.md`, Deployment).
+
 See `docs/event-schema.md` for the data contract, `docs/architecture.md` for the design and `docs/build-plan.md` for the plan.
