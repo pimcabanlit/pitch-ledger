@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pitch_ledger.agents import copy
+from pitch_ledger.agents.editorial import draft_issues, editorial_issues
 from pitch_ledger.agents.replay import ReplayOptions, ReplayRun, replay_match
 from pitch_ledger.engine.detector import detect
 from pitch_ledger.engine.evaluation import check_detection
@@ -224,6 +225,39 @@ def coverage_section(matches: Sequence[_Match]) -> dict[str, Any]:
     }
 
 
+def editorial_section(matches: Sequence[_Match]) -> dict[str, Any]:
+    """Form of the aired copy (length, clichés, unsupported claims, repetition), whether the
+    five modes say it differently, and how many repeat alerts the detector folded away."""
+    issues: list[str] = []
+    texts = sets = indistinct = superseded = 0
+    for m in matches:
+        ledger = m.clean.ledger
+        superseded += sum(bool(t.context.get("superseded_by")) for t in m.clean.triggers)
+        for insight in ledger.insights():
+            overlays = ledger.overlays(insight.insight_id)
+            if not overlays:
+                continue
+            found = draft_issues(insight.headline, insight.explanation)
+            issues += [f"{insight.insight_id}: {f}" for f in found]
+            by_language: dict[str, list[str]] = {}
+            for o in overlays:
+                texts += 1
+                problems = editorial_issues(o.text, "overlay", o.language)
+                issues += [f"{o.overlay_id} ({o.language}): {f}" for f in problems]
+                by_language.setdefault(o.language, []).append(o.text)
+            for group in by_language.values():
+                sets += 1
+                indistinct += len(set(group)) < len(group)
+    return {
+        "texts_checked": texts,
+        "issues": len(issues),
+        "examples": issues[:20],
+        "mode_sets": sets,
+        "mode_sets_with_repeats": indistinct,
+        "superseded_triggers": superseded,
+    }
+
+
 def outcomes_section(matches: Sequence[_Match]) -> dict[str, Any]:
     status: Counter[str] = Counter()
     routes: Counter[str] = Counter()
@@ -285,6 +319,7 @@ def gates(card: dict[str, Any]) -> list[Gate]:
         ("every planted error caught", p["catch_rate"] in (1.0, None)),
         ("no wrong number passed the Auditor", p["wrong_numbers_passed"] == 0),
         ("every aired insight in 5 modes x 3 languages", c["coverage"] in (1.0, None)),
+        ("aired copy passes the editorial check", card["editorial"]["issues"] == 0),
         ("no dead letters", o["dead_letters"] == 0),
     ]
 
@@ -316,6 +351,7 @@ def build_scorecard(
         "accuracy": accuracy_section(runs),
         "planted": planted_section(runs),
         "coverage": coverage_section(runs),
+        "editorial": editorial_section(runs),
         "outcomes": outcomes_section(runs),
         "usage": usage_section(runs),
     }

@@ -313,6 +313,12 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         f"  coverage: {c['complete_mode_language_sets']}/{c['insights_with_overlays']} insights "
         f"in every mode and language; template fallbacks {c['template_fallbacks']}"
     )
+    e = card["editorial"]
+    print(
+        f"  editorial: {e['issues']} issues in {e['texts_checked']} on-screen texts; "
+        f"{e['mode_sets_with_repeats']}/{e['mode_sets']} mode sets repeat a text; "
+        f"{e['superseded_triggers']} repeat alerts folded"
+    )
     print(
         f"  outcomes: {o['audit_status']}; first-pass approval {o['first_pass_approval']}; "
         f"processing p50 {o['processing_s']['p50']} s"
