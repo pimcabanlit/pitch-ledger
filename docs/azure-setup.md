@@ -250,7 +250,7 @@ Menu names drift a little between versions of the web UI; when it differs, look 
    | 4. Latest window per team | Table | — |
    | 5. Insight pipeline | **Pie chart** | Category: `status`, Numeric: `insights` |
    | 6. Insights | Table | — |
-   | 7. Feed health | **Time chart** | X: `window_start`, Y: `p50_ms`, `p95_ms` (pick match M0099 to see data) |
+   | 7. Feed health | **Time chart** | X: `window_start`, Y: `p50_ms`, `p95_ms` (filled by the live service: M0002) |
    | 8. Ops alerts | Table | Filled by `live --store adx` (and `store` after a replay). If you added this tile before 2026-10-10, paste the updated query from `infra/adx/dashboard.kql`: it shows each alert's latest state |
 
 6. **Arrange:** drag tile edges to resize; put tiles 1, 2 and 3 on top.
@@ -560,8 +560,9 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
 - [x] ADX tables created; `check-store` passes (streaming write readable after 3.5 s); M0002 loaded (`store --store adx`, 129,781 rows in 23 s); live `listen --store adx` verified with test match M0099 (1,343 rows, feed health).
 - [x] Live service in Container Apps with Foundry and the ADX store (2026-10-10): M0002 at 25x, all rows received, 54 triggers, 15 insights aired (225 overlays), planted error caught and corrected, no blocks; feed lag p95 under 5 s after packing tracking rows (it grew to 2 minutes with one row per message). The live job waits 10 idle minutes for the feed and the feed repeats the match reference, so the two jobs can start in either order (see Measured, 2026-10-10).
-- [ ] ADX: build the dashboard from `infra/adx/dashboard.kql`.
-- [ ] ADX (optional): clear the test matches before the demo, as database admin: `.delete table Events records <| Events | where match_id in ('M0099', 'M0012')`, and the same for Tracking, TeamState, Triggers, InsightStatus and FeedHealth. The event store only appends, so a rerun of a live match adds a second copy.
+- [x] ADX dashboard `Pitch Ledger control room` built from `infra/adx/dashboard.kql` (8 tiles, Match picker, live refresh); verified 2026-10-10 on the live M0002 run and on M0005. The six demo matches are in the event store (M0002 from the live service; the others written with `store`, so their insight, feed-health and ops-alert tiles are empty).
+- [x] ADX test matches (M0099, M0012) cleared (2026-10-10: tables emptied before the final live run).
+- [ ] ADX: the event store only appends, so before re-running a live match, empty its rows as database admin (`.execute database script <|` followed by one `.clear table <name> data` line per table, or `.delete table <name> records <| <name> | where match_id == 'M0002'` per table to keep other matches).
 - [ ] Service Bus: 16 triggers of test match M0012 sit in the `triggers` dead-letter queue from a run before the send/receive race fix (reason `stale`); harmless (later runs ignore them), clear them in the portal (Service Bus Explorer, dead-letter, receive) if you like.
 - [x] Live service verified on Azure (2026-10-09): M0012 streamed at 25x through Event Hubs; 56 triggers via Service Bus, 18 insights aired, momentum insight corrected, ledger in Cosmos DB (56 triggers, 18 insights, 70 audits, 270 overlays), rows in ADX; trigger to outcome p50 3.9 s, max 17 s (offline models).
 - [x] Fabric-only pieces replaced (2026-10-09): ADX free cluster (event store), ADX dashboard (control room), producer-console ops alerts. Fabric kept as a future upgrade.
