@@ -1,7 +1,8 @@
 """FastAPI app: ``/api/v1``.
 
-Public (fan view): health, matches, a match, the aired overlays of a match, and the story
-and broadcast package of an aired insight (no producer identity).
+Public (fan view): health, matches, a match, the aired overlays of a match, the Match Centre
+replay data (timeline, tracking frames), and the story and broadcast package of an aired
+insight (no producer identity).
 Producer (Entra ID producer role, see ``auth``): every insight with its status, one insight
 with its audit trail and evidence, the approve/block decision (rate-limited: an approval
 runs the Personalizer and Translator), and the match's ops alerts with acknowledgement.
@@ -15,9 +16,11 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from pitch_ledger.agents.replay import decide_insight
 from pitch_ledger.api.auth import EntraVerifier, Producer, producer
+from pitch_ledger.api.match_centre import MatchCentre, MatchData, Timeline, TrackingWindow
 from pitch_ledger.api.repository import MatchRepository
 from pitch_ledger.api.schemas import (
     AlertState,
@@ -92,7 +95,9 @@ def create_app(
         allow_methods=["GET", "POST"],
         allow_headers=["Authorization", "Content-Type"],
     )
+    app.add_middleware(GZipMiddleware, minimum_size=1000)  # timelines and tracking are large
     limiter = RateLimiter(settings.api_decisions_per_minute)
+    centre = MatchCentre()
     push: Notifier = notifier or open_notifier(PushSettings())
 
     def match_files(match_id: str) -> MatchFiles:
@@ -153,6 +158,27 @@ def create_app(
                  and (mode is None or o.audience_mode.value == mode)
                  and (language is None or o.language == language)]  # fmt: skip
         return sorted(found, key=lambda o: (o.period, o.trigger_clock_ms, o.overlay_id))
+
+    def centre_data(match_id: str) -> MatchData:
+        match_dir = repo.match_dir(match_id)
+        if match_dir is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"no match {match_id}")
+        return centre.get(match_dir)
+
+    @app.get("/api/v1/matches/{match_id}/timeline", response_model=Timeline)
+    def timeline(match_id: MatchIdPath) -> Timeline:
+        """Every event of the match on one clock, positions in the broadcast frame."""
+        return centre_data(match_id).timeline
+
+    @app.get("/api/v1/matches/{match_id}/tracking", response_model=TrackingWindow)
+    def tracking(
+        match_id: MatchIdPath,
+        period: Annotated[int, Query(ge=1, le=2)],
+        from_s: Annotated[int, Query(ge=0)] = 0,
+        to_s: Annotated[int, Query(ge=0)] = 299,
+    ) -> TrackingWindow:
+        """Player positions per second for up to five minutes of one period."""
+        return centre_data(match_id).tracking_window(period, from_s, to_s)
 
     def aired(insight_id: str) -> tuple[InMemoryLedger, InsightView]:
         """An insight the public may see: aired only (pending and blocked stay internal)."""
