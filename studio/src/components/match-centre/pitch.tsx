@@ -60,7 +60,7 @@ export function Pitch({
   label,
 }: {
   dots: Dot[];
-  ball: { x: number; y: number } | null;
+  ball: { x: number; y: number; dead?: boolean } | null; // dead: play stopped, drawn faded
   children?: ReactNode;
   label: string;
 }) {
@@ -88,7 +88,15 @@ export function Pitch({
           </g>
         ))}
         {ball && (
-          <circle cx={ball.x} cy={sy(ball.y)} r={0.85} fill="white" stroke="#0f172a" strokeWidth={0.3} />
+          <circle
+            cx={ball.x}
+            cy={sy(ball.y)}
+            r={0.85}
+            fill="white"
+            stroke="#0f172a"
+            strokeWidth={0.3}
+            opacity={ball.dead ? 0.45 : 1}
+          />
         )}
       </svg>
       {children}

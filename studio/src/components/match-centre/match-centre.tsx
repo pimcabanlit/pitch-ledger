@@ -4,6 +4,7 @@ import { Pause, Play, Radio, RotateCcw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { ballAt, ballPath } from "@/components/match-centre/ball";
 import { Caption } from "@/components/match-centre/caption";
 import { ControlChart, type Side } from "@/components/match-centre/control-chart";
 import { Feed, type FeedItem } from "@/components/match-centre/feed";
@@ -11,11 +12,9 @@ import { PassNetwork } from "@/components/match-centre/pass-network";
 import { Pitch, type Dot } from "@/components/match-centre/pitch";
 import {
   axisFromMinute,
-  ballAt,
   buildAxis,
   fromAxis,
   lastIndexAt,
-  locatedEvents,
   minuteAt,
   toAxis,
   useReplayClock,
@@ -129,7 +128,7 @@ function Centre({
   const keep = useCallback((team: string | null | undefined) => club === "all" || !team || team === club, [club]);
 
   const times = useMemo(() => timeline.events.map((e) => toAxis(axis, e.period, e.clock_ms)), [timeline, axis]);
-  const located = useMemo(() => locatedEvents(axis, timeline.events), [timeline, axis]);
+  const path = useMemo(() => ballPath(axis, timeline.events, match.home.team_id), [timeline, axis, match.home.team_id]);
   const insights = useMemo(
     () =>
       (result?.key === selection ? result.rows : [])
@@ -141,7 +140,12 @@ function Centre({
   // Where the clock is.
   const { period, clockMs } = fromAxis(axis, t);
   const second = clockMs / 1000;
-  const positions = useTracking(match.match_id, period, second)(period, second);
+  const trackAt = useTracking(match.match_id, period, second);
+  const positions = trackAt(period, second);
+  const ball = ballAt(path, t, (pid, at) => {
+    const where = fromAxis(axis, at);
+    return where.period === period ? trackAt(period, where.clockMs / 1000).get(pid) : undefined;
+  });
   const index = lastIndexAt(times, t);
   const now = index >= 0 ? timeline.events[index] : null;
   const ended = t >= axis.total - 0.5;
@@ -223,7 +227,7 @@ function Centre({
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-3">
-          <Pitch dots={dots} ball={ballAt(located, t)} label={`${match.home.name} v ${match.away.name}, replay`}>
+          <Pitch dots={dots} ball={ball} label={`${match.home.name} v ${match.away.name}, replay`}>
             {caption && <Caption overlay={caption} subject={subject(caption)} color={colorOf(caption.data.team_id as string | null)} />}
           </Pitch>
           {caption && (

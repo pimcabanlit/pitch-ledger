@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api, type Timeline, type TimelineEvent, type TrackingWindow } from "@/lib/api";
+import { api, type Timeline, type TrackingWindow } from "@/lib/api";
 
 /**
  * One replay clock across both halves, in seconds: the first half runs from 0 to its end,
@@ -64,29 +64,6 @@ export function lastIndexAt(times: number[], t: number): number {
     } else hi = mid - 1;
   }
   return found;
-}
-
-/** Where the ball is: between the locations of the events either side of `t`. */
-export function ballAt(
-  located: { t: number; x: number; y: number }[],
-  t: number,
-): { x: number; y: number } | null {
-  const i = lastIndexAt(
-    located.map((l) => l.t),
-    t,
-  );
-  if (i < 0) return located[0] ?? null;
-  const a = located[i];
-  const b = located[i + 1];
-  if (!b || b.t - a.t > 20) return a; // a stoppage: hold the ball where play stopped
-  const f = (t - a.t) / Math.max(0.001, b.t - a.t);
-  return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-}
-
-export function locatedEvents(axis: Axis, events: TimelineEvent[]) {
-  return events
-    .filter((e) => e.x !== null && e.y !== null)
-    .map((e) => ({ t: toAxis(axis, e.period, e.clock_ms), x: e.x as number, y: e.y as number }));
 }
 
 /** The replay clock: advances `speed` match seconds per real second while playing. */

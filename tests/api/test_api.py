@@ -164,6 +164,7 @@ def test_match_centre_timeline_and_tracking_use_one_broadcast_frame(data_dir: Pa
         mirrored = (stored["team_id"] == "T02") != (stored["period"] == 2)  # away team: T02
         expected = round(105 - stored["start_x"], 1) if mirrored else round(stored["start_x"], 1)
         assert e["x"] == expected
+        assert e["duration_ms"] == stored["duration_ms"]  # the Studio's ball flight times
 
     def keeper_x(period: int) -> float:
         window = client.get("/api/v1/matches/M0002/tracking",

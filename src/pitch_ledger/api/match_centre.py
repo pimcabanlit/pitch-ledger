@@ -42,6 +42,7 @@ class TimelineEvent(BaseModel):
     y: float | None
     end_x: float | None
     end_y: float | None
+    duration_ms: int | None  # ball travel time for passes and shots, run time for carries
     score_home: int  # after this event: a goal counts at the shot, not at the restart
     score_away: int
     key: bool  # shown in the feed: shots, cards, substitutions, period markers
@@ -189,6 +190,7 @@ def build_timeline(files: MatchFiles) -> Timeline:
             seq=e["seq_no"], period=e["period"], clock_ms=e["clock_ms"], type=e["event_type"],
             outcome=e["outcome"], team_id=e["team_id"], player_id=e["player_id"],
             receiver_id=e.get("receiver_player_id"), x=x, y=y, end_x=end_x, end_y=end_y,
+            duration_ms=e.get("duration_ms"),
             score_home=after["score_home"], score_away=after["score_away"],
             key=e["event_type"] in KEY_EVENTS,
             player_in_id=details.get("player_in_id") if isinstance(details, dict) else None,
