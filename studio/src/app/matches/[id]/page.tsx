@@ -1,11 +1,11 @@
 import { Suspense } from "react";
 
-import { FanView } from "@/components/fan-view";
+import { MatchCentre } from "@/components/match-centre/match-centre";
 
 export default function MatchPage({ params }: PageProps<"/matches/[id]">) {
   return (
-    <Suspense fallback={<p className="text-sm text-slate-500">Loading match…</p>}>
-      <FanView params={params} />
+    <Suspense fallback={<p className="text-sm text-slate-500">Loading the match…</p>}>
+      <MatchCentre params={params} />
     </Suspense>
   );
 }
