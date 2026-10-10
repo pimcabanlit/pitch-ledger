@@ -167,6 +167,15 @@ The `pitch-ledger-live` job (1 vCPU) read M0002 streamed at 25x by `pitch-ledger
 
 - The job received a steady ~350 rows a second while the feed sent ~560 (22 tracking rows per match second, at 25x), so a backlog built. The Event Hubs SDK's cost is per message (receiving in batches made no difference, about 800 messages a second on a free 4-core machine); the detector and validation take under 0.4 s per tick.
 - Fix: the adapter now packs runs of tracking rows into one message (a JSON array of up to 100 rows), so a 25x stream is about 35 messages a second instead of 560. From this sandbox, the publisher then kept pace at 25x (at most 0.4 s behind; before, it fell 25 s behind at 10x), and every row arrived in source order.
+- Re-run with packed rows (13:46–13:51 UTC): every row arrived, about 34,000 rows a minute (the full 25x rate), and lag stayed flat for the whole match:
+
+  | Minute (UTC) | Rows received | p50 | p95 | Max |
+  | --- | --- | --- | --- | --- |
+  | 13:47 | 33,829 | 0.9 s | 3.4 s | 4.9 s |
+  | 13:48 | 33,081 | 1.0 s | 4.1 s | 5.5 s |
+  | 13:49 | 33,926 | 0.8 s | 3.9 s | 5.5 s |
+
+- That run also showed two false alarms, both fixed: a 15.8 s "feed gap" at 6' (the first trigger's processing emptied the old Cosmos documents on the event loop while a tick was checking for gaps; the ledger is now loaded when the match message arrives, and the gap check is skipped while rows wait in the inbox), and three goals blocked by the Auditor's model reviewer over whole minutes (4.7 written 5') and the score before a goal. The reviewer now ignores number format, a `goal_before` signal states the score before each goal in words, and INS-01 accepts an exact half rounded either way (30.5 as 31'). A Foundry replay of M0002's goals then aired all five.
 
 ### Switching to Fabric Eventstream later
 

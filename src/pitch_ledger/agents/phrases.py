@@ -74,6 +74,19 @@ def state(values: Values) -> Phrase | None:
     )
 
 
+def goal_before(values: Values) -> Phrase | None:
+    """The score before the goal, in words (a signal for the models: it settles whether a
+    goal opened, levelled, led or extended)."""
+    before = {
+        "opener": "the match was goalless before it",
+        "equaliser": "{team} were one goal behind before it",
+        "lead": "the score was level before it",
+        "extend": "{team} were already ahead before it",
+        "reduce": "{team} were behind before it and still are",
+    }.get(_goal_situation(values) or "")
+    return _p(before, before, before) if before else None  # signals are English only
+
+
 def club_goal(values: Values) -> Phrase | None:
     """The goal as the subject team's supporters would hear it."""
     return {
@@ -712,6 +725,7 @@ SELECTORS: dict[str, Callable[[Values], Phrase | None]] = {
     "club_goal": club_goal,
     "move": move,
     "goal_context": goal_context,
+    "goal_before": goal_before,
     "casual_tally": casual_tally,
     "player_goal": player_goal,
     "match_xg": match_xg,

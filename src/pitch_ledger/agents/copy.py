@@ -601,4 +601,11 @@ def signals(key: str, values: Mapping[str, object]) -> list[str]:
             continue
         if text:
             out.append(f"{name}: {text}")
+    if "{state}" in used:  # what the goal changed, so no model has to guess it
+        try:
+            before = fill("{goal_before}", values, "en")
+        except (KeyError, ValueError):
+            before = ""
+        if before:
+            out.append(f"goal_before: {before}")
     return out

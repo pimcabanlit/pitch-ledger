@@ -156,6 +156,11 @@ def test_recap_with_no_shots_reads_as_even() -> None:
 def test_signals_give_models_the_context_in_words(cases: list[Case]) -> None:
     case = next(c for c in cases if c.trigger.rule_id == "penalty_awarded")
     assert any(s.startswith("pen_stakes: Scoring it would") for s in case.facts.signals)
+    goals = [c for c in cases if c.trigger.rule_id == "goal" and c.trigger.match_id == "M0002"]
+    before = [next(s for s in c.facts.signals if s.startswith("goal_before:")) for c in goals]
+    assert before[0] == "goal_before: the match was goalless before it"
+    assert before[2] == "goal_before: the score was level before it"  # the 2-1 at 30.5'
+    assert before[3].endswith("were already ahead before it")
     for c in cases:
         for s in c.facts.signals:
             assert unsupported_numbers(s, c.trigger.metrics.values()) == [], s

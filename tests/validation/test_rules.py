@@ -299,6 +299,14 @@ def test_ins01_respects_display_precision() -> None:
     assert check_insight(insight(explanation="PPDA 6.3", metrics={"ppda": 6.2}))
 
 
+@pytest.mark.parametrize(("written", "ok"), [("31'", True), ("30'", True), ("32'", False)])
+def test_ins01_lets_an_exact_half_round_either_way(written: str, ok: bool) -> None:
+    """Python rounds 30.5 to 30 (half to even); a broadcast caption writes 31'."""
+    results = check_insight(insight(headline=f"Goal at {written}", explanation="",
+                                    metrics={"minute": 30.5}))  # fmt: skip
+    assert (results == []) is ok
+
+
 def test_ins01_reads_thousands_and_ignores_ids() -> None:
     ok = insight(headline="T02 complete 1,050 passes", explanation="", metrics={"passes": 1050})
     assert check_insight(ok) == []

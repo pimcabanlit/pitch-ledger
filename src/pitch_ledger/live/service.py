@@ -203,7 +203,7 @@ class LiveService:
             if live.full_time and live.match_id not in self._validated:
                 self._validated.add(live.match_id)
                 self.watch.validated(live.match_id, live.finish_validation())
-            if not final:
+            if not final and self._inbox.empty():  # rows waiting: the feed is not silent
                 period, clock_ms = live.position()
                 where = minute_label(period, clock_ms)
                 self.watch.check_gap(
@@ -230,6 +230,9 @@ class LiveService:
                 if item is None:
                     done = True
                     break
+                if item.message.kind == "match":  # read (or empty) its ledger records now,
+                    # off the event loop, not inside the first trigger's processing
+                    await asyncio.to_thread(self.ledger.load, item.message.match_id)
                 self._take(item)
             if done or self.clock() - last_tick >= self.options.tick_s:
                 await self._tick(final=done)

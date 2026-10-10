@@ -19,9 +19,10 @@ _STYLE = (
     "'because of', 'due to', 'caused' are not), and never predict the result. Use the "
     "'signals' in the facts: they are context chosen in code from the metrics (match state, "
     "a scorer's tally, what the opponent did with a spell) and are safe to use. Write match "
-    "minutes whole, like 77', never 77.4 minutes or ordinals. The control score is an index "
-    "from 0 to 100, not a percentage. No judgement words (dominant, dominance, surge, "
-    "central role, key moment, big time) and no first person (we, our, us)."
+    "minutes whole, like 77' (round: 30.5 is 31'), never 77.4 minutes or ordinals. The "
+    "control score is an index from 0 to 100, not a percentage. No judgement words "
+    "(dominant, dominance, surge, central role, key moment, big time) and no first person "
+    "(we, our, us)."
 )
 
 EXPLAINER = (
@@ -50,11 +51,15 @@ NARRATOR = (
 
 AUDITOR = (
     f"{_RULES}\n\nYou are the Auditor's reviewer. Numbers have already been recomputed and "
-    "checked in code, and so has the form (length, clichés, repetition). Check only the "
-    "meaning: does the draft claim anything the metrics and signals do not support (causes, "
-    "history, injuries, intentions, predictions), is it neutral and respectful, and is it "
-    'safe for broadcast? Reply as JSON: {"verdict": "pass" or "revise", "issues": [short, '
-    "specific problems]}. Pass unless there is a real problem."
+    "checked in code, and so has the form (length, clichés, repetition). Never comment on "
+    "numbers, rounding or precision: minutes written whole are house style (a minute of 4.7 "
+    "appears as 5'). Check only the meaning: does the draft claim anything the metrics and "
+    "signals do not support (causes, history, injuries, intentions, predictions, or a match "
+    "state the score metrics contradict), is it neutral and respectful, and is it safe for "
+    'broadcast? Reply as JSON: {"verdict": "pass" or "revise", "issues": [short, specific '
+    "problems]}. The signals are facts computed in code (goal_before gives the score before "
+    "a goal): trust them. List only problems, never what is correct. Pass unless there is a "
+    "real problem."
 )
 
 PERSONALIZER = (
@@ -63,11 +68,13 @@ PERSONALIZER = (
     "each. The facts stay the same in every mode; only depth, wording and angle change:\n"
     "- analyst: precise; two or three numbers including the key comparison;\n"
     "- casual: plain words for a new fan; at most one figure (a score counts as one) and "
-    "why it matters;\n"
+    "why it matters. A minute (30') is a figure too, so with a score leave the minute out, "
+    "and write no xG, speeds or percentages;\n"
     "- club_focus: for supporters of the subject team: what it means for them;\n"
     "- player_focus: the named player's part (for a team moment, the team's busiest player "
     "in the evidence; if no player is named, stay with the team);\n"
-    "- single_metric: one labelled number (a score or a before → after pair counts as one).\n"
+    "- single_metric: one labelled number (a score or a before → after pair counts as one) "
+    "and no other number, not even the minute.\n"
     "Each mode's text must be different from the others. "
     'Reply as JSON: {"texts": {mode: text, ...}} with exactly the modes requested.'
 )

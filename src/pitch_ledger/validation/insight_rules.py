@@ -1,12 +1,14 @@
 """INS-01: every number in an insight's text appears in ``metrics`` and recomputes from evidence.
 
 Numbers are compared at the precision they are written with: "64" matches a metric of
-64.3; "6.2" matches 6.2 but not 6.3. The recompute half takes a callback; Phase 3 wires
+64.3; "6.2" matches 6.2 but not 6.3. An exact half may be rounded either way: a minute of
+30.5 may be written 30 or 31. The recompute half takes a callback; Phase 3 wires
 it to the stats engine, which recomputes each metric from the evidence events.
 """
 
 import re
 from collections.abc import Callable, Iterable, Mapping
+from decimal import ROUND_HALF_UP, Decimal
 
 from pitch_ledger.schema import Insight
 from pitch_ledger.validation.results import ValidationResult, violation
@@ -42,7 +44,9 @@ def _decimals(written: str) -> int:
 
 def _matches(written: str, value: float) -> bool:
     shown = float(written.replace(",", ""))
-    return round(value, _decimals(written)) == shown
+    places = _decimals(written)
+    half_up = Decimal(repr(value)).quantize(Decimal(1).scaleb(-places), ROUND_HALF_UP)
+    return shown in (round(value, places), float(half_up))  # half to even, or half up
 
 
 def check_insight(insight: Insight, recompute: Recompute | None = None) -> list[ValidationResult]:

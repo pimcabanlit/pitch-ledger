@@ -15,6 +15,10 @@ class InMemoryLedger:
         self._overlays: dict[str, Overlay] = {}
         self._alerts: dict[str, OpsAlert] = {}
 
+    def load(self, match_id: str) -> None:
+        """Bring a match's stored records in (and empty it, for a fresh run); a no-op here,
+        overridden by stores that read on first touch."""
+
     def next_id(self, match_id: str, kind: IdKind) -> str:
         self._counters[(match_id, kind)] += 1
         return f"{match_id}-{kind}{self._counters[(match_id, kind)]:04d}"

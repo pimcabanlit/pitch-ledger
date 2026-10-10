@@ -149,7 +149,7 @@ def test_feed_faults_raise_ops_alerts(match_dir: Path, tmp_path: Path) -> None:
                   if m.kind == "event" and m.row["event_id"] != bad_id][-1]  # fmt: skip
     ledger, push = InMemoryLedger(), RecordingNotifier()
     options = LiveOptions(provider="offline", tick_s=0.05, idle_s=0.3, gap_s=0.2)
-    service = LiveService(PausingFeed(rows, pause_at, 0.6), InMemoryTriggerQueue(), ledger, None,
+    service = LiveService(PausingFeed(rows, pause_at, 1.0), InMemoryTriggerQueue(), ledger, None,
                           tmp_path / "live", options, notifier=push)  # fmt: skip
     report = asyncio.run(service.run())
 
