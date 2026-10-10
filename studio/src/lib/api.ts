@@ -162,6 +162,41 @@ export interface InsightStory {
   overlays: Overlay[];
 }
 
+export interface TimelineEvent {
+  seq: number;
+  period: number;
+  clock_ms: number;
+  type: string;
+  outcome: string | null;
+  team_id: string | null;
+  player_id: string | null;
+  receiver_id: string | null;
+  x: number | null; // broadcast frame: home attacks toward x = 105 in period 1
+  y: number | null;
+  end_x: number | null;
+  end_y: number | null;
+  score_home: number;
+  score_away: number;
+  key: boolean;
+  player_in_id: string | null;
+}
+
+export interface Timeline {
+  match_id: string;
+  home_team_id: string;
+  away_team_id: string;
+  periods: { period: number; end_ms: number }[];
+  events: TimelineEvent[];
+}
+
+export interface TrackingWindow {
+  period: number;
+  from_s: number;
+  to_s: number;
+  players: string[];
+  frames: (number | null)[][];
+}
+
 export interface Realtime {
   url: string | null; // null: push is off, poll instead
   group: string;
@@ -225,6 +260,9 @@ export const api = {
   insights: (id: string) => request<InsightView[]>(`/matches/${id}/insights`),
   insight: (id: string) => request<InsightDetail>(`/insights/${id}`),
   story: (insightId: string) => request<InsightStory>(`/insights/${insightId}/story`),
+  timeline: (matchId: string) => request<Timeline>(`/matches/${matchId}/timeline`),
+  tracking: (matchId: string, period: number, fromS: number, toS: number) =>
+    request<TrackingWindow>(`/matches/${matchId}/tracking?period=${period}&from_s=${fromS}&to_s=${toS}`),
   /** The broadcast package as JSON text (shown and downloaded as is). */
   broadcast: async (insightId: string) => {
     const response = await fetch(`/api/v1/insights/${insightId}/broadcast`, { cache: "no-store" });

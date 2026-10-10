@@ -142,6 +142,44 @@ def test_insight_story_traces_an_aired_insight_without_producer_identity(
     assert client.get("/api/v1/insights/M0002-I0099/story").status_code == 404
 
 
+def test_match_centre_timeline_and_tracking_use_one_broadcast_frame(data_dir: Path) -> None:
+    client = _client(data_dir)
+    response = client.get("/api/v1/matches/M0002/timeline", headers={"Accept-Encoding": "gzip"})
+    assert response.headers["content-encoding"] == "gzip"
+    timeline = response.json()
+    assert [p["period"] for p in timeline["periods"]] == [1, 2]
+    assert all(p["end_ms"] > 45 * 60_000 for p in timeline["periods"])
+    last = timeline["events"][-1]
+    assert (last["type"], last["score_home"], last["score_away"]) == ("period_end", 4, 1)
+    assert {e["type"] for e in timeline["events"] if e["key"]} >= {"shot", "period_start"}
+    goals = [e for e in timeline["events"] if e["type"] == "shot" and e["outcome"] == "goal"]
+    assert [(g["score_home"], g["score_away"]) for g in goals] == [
+        (1, 0), (1, 1), (2, 1), (3, 1), (4, 1)]  # the scoreboard changes at the goal  # fmt: skip
+    raw = {json.loads(line)["seq_no"]: json.loads(line)
+           for line in (data_dir / "M0002" / "events.jsonl").read_text().splitlines()}  # fmt: skip
+    for e in timeline["events"]:
+        stored = raw[e["seq"]]
+        if stored["start_x"] is None:
+            continue
+        mirrored = (stored["team_id"] == "T02") != (stored["period"] == 2)  # away team: T02
+        expected = round(105 - stored["start_x"], 1) if mirrored else round(stored["start_x"], 1)
+        assert e["x"] == expected
+
+    def keeper_x(period: int) -> float:
+        window = client.get("/api/v1/matches/M0002/tracking",
+                            params={"period": period, "from_s": 0, "to_s": 10}).json()  # fmt: skip
+        assert len(window["frames"]) == 11 and len(window["players"]) >= 22
+        i = window["players"].index("T01-P01")  # the home goalkeeper
+        return float(window["frames"][0][2 * i])
+
+    assert keeper_x(1) < 15 and keeper_x(2) > 90  # home defends the left goal, then the right
+    capped = client.get("/api/v1/matches/M0002/tracking",
+                        params={"period": 1, "from_s": 60, "to_s": 5000}).json()  # fmt: skip
+    assert (capped["from_s"], capped["to_s"], len(capped["frames"])) == (60, 360, 301)
+    assert client.get("/api/v1/matches/M0009/timeline").status_code == 404
+    assert client.get("/api/v1/matches/M0002/tracking?period=3").status_code == 422
+
+
 def test_public_endpoints(data_dir: Path) -> None:
     client = _client(data_dir)
     assert client.get("/api/v1/health").json()["matches"] == 1

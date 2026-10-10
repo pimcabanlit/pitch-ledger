@@ -23,6 +23,7 @@ Data contract for the Pitch Ledger pipeline. Every stage reads from one event ta
 | Pitch | Meters. x from 0 to 105, y from 0 to 68; origin at bottom-left |
 | Direction of play | Stored so the **acting team always attacks toward x = 105**. When possession flips, coordinates flip: x' = 105 − x, y' = 68 − y |
 | Goal | Centre of attacked goal at (105, 34); posts at y = 30.34 and 37.66 |
+| Broadcast frame (derived, Match Centre only) | One fixed pitch as a touchline camera sees it: the home team attacks toward x = 105 in period 1 and toward x = 0 in period 2; positions of the other team (and of both teams in period 2) are mirrored (105 − x, 68 − y). Stored rows never use it |
 | Match clock | `clock_ms`: integer milliseconds since the start of the period; stoppage time continues past 45:00 |
 | Broadcast time | `feed_ts_utc`: simulated wall-clock time the event is published (for overlay sync) |
 | Periods | 1 = first half, 2 = second half |

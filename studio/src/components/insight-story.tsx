@@ -8,6 +8,7 @@ import {
   Download,
   FlaskConical,
   PenLine,
+  PlayCircle,
   Radar,
   Radio,
   ShieldAlert,
@@ -169,6 +170,12 @@ function StoryHeader({ story }: { story: Story }) {
           <span className="font-mono">{minuteLabel(story.minute)}</span>
           <span>{label(insight.insight_type)}</span>
           <span className="font-mono">{insight.insight_id}</span>
+          <Link
+            href={`/matches/${match.match_id}?t=${story.minute.toFixed(1)}`}
+            className="flex items-center gap-1 text-sky-700 hover:underline"
+          >
+            <PlayCircle className="h-3.5 w-3.5" aria-hidden /> Watch the moment
+          </Link>
           <Badge tone={story.status} className="ml-auto">
             {story.status}
           </Badge>
