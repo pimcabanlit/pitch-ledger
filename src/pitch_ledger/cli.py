@@ -405,7 +405,7 @@ def cmd_listen(args: argparse.Namespace) -> int:
         from pitch_ledger.infra_adapters.stores import open_store
 
         store_settings = _store_settings(args.store)
-        store, meter = open_store(store_settings), FeedHealthMeter()
+        store, meter = open_store(store_settings, fail_open=True), FeedHealthMeter()
         print(f"  also writing rows and feed health to {store_settings.describe()}")
 
     def progress(d: Delivered) -> None:
@@ -554,7 +554,7 @@ def cmd_live(args: argparse.Namespace) -> int:
         )
     else:
         ledger = FileLedger(out / "ledger", fresh=args.fresh)
-    store = open_store(_store_settings(args.store)) if args.store else None
+    store = open_store(_store_settings(args.store), fail_open=True) if args.store else None
     only = tuple(x.strip() for x in args.only.split(",") if x.strip()) if args.only else None
     options = LiveOptions(
         approve=args.approve, inject_first_momentum=args.inject_error, provider=args.provider,

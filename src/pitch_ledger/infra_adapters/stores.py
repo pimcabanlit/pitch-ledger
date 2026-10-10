@@ -30,11 +30,12 @@ class StoreSettings(BaseSettings):
         return f"adx {self.adx_cluster_uri}/{self.adx_database}"
 
 
-def open_store(settings: StoreSettings) -> EventStore:
+def open_store(settings: StoreSettings, fail_open: bool = False) -> EventStore:
+    """``fail_open``: a failed ADX write is logged and skipped (live paths), not raised."""
     if settings.store == "file":
         return FileEventStore(settings.store_dir)
     if not (settings.adx_cluster_uri and settings.adx_database):
         raise ValueError("adx store needs ADX_CLUSTER_URI and ADX_DATABASE")
     from pitch_ledger.infra_adapters.adx import AdxEventStore
 
-    return AdxEventStore.connect(settings.adx_cluster_uri, settings.adx_database)
+    return AdxEventStore.connect(settings.adx_cluster_uri, settings.adx_database, fail_open)

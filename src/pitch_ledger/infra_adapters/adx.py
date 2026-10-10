@@ -8,10 +8,14 @@ the same protocol, so the same adapter serves it later).
 - Sign-in: Microsoft Entra ID (``DefaultAzureCredential``). The app needs the database
   Ingestor and Viewer roles; tables are created by a database admin with the script from
   ``pitch-ledger store-schema``.
+- Failures: ``fail_open`` (the live service and ``listen``) logs a failed request, counts
+  its rows in ``rows_failed`` and carries on, since the store is the analytical copy and
+  must not stop a live match; otherwise (``store``) the error is raised.
 """
 
 import io
 import json
+import logging
 import time
 import uuid
 from collections.abc import Callable, Sequence
@@ -22,6 +26,7 @@ from pitch_ledger.core.checks import Check, short_error
 from pitch_ledger.eventstore.tables import TABLES, mapping_name, project
 
 MAX_REQUEST_BYTES = 3_500_000  # stay under the 4 MB streaming limit
+log = logging.getLogger(__name__)
 
 
 def encode(table: str, rows: Sequence[dict[str, Any]]) -> list[bytes]:
@@ -50,8 +55,11 @@ class AdxEventStore:
         max_age_s: float = 5.0,
         clock: Callable[[], float] = time.monotonic,
         on_close: Callable[[], None] | None = None,
+        fail_open: bool = False,
     ) -> None:
         """``ingest(table, json_lines)`` sends one request (tests pass a fake)."""
+        self.fail_open = fail_open
+        self.rows_failed: dict[str, int] = {}
         self.database = database
         self._ingest = ingest
         self._max_rows, self._max_age_s, self._clock = max_rows, max_age_s, clock
@@ -61,7 +69,7 @@ class AdxEventStore:
         self.rows_sent: dict[str, int] = {}
 
     @classmethod
-    def connect(cls, cluster_uri: str, database: str) -> "AdxEventStore":
+    def connect(cls, cluster_uri: str, database: str, fail_open: bool = False) -> "AdxEventStore":
         from azure.identity import DefaultAzureCredential
         from azure.kusto.data import KustoConnectionStringBuilder
         from azure.kusto.data.data_format import DataFormat, IngestionMappingKind
@@ -89,7 +97,7 @@ class AdxEventStore:
             client.close()
             credential.close()
 
-        return cls(database, ingest, on_close=close)
+        return cls(database, ingest, on_close=close, fail_open=fail_open)
 
     def append(self, table: str, rows: Sequence[dict[str, Any]]) -> None:
         if table not in TABLES:
@@ -102,8 +110,17 @@ class AdxEventStore:
     def flush(self) -> None:
         for table, rows in self._queued.items():
             for payload in encode(table, rows):
-                self._ingest(table, payload)
-            self.rows_sent[table] = self.rows_sent.get(table, 0) + len(rows)
+                try:
+                    self._ingest(table, payload)
+                except Exception as exc:  # sign-in, role, network or cluster failure
+                    if not self.fail_open:
+                        raise
+                    lost = payload.count(b"\n")
+                    self.rows_failed[table] = self.rows_failed.get(table, 0) + lost
+                    log.warning("event store: %d %s rows not written: %s", lost, table,
+                                short_error(exc))  # fmt: skip
+                    continue
+                self.rows_sent[table] = self.rows_sent.get(table, 0) + payload.count(b"\n")
         self._queued.clear()
         self._since = self._clock()
 

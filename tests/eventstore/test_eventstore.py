@@ -123,6 +123,22 @@ def test_adx_store_buffers_then_flushes_by_size_age_and_close() -> None:
     assert store.rows_sent == {"Tracking": 3, "Events": 2, "FeedHealth": 1}
 
 
+def test_adx_store_fails_open_on_live_paths_and_raises_otherwise() -> None:
+    def refuse(table: str, payload: bytes) -> None:
+        if table == "Tracking":
+            raise PermissionError("Principal is not authorized to ingest")
+
+    live = AdxEventStore("db", refuse, fail_open=True)
+    live.append("Tracking", [{"match_id": "M1"}] * 2)
+    live.append("Events", [{"event_id": "e"}])
+    live.flush()  # carries on
+    assert live.rows_failed == {"Tracking": 2} and live.rows_sent == {"Events": 1}
+    strict = AdxEventStore("db", refuse)
+    strict.append("Tracking", [{"match_id": "M1"}])
+    with pytest.raises(PermissionError):
+        strict.flush()
+
+
 def test_store_settings_default_to_files_and_adx_needs_settings(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
