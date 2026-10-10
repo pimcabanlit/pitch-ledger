@@ -61,6 +61,14 @@ def test_stream_paces_one_batch_per_match_second(match_dir: Path) -> None:
     assert report.tracking == sum(60 <= match_minute(r) < 61 for r in files.tracking)
 
 
+def test_stream_repeats_the_reference_for_late_consumers(match_dir: Path) -> None:
+    feed, clock = InMemoryFeed(), FakeClock()
+    stream_match(match_dir, feed, speed=4, start_min=60, minutes=1, reference_every_s=5,
+                 clock=clock, sleep=clock.sleep)  # fmt: skip
+    kinds = [d.message.kind for d in feed.messages(0.05)]
+    assert kinds[0] == "match" and kinds.count("match") == 3  # at 0 s, then 5 s and 10 s
+
+
 def test_stream_rejects_non_positive_speed(match_dir: Path) -> None:
     with pytest.raises(ValueError):
         stream_match(match_dir, InMemoryFeed(), speed=0)

@@ -78,8 +78,12 @@ def stream_match(
     sleep: Callable[[float], None] = time.sleep,
     fault_at: float | None = None,
     fault_pause_s: float = 12.0,
+    reference_every_s: float = 10.0,
 ) -> StreamReport:
     """Publish a match directory's rows at ``speed`` x match pace.
+
+    The match reference goes first and again every ``reference_every_s`` wall seconds, so a
+    consumer that connects after the start still learns the teams and players.
 
     ``fault_at`` (a match minute) stages a feed fault for the ops-alert demo: the first pass
     from that minute is sent with an off-pitch start (a validation reject), then the feed
@@ -105,11 +109,12 @@ def stream_match(
         faulty = events[n]["event_id"]
         report.fault = f"{faulty} sent off the pitch, then a {fault_pause_s:g} s pause"
     seconds = feed_seconds(events, [r for r in files.tracking if keep(r)])
-    reference = json.loads((match_dir / MATCH_FILE).read_text("utf-8"))
-    publisher.publish([FeedMessage("match", reference)])  # reference rows first
+    reference = FeedMessage("match", json.loads((match_dir / MATCH_FILE).read_text("utf-8")))
+    publisher.publish([reference])  # reference rows first
     if not seconds:
         return report
     t0, first = clock(), seconds[0][0]
+    last_reference = t0
 
     def due(i: int) -> float:
         return t0 + (seconds[i][0] - first) / speed
@@ -126,6 +131,9 @@ def stream_match(
         while i < len(seconds) and due(i) <= clock():  # behind: send what is overdue together
             batch += seconds[i][1]
             i += 1
+        if clock() - last_reference >= reference_every_s:  # for consumers that joined late
+            batch.insert(0, reference)
+            last_reference = clock()
         publisher.publish(batch)
         if faulty is not None and any(m.row.get("event_id") == faulty for m in batch):
             sleep(fault_pause_s)  # the feed gap; the schedule resumes after it

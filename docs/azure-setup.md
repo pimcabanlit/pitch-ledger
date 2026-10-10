@@ -176,6 +176,7 @@ The `pitch-ledger-live` job (1 vCPU) read M0002 streamed at 25x by `pitch-ledger
   | 13:49 | 33,926 | 0.8 s | 3.9 s | 5.5 s |
 
 - That run also showed two false alarms, both fixed: a 15.8 s "feed gap" at 6' (the first trigger's processing emptied the old Cosmos documents on the event loop while a tick was checking for gaps; the ledger is now loaded when the match message arrives, and the gap check is skipped while rows wait in the inbox), and three goals blocked by the Auditor's model reviewer over whole minutes (4.7 written 5') and the score before a goal. The reviewer now ignores number format, a `goal_before` signal states the score before each goal in words, and INS-01 accepts an exact half rounded either way (30.5 as 31'). A Foundry replay of M0002's goals then aired all five.
+- A third run found no triggers: the feed was started before the live job's reader had connected, so the job never got the match reference (sent once, at the start). The feed now repeats the reference every 10 seconds and the engine keeps rows that arrive before it.
 
 ### Switching to Fabric Eventstream later
 

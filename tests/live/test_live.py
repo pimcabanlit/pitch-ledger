@@ -16,7 +16,7 @@ from pitch_ledger.feed import InMemoryFeed, listen
 from pitch_ledger.feed.live import feed_seconds, match_minute, stream_match
 from pitch_ledger.feed.port import Delivered, FeedMessage
 from pitch_ledger.ledger import InMemoryLedger
-from pitch_ledger.live.engine import LiveMatch
+from pitch_ledger.live.engine import LiveMatch, rejected
 from pitch_ledger.live.service import LiveOptions, LiveService
 from pitch_ledger.matchlab.io import read_match
 from pitch_ledger.push import RecordingNotifier
@@ -54,6 +54,21 @@ def test_live_engine_emits_exactly_the_batch_triggers(match_dir: Path) -> None:
             for t in live.settled_triggers(60_000):
                 assert t.clock_ms + 60_000 <= live.position()[1] or t.period < live.position()[0]
     assert live.full_time
+    live.settled_triggers(60_000, final=True)
+    assert [_key(t) for t in live.emitted] == [_key(t) for t in _batch(match_dir)]
+
+
+def test_a_late_or_repeated_reference_still_gives_the_batch_triggers(match_dir: Path) -> None:
+    """A consumer that connects after the start gets rows before the reference (which the
+    feed repeats); it keeps them, ignores repeats and still finds every trigger."""
+    files = read_match(match_dir)
+    reference = json.loads((match_dir / "match.json").read_text())
+    live = LiveMatch("M0002")
+    for n, (_, batch) in enumerate(feed_seconds(files.events, files.tracking)):
+        if n % 600 == 20:  # first at second 20, then every 10 match minutes
+            live.add("match", reference)
+        for message in batch:
+            assert not rejected(live.add(message.kind, message.row))
     live.settled_triggers(60_000, final=True)
     assert [_key(t) for t in live.emitted] == [_key(t) for t in _batch(match_dir)]
 

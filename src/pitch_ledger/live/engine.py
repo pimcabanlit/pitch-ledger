@@ -10,7 +10,8 @@ order, so a live run numbers its triggers like a batch run.
 Once the match reference has arrived, every row goes through the ingest validation rules
 (docs/event-schema.md): a rejected row is dropped before the engine, and ``add`` returns
 the rule results so the service can raise ops alerts. A feed joined mid-match (first event
-after ``seq_no`` 1) gets only the rules that need no earlier rows.
+after ``seq_no`` 1, or rows before the reference) gets only the rules that need no earlier
+rows. The feed repeats the reference for consumers that join late; repeats are ignored.
 """
 
 from dataclasses import dataclass, field
@@ -65,9 +66,14 @@ class LiveMatch:
     def add(self, kind: str, row: dict[str, Any]) -> list[ValidationResult]:
         """Take one feed row; returns its validation results (a reject is not kept)."""
         if kind == "match":
+            if self.reference is not None:  # the feed repeats it for late joiners
+                return []
             self.reference = row
             self._players = [Player.model_validate(p) for p in row["players"]]
-            self.validator = MatchValidator(Match.model_validate(row["match"]), self._players)
+            # Rows already received (the reference came late): only the stateless rules.
+            self.validator = MatchValidator(
+                Match.model_validate(row["match"]), self._players, stateful=not self.events
+            )
             return []
         if kind == "event":
             results: list[ValidationResult] = []

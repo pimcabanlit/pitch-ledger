@@ -123,6 +123,7 @@ class LiveService:
         self._pending = 0
         self._injected: set[str] = set()
         self._handles: dict[tuple[str, str], Any] = {}
+        self._loaded: set[str] = set()  # matches whose ledger records were loaded
 
     # Feed thread -----------------------------------------------------------------
     def _pump(self) -> None:
@@ -230,9 +231,12 @@ class LiveService:
                 if item is None:
                     done = True
                     break
-                if item.message.kind == "match":  # read (or empty) its ledger records now,
-                    # off the event loop, not inside the first trigger's processing
-                    await asyncio.to_thread(self.ledger.load, item.message.match_id)
+                match_id = item.message.match_id
+                if item.message.kind == "match" and match_id not in self._loaded:
+                    # read (or empty) its ledger records now, off the event loop, not
+                    # inside the first trigger's processing
+                    self._loaded.add(match_id)
+                    await asyncio.to_thread(self.ledger.load, match_id)
                 self._take(item)
             if done or self.clock() - last_tick >= self.options.tick_s:
                 await self._tick(final=done)
