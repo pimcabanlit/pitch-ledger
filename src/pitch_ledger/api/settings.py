@@ -20,6 +20,10 @@ class ApiSettings(BaseSettings):
         default=None, validation_alias=AliasChoices("PITCH_LEDGER_API_TENANT_ID", "AZURE_TENANT_ID")
     )
     api_producer_role: str = "Producer"
+    api_producers: Literal["role", "any_account"] = "role"
+    """Who may act as a producer in ``entra`` mode: ``role`` (production) is our tenant's
+    users with the producer app role; ``any_account`` (the public demo) is anyone signed in
+    with a Microsoft account, work or personal, recorded by object ID."""
     api_cors_origins: list[str] = ["http://localhost:3000"]
     api_decisions_per_minute: int = 10  # each approval runs model calls (cost)
     api_decision_provider: Literal["offline", "foundry"] | None = None  # default: model settings

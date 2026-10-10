@@ -26,8 +26,11 @@ const FILTERS: (InsightStatus | "all")[] = ["pending", "aired", "blocked", "all"
 const POLL_MS = 10000; // without push
 
 function signInMessage(error: unknown): string {
-  if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-    return "Producer sign-in required (Microsoft Entra ID, Producer role).";
+  if (error instanceof ApiError && error.status === 401) {
+    return "Sign in as a producer to see the review queue.";
+  }
+  if (error instanceof ApiError && error.status === 403) {
+    return "This account does not have the Producer role.";
   }
   if (error instanceof ApiError && error.status === 503) {
     return "Producer sign-in is not configured on the API yet. For a local demo, run the API with PITCH_LEDGER_API_AUTH=dev.";

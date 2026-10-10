@@ -446,18 +446,38 @@ Until this is done, the jobs still run; their event-store writes are logged as f
 
 The producer console answers "sign-in is not configured" until producer sign-in (below) is set up: producer endpoints refuse rather than open up.
 
-## API sign-in for producers (needed with the Studio app)
+## Producer sign-in (Microsoft Entra ID)
 
-Not set up yet; do this when the Studio producer console is built. Until then run the API with `PITCH_LEDGER_API_AUTH=dev` on your own machine only.
+The producer console signs in with Microsoft Entra ID: the Studio (a single-page app) gets an access token for the API's `access_as_producer` scope, and the API verifies it (audience, signature, expiry, issuer). Two app registrations and two repository variables turn it on; until then the console says sign-in is not configured and producer endpoints refuse (fail closed). On your own machine `PITCH_LEDGER_API_AUTH=dev` stands in.
 
-1. Entra ID → **App registrations** → **New registration** → name `pitch-ledger-api`, single tenant → Register. Note its **Application (client) ID**.
-2. **Expose an API** → Application ID URI → Add (accept `api://<client-id>`) → **Add a scope** `access_as_producer` (admins and users can consent).
-3. **App roles** → **Create app role**: display name `Producer`, allowed member types **Users/Groups**, value **`Producer`**.
-4. **Manifest** → set `"requestedAccessTokenVersion": 2` (under `api`) → Save. The API checks v2 tokens: issuer `https://login.microsoftonline.com/<tenant>/v2.0`, audience = the client ID.
-5. Entra ID → **Enterprise applications** → `pitch-ledger-api` → **Users and groups** → **Add user/group** → yourself, role **Producer**.
-6. Settings: `PITCH_LEDGER_API_AUTH=entra`, `PITCH_LEDGER_API_AUDIENCE=<client ID>` (the tenant comes from `AZURE_TENANT_ID`).
+Who may act as a producer is one setting (`producerAccess` in `infra/main.bicepparam`, `PITCH_LEDGER_API_PRODUCERS` for the API):
 
-The Studio app gets its own app registration (a single-page app) that requests the `access_as_producer` scope; that comes with the Studio.
+- `any_account` (the public demo, so judges can try the console): anyone signed in with a Microsoft account, work, school or personal. Their object ID is recorded as the approver; the public story page shows only "producer".
+- `role` (production): only users of this tenant assigned the `Producer` app role.
+
+### 1. The API registration
+
+1. Entra ID → **App registrations** → **New registration**. Name `pitch-ledger-api`. Supported account types: **Accounts in any organizational directory and personal Microsoft accounts**. No redirect URI. **Register**, and note the **Application (client) ID**.
+2. **Manifest**: check that `"requestedAccessTokenVersion": 2` (under `api`); set it and **Save** if it is `null` or `1`. The API accepts v2 tokens only (audience = the client ID).
+3. **Expose an API** → Application ID URI **Add** → accept `api://<client-id>` → **Save**. **Add a scope**: name `access_as_producer`, consent **Admins and users**, display name "Act as a producer", state **Enabled**.
+4. For `role` access only: **App roles** → **Create app role** `Producer` (members **Users/Groups**, value `Producer`), then Enterprise applications → `pitch-ledger-api` → **Users and groups** → add the producers.
+
+### 2. The Studio registration
+
+1. **New registration**. Name `pitch-ledger-studio`, the same account types. Redirect URI: platform **Single-page application (SPA)**, `https://<studio-url>/producer` (the Studio URL from the deployment). **Register**, and note the **Application (client) ID**.
+2. **Authentication** → under Single-page application **Add URI** `http://localhost:3000/producer` (local runs) → **Save**.
+3. **API permissions** → **Add a permission** → **APIs my organization uses** → `pitch-ledger-api` → **Delegated** → `access_as_producer` → **Add permissions**.
+4. Back in `pitch-ledger-api` → **Expose an API** → **Add a client application** → the Studio's client ID, tick `access_as_producer` → **Add application**. Pre-authorizing the Studio means producers are not asked to consent to the API scope.
+
+### 3. Turn it on
+
+1. GitHub → the repository → **Settings** → **Secrets and variables** → **Actions** → **Variables**: `API_AUDIENCE` = the API's client ID, `STUDIO_CLIENT_ID` = the Studio's client ID. (Client IDs are not secrets.)
+2. Re-run the **Deploy** workflow (or push to `main`). It sets the API's audience and access mode and the Studio's sign-in settings, which the Studio reads at request time from `/auth-config`.
+3. Open `https://<studio-url>/producer` → **Sign in with Microsoft** → the console loads with "Signed in as …".
+
+Local runs: put `STUDIO_ENTRA_CLIENT_ID`, `STUDIO_API_SCOPE=api://<api-client-id>/access_as_producer` (and optionally `STUDIO_ENTRA_AUTHORITY`, `STUDIO_PRODUCER_ACCESS`) in the Studio's environment and run the API with `PITCH_LEDGER_API_AUTH=entra`, `PITCH_LEDGER_API_AUDIENCE=<api-client-id>`, `PITCH_LEDGER_API_PRODUCERS=any_account`. Sign-in needs `https` or `localhost` (the browser's crypto API).
+
+Work accounts from organizations that block user consent may see "Need admin approval"; personal Microsoft accounts are never blocked.
 
 ## Lessons learned (first live run, 2026-10-09)
 

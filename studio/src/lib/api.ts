@@ -272,10 +272,22 @@ export class ApiError extends Error {
   }
 }
 
+let tokenProvider: (() => Promise<string | null>) | null = null;
+
+/** Producer sign-in registers how to get an access token for the API (null: signed out). */
+export function setTokenProvider(provider: (() => Promise<string | null>) | null) {
+  tokenProvider = provider;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = tokenProvider ? await tokenProvider() : null;
   const response = await fetch(`/api/v1${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
     cache: "no-store",
   });
   if (!response.ok) {

@@ -72,6 +72,17 @@ param adxDatabase string = 'matchdata'
 @description('API app registration for producer sign-in; empty: producer endpoints refuse (fail closed).')
 param apiAudience string = ''
 
+@description('Studio (single-page app) registration for producer sign-in; empty: no sign-in button.')
+param studioClientId string = ''
+
+@description('Who may act as a producer: any Microsoft account (the public demo) or the Producer app role in this tenant.')
+@allowed(['any_account', 'role'])
+param producerAccess string = 'any_account'
+
+var signInAuthority = producerAccess == 'role'
+  ? '${az.environment().authentication.loginEndpoint}${tenant().tenantId}'
+  : '${az.environment().authentication.loginEndpoint}common'
+
 @description('Minimum replicas of the API and Studio (0 = scale to zero, inside the free grant).')
 @minValue(0)
 param minReplicas int = 0
@@ -246,6 +257,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           env: concat(backendEnv, [
             { name: 'PITCH_LEDGER_API_AUTH', value: 'entra' }
             { name: 'PITCH_LEDGER_API_AUDIENCE', value: apiAudience }
+            { name: 'PITCH_LEDGER_API_PRODUCERS', value: producerAccess }
           ])
           probes: [
             {
@@ -288,6 +300,13 @@ resource studio 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'studio'
           image: '${studioImage}:${imageTag}'
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          env: [
+            // Producer sign-in, read by the Studio at request time (public values).
+            { name: 'STUDIO_ENTRA_CLIENT_ID', value: studioClientId }
+            { name: 'STUDIO_API_SCOPE', value: empty(apiAudience) ? '' : 'api://${apiAudience}/access_as_producer' }
+            { name: 'STUDIO_ENTRA_AUTHORITY', value: signInAuthority }
+            { name: 'STUDIO_PRODUCER_ACCESS', value: producerAccess }
+          ]
         }
       ]
       scale: {

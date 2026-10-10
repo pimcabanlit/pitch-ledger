@@ -91,8 +91,11 @@ def create_app(
     settings = settings or ApiSettings()
     repo = repository or MatchRepository(settings.data_dir, LedgerQueueSettings())
     tenant, audience = settings.api_tenant_id, settings.api_audience
-    if verifier is None and settings.api_auth == "entra" and tenant and audience:
-        verifier = EntraVerifier(tenant, audience, settings.api_producer_role)
+    any_account = settings.api_producers == "any_account"
+    if verifier is None and settings.api_auth == "entra" and audience and (tenant or any_account):
+        verifier = EntraVerifier(
+            tenant, audience, settings.api_producer_role, any_account=any_account
+        )
     app = FastAPI(title="Pitch Ledger API", version="1", docs_url="/api/v1/docs",
                   openapi_url="/api/v1/openapi.json")  # fmt: skip
     app.state.settings, app.state.verifier = settings, verifier
