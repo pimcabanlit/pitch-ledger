@@ -13,6 +13,7 @@
 import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from itertools import product
 
 from pitch_ledger.agents import copy
@@ -77,6 +78,7 @@ class Services:
             findings=list(findings),
             headline=draft.headline if draft else None,
             explanation=draft.explanation if draft else None,
+            recorded_at=datetime.now(UTC),
         )
         self.ledger.add_audit(record)
         return record

@@ -112,6 +112,56 @@ export interface DecisionResult {
   approved_by: string | null;
 }
 
+export type StageKey = "detected" | "analyzed" | "explained" | "audited" | "approved" | "published";
+
+export interface StoryStage {
+  key: StageKey;
+  label: string;
+  done: boolean;
+  detail: string;
+  at: string | null;
+}
+
+export interface StoryStep {
+  audit_id: string;
+  round: number;
+  agent: string;
+  role: "agent" | "test" | "producer";
+  action: string;
+  passed: boolean | null;
+  findings: string[];
+  headline: string | null;
+  explanation: string | null;
+  unsupported_numbers: string[];
+  recorded_at: string | null;
+}
+
+export interface StoryWindow {
+  label: string;
+  start_minute: number;
+  end_minute: number;
+}
+
+export interface InsightStory {
+  match: MatchSummary;
+  insight: Insight;
+  status: InsightStatus;
+  minute: number;
+  trigger: {
+    trigger_id: string;
+    rule_id: string;
+    minute: number;
+    detector: string | null;
+    metrics: Record<string, number>;
+    windows: StoryWindow[];
+  } | null;
+  stages: StoryStage[];
+  steps: StoryStep[];
+  evidence: EvidenceEvent[];
+  evidence_counts: Record<string, number>;
+  overlays: Overlay[];
+}
+
 export interface Realtime {
   url: string | null; // null: push is off, poll instead
   group: string;
@@ -174,6 +224,13 @@ export const api = {
     request<Overlay[]>(`/matches/${id}/overlays?mode=${mode}&language=${language}`),
   insights: (id: string) => request<InsightView[]>(`/matches/${id}/insights`),
   insight: (id: string) => request<InsightDetail>(`/insights/${id}`),
+  story: (insightId: string) => request<InsightStory>(`/insights/${insightId}/story`),
+  /** The broadcast package as JSON text (shown and downloaded as is). */
+  broadcast: async (insightId: string) => {
+    const response = await fetch(`/api/v1/insights/${insightId}/broadcast`, { cache: "no-store" });
+    if (!response.ok) throw new ApiError(response.status, response.statusText);
+    return JSON.stringify(await response.json(), null, 2);
+  },
   negotiate: (matchId: string, producer = false) =>
     request<Realtime>(`/realtime/negotiate${producer ? "/producer" : ""}?match_id=${matchId}`),
   alerts: (matchId: string) => request<OpsAlert[]>(`/matches/${matchId}/alerts`),

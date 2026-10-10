@@ -1,5 +1,6 @@
 """The ``audit record``: one step in an insight's audit trail, kept in the ledger."""
 
+from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
@@ -37,3 +38,4 @@ class AuditRecord(BaseModel):
     findings: list[str] = Field(default_factory=list)
     headline: str | None = None
     explanation: str | None = None
+    recorded_at: datetime | None = None  # when the step happened (records before 2026-10-10: none)

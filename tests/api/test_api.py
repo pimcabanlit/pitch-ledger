@@ -1,6 +1,7 @@
 """/api/v1: public fan endpoints, producer endpoints behind Entra ID, decisions."""
 
 import asyncio
+import json
 import time
 from pathlib import Path
 from typing import Any
@@ -96,6 +97,49 @@ def test_ops_alerts_listed_and_acknowledged_by_the_signed_in_producer(data_dir: 
     closed = _client(data_dir, api_auth="entra", api_tenant_id=None)
     assert closed.get("/api/v1/matches/M0002/alerts").status_code == 503
     assert closed.post("/api/v1/alerts/M0002-X0002/acknowledge").status_code == 503
+
+
+def test_insight_story_traces_an_aired_insight_without_producer_identity(
+    data_dir: Path, keys: tuple[Any, Any]
+) -> None:
+    private, public = keys
+    verifier = EntraVerifier(TENANT, AUDIENCE, "Producer", jwks=FakeJwks(public))
+    client = _client(data_dir, verifier, api_auth="entra")
+    good = {"Authorization": f"Bearer {_token(private)}"}
+    [view] = client.get("/api/v1/matches/M0002/insights", headers=good).json()
+    insight_id = view["insight"]["insight_id"]
+    assert client.get(f"/api/v1/insights/{insight_id}/story").status_code == 404  # pending
+    assert client.get(f"/api/v1/insights/{insight_id}/broadcast").status_code == 404
+    client.post(f"/api/v1/insights/{insight_id}/decision", json={"approve": True}, headers=good)
+
+    story = client.get(f"/api/v1/insights/{insight_id}/story").json()  # public, no token
+    assert "producer-oid-1" not in json.dumps(story)  # the approver's identity stays internal
+    assert story["insight"]["approved_by"] == "producer"
+    stages = {s["key"]: s for s in story["stages"]}
+    assert list(stages) == ["detected", "analyzed", "explained", "audited", "approved",
+                            "published"] and all(s["done"] for s in stages.values())  # fmt: skip
+    assert stages["detected"]["detail"] == "Momentum shift at 69'"
+    assert stages["audited"]["detail"].startswith("Corrected after 1 revision")
+    assert stages["published"]["detail"] == "15 overlays: 5 audience modes × 3 languages"  # noqa: RUF001
+    assert stages["explained"]["at"] and stages["approved"]["at"]  # timestamps recorded
+    planted = next(s for s in story["steps"] if s["action"] == "inject_error")
+    assert planted["role"] == "test" and planted["unsupported_numbers"] == ["32"]
+    check = next(s for s in story["steps"] if s["action"] == "check")
+    assert check["passed"] is False and check["findings"][0].startswith("INS-01")
+    assert check["unsupported_numbers"] == ["32"]  # the Auditor saw the planted draft
+    redrafts = [s for s in story["steps"] if s["action"] == "draft"]
+    assert [s["unsupported_numbers"] for s in redrafts] == [[], []]
+    assert story["steps"][-1]["agent"] == "producer"
+    assert story["trigger"]["rule_id"] == "momentum_shift" and len(story["evidence"]) == 32
+    assert sum(story["evidence_counts"].values()) == 32 and len(story["overlays"]) == 15
+
+    package = client.get(f"/api/v1/insights/{insight_id}/broadcast").json()
+    assert package["format"] == "pitch-ledger.broadcast/1"
+    assert package["metrics"] == story["insight"]["metrics"] and len(package["graphics"]) == 15
+    assert package["audit"] == {"status": "corrected", "drafts": 2, "revisions": 1,
+                                "approval": "producer",
+                                "model_version": "offline-templates"}  # fmt: skip
+    assert client.get("/api/v1/insights/M0002-I0099/story").status_code == 404
 
 
 def test_public_endpoints(data_dir: Path) -> None:

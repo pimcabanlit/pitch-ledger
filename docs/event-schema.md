@@ -267,8 +267,21 @@ An insight airs only when `approved_by` is set and `audit_status` is not `blocke
 | passed | boolean | false for a check with findings |
 | findings | list | ["INS-01: '32' in the text matches no cited metric (cited: turnovers_after=16, …)"] |
 | headline, explanation | string | the draft as checked (draft, check and inject_error steps) |
+| recorded_at | datetime | 2026-10-24T14:21:07.4Z (when the step happened; absent on records written before 2026-10-10) |
 
 A planted error (`inject_error`, actor `test`) is recorded as such, so the trail shows a deliberate test rather than a model mistake.
+
+**broadcast package** (`GET /api/v1/insights/{id}/broadcast`, aired insights only: what a graphics system would receive)
+
+| Field | Type | Example |
+| --- | --- | --- |
+| format | string | `pitch-ledger.broadcast/1` |
+| insight_id, match_id | string | M0002-I0016, M0002 |
+| period, clock_ms, match_minute | integer, integer, number | 2, 1431700, 68.86 |
+| insight_type, team_id, player_id | string | momentum_shift, T02, null |
+| headline, metrics, evidence_event_ids | string, object, list | as in the insight |
+| graphics | list | one per audience mode and language: mode, language, template, display_ms, priority, text, data (the overlay) |
+| audit | object | status, drafts, revisions, approval (`producer` or the auto-approval rule, never an identity), model_version |
 
 **ops alert** (a pipeline problem for the producer; ledger and `OpsAlerts` table)
 

@@ -147,6 +147,8 @@ FastAPI (`pitch_ledger.api`, `pitch-ledger api`); OpenAPI docs at `/api/v1/docs`
 | `GET /api/v1/health` | anyone | status, ledger, match count |
 | `GET /api/v1/matches`, `GET /api/v1/matches/{id}` | anyone | teams, kickoff, venue; players' display names, score, last minute |
 | `GET /api/v1/matches/{id}/overlays?mode=&language=` | anyone (fan view) | overlays of **aired** insights only, in match order |
+| `GET /api/v1/insights/{id}/story` | anyone (aired only) | the Insight Story: pipeline stages, every agent step with unsupported numbers marked, evidence events, overlays; no producer identity |
+| `GET /api/v1/insights/{id}/broadcast` | anyone (aired only) | the broadcast package (schema doc) |
 | `GET /api/v1/me` | producer | the signed-in producer |
 | `GET /api/v1/matches/{id}/insights?status=` | producer | every insight with status (aired, pending, blocked) |
 | `GET /api/v1/insights/{id}` | producer | insight, audit trail, cited evidence events, overlays |
@@ -155,6 +157,7 @@ FastAPI (`pitch_ledger.api`, `pitch-ledger api`); OpenAPI docs at `/api/v1/docs`
 | `POST /api/v1/alerts/{id}/acknowledge` | producer | mark an alert as seen (identity from the token; the first acknowledgement stays) |
 
 - **Producer sign-in:** a Microsoft Entra ID access token for the API app registration with the `Producer` app role. The producer's identity (recorded as `approved_by`) comes from the verified token, never from the request. If the API's Entra settings are missing, producer endpoints refuse (fail closed); `PITCH_LEDGER_API_AUTH=dev` is a local-only stand-in.
+- **Insight Story (Studio `/insights/[id]`, linked from every fan-view card as "How we know"):** one aired insight traced Detected → Analyzed → Explained → Audited → Approved → Published, the agent handoffs with the planted error and the Auditor's finding, the computed numbers and evidence events, the same moment in three audience modes, and the broadcast JSON. Built from ledger records only (`pitch_ledger.api.story`); pending and blocked insights stay in the producer console.
 - **Controls:** request bodies reject unknown fields; IDs are pattern-checked before they reach a file path; CORS is limited to the Studio's origin; decisions are rate-limited per producer (they cost model calls); responses are dedicated schemas (fans never see ratings, audits or pending insights).
 
 ## Agents and orchestration
