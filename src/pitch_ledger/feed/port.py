@@ -6,9 +6,10 @@ adapter in ``pitch_ledger.infra_adapters.eventhubs`` also serves Fabric Eventstr
 endpoints, which speak the same protocol, so switching is a settings change.
 
 Each message body is one feed row exactly as in ``events.jsonl`` / ``tracking.jsonl``
-(docs/event-schema.md: same schema for live and batch). Transport details travel beside
-the body: the row kind, and the wall-clock send time used to measure feed latency. A match starts
-with one ``match`` message carrying the reference rows (``match.json``: match, teams,
+(docs/event-schema.md: same schema for live and batch); an adapter may pack several rows
+into one transport message (Event Hubs packs runs of tracking rows). Transport details
+travel beside the body: the row kind, and the wall-clock send time used to measure feed
+latency. A match starts with one ``match`` message carrying the reference rows (``match.json``: match, teams,
 players), so a consumer needs no shared files.
 """
 

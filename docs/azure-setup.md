@@ -155,6 +155,19 @@ uv run pitch-ledger stream data/M0002 --start-min 60 --minutes 2 --speed 10
 - At 10x the publisher could only send about 3.7 batches a second (one round trip each), so it fell 25 s behind. Real-time pace (1 batch a second) keeps up.
 - These are **pessimistic** numbers for this sandbox. Re-measure from Container Apps (same region, plain AMQP), or from your laptop with the same two commands.
 
+### Measured (2026-10-10, live job in Container Apps)
+
+The `pitch-ledger-live` job (1 vCPU) read M0002 streamed at 25x by `pitch-ledger-feed`, with Foundry models, Cosmos DB, Service Bus and the ADX event store. Every row arrived (2,418 events, 127,116 tracking rows), and 54 triggers became 15 aired insights (225 overlays), two of them corrected by the Auditor. But feed lag grew every minute:
+
+| Minute (UTC) | Rows received | p50 | p95 |
+| --- | --- | --- | --- |
+| 13:03 | 20,999 | 9.3 s | 19.0 s |
+| 13:05 | 21,000 | 54.0 s | 64.4 s |
+| 13:08 | 20,975 | 122.4 s | 132.4 s |
+
+- The job received a steady ~350 rows a second while the feed sent ~560 (22 tracking rows per match second, at 25x), so a backlog built. The Event Hubs SDK's cost is per message (receiving in batches made no difference, about 800 messages a second on a free 4-core machine); the detector and validation take under 0.4 s per tick.
+- Fix: the adapter now packs runs of tracking rows into one message (a JSON array of up to 100 rows), so a 25x stream is about 35 messages a second instead of 560. From this sandbox, the publisher then kept pace at 25x (at most 0.4 s behind; before, it fell 25 s behind at 10x), and every row arrived in source order.
+
 ### Switching to Fabric Eventstream later
 
 No code changes either way (see docs/architecture.md, Live feed):
@@ -535,6 +548,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [x] Feed settings and `ADX_CLUSTER_URI` / `ADX_DATABASE` in the cloud environment; `listen` + `stream` pass with them (1,341/1,341 messages, p50 2.3 s from the cloud session).
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
 - [x] ADX tables created; `check-store` passes (streaming write readable after 3.5 s); M0002 loaded (`store --store adx`, 129,781 rows in 23 s); live `listen --store adx` verified with test match M0099 (1,343 rows, feed health).
+- [x] Live service in Container Apps with Foundry and the ADX store (2026-10-10): M0002 at 25x, all rows received, 54 triggers, 15 insights aired (225 overlays), 2 corrected by the Auditor; feed lag grew to 2 minutes with one row per message, fixed by packing tracking rows (see Measured, 2026-10-10). The live job now waits 10 idle minutes for the feed.
 - [ ] ADX: build the dashboard from `infra/adx/dashboard.kql`.
 - [ ] ADX (optional): clear the test matches before the demo, as database admin: `.delete table Events records <| Events | where match_id in ('M0099', 'M0012')`, and the same for Tracking, TeamState, Triggers, InsightStatus and FeedHealth. The event store only appends, so a rerun of a live match adds a second copy.
 - [ ] Service Bus: 16 triggers of test match M0012 sit in the `triggers` dead-letter queue from a run before the send/receive race fix (reason `stale`); harmless (later runs ignore them), clear them in the portal (Service Bus Explorer, dead-letter, receive) if you like.

@@ -1,7 +1,10 @@
 """Azure Event Hubs feed adapter. Also serves Fabric Eventstream custom endpoints, which
 expose the same Event Hubs protocol: point the settings at the endpoint, no code change.
 
-- Body: the feed row as compact JSON, unchanged. Properties: ``kind`` and ``sent_at``.
+- Body: the feed row as compact JSON, unchanged; consecutive tracking rows are packed into
+  one message as a JSON array of rows (up to ``TRACKING_PER_MESSAGE``), because the SDK's
+  cost is per message and a match sends about 22 tracking rows per match second.
+  Properties: ``kind`` and ``sent_at``.
 - Partition key: the match ID, so a match's rows stay in order (Event Hubs orders within
   a partition).
 - Transport (``auto``): plain AMQP (port 5671) when there is no proxy, as in Azure; AMQP over
@@ -35,6 +38,7 @@ log = logging.getLogger(__name__)
 
 
 Transport = Literal["auto", "amqp", "websockets"]
+TRACKING_PER_MESSAGE = 100  # about 25 KB, well under the 256 KB Basic-tier message limit
 
 
 def client_options(transport: Transport = "auto") -> dict[str, Any]:
@@ -64,24 +68,58 @@ def _text(value: Any) -> str:
     return value.decode() if isinstance(value, bytes) else str(value)
 
 
+def _body(rows: dict[str, Any] | list[dict[str, Any]]) -> str:
+    return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+
+
 def to_event_data(message: FeedMessage, sent_at: float) -> EventData:
-    event = EventData(json.dumps(message.row, ensure_ascii=False, separators=(",", ":")))
+    event = EventData(_body(message.row))
     event.properties = {"kind": message.kind, "sent_at": repr(sent_at)}
     return event
 
 
-def from_event_data(event: EventData) -> FeedMessage | None:
-    """The feed message in a received event; None for anything else on the hub."""
+def to_event_datas(messages: Sequence[FeedMessage], sent_at: float) -> list[EventData]:
+    """One event per message, except runs of tracking rows: those go as JSON arrays of up
+    to ``TRACKING_PER_MESSAGE`` rows. Order is kept (a run ends at the next non-tracking
+    message)."""
+    out: list[EventData] = []
+    run: list[dict[str, Any]] = []
+
+    def close_run() -> None:
+        if run:
+            event = EventData(_body(run))
+            event.properties = {"kind": "tracking", "sent_at": repr(sent_at)}
+            out.append(event)
+            run.clear()
+
+    for message in messages:
+        if message.kind != "tracking":
+            close_run()
+            out.append(to_event_data(message, sent_at))
+            continue
+        run.append(message.row)
+        if len(run) == TRACKING_PER_MESSAGE:
+            close_run()
+    close_run()
+    return out
+
+
+def from_event_data(event: EventData) -> list[FeedMessage]:
+    """The feed messages in a received event (several for a packed array of rows); none for
+    anything else on the hub."""
     props = {_text(k): _text(v) for k, v in (event.properties or {}).items()}
     kind = props.get("kind")
     if kind not in FEED_KINDS:
-        return None
+        return []
     try:
-        row = json.loads(event.body_as_str())
+        body = json.loads(event.body_as_str())
         sent_at = float(props["sent_at"]) if "sent_at" in props else None
     except (ValueError, TypeError):
-        return None
-    return FeedMessage(cast(FeedKind, kind), row, sent_at)
+        return []
+    rows = body if isinstance(body, list) and kind != "match" else [body]
+    if not all(isinstance(row, dict) for row in rows):
+        return []
+    return [FeedMessage(cast(FeedKind, kind), row, sent_at) for row in rows]
 
 
 class EventHubsPublisher:
@@ -124,8 +162,7 @@ class EventHubsPublisher:
         now = self._clock()
         for match_id, group in by_match.items():
             batch = self._producer.create_batch(partition_key=match_id)
-            for message in group:
-                event = to_event_data(message, now)
+            for event in to_event_datas(group, now):
                 try:
                     batch.add(event)
                 except ValueError:  # batch full: send it and start the next one
@@ -197,8 +234,7 @@ class EventHubsSubscriber:
 
     def _on_event(self, _ctx: PartitionContext, event: EventData | None) -> None:
         now = self._clock()
-        message = from_event_data(event) if event is not None else None
-        if message is not None:
+        for message in from_event_data(event) if event is not None else []:
             self._queue.put(Delivered(message, now))
 
     def _on_error(self, _ctx: PartitionContext | None, error: Exception) -> None:

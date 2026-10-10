@@ -47,7 +47,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 3. `engine/detector.py`: triggers with evidence event IDs.
 4. Scenario tests: each scenario is detected within its time limit; the baseline produces no false momentum alerts.
 5. **Azure setup in parallel:** personal subscription, budget alerts, resource group, Foundry project with two model deployments (confirm region availability).
-6. ~~**Latency spike:** Fabric trial, Eventstream → local Python consumer; time the hop.~~ Resolved 2026-10-09: the Fabric trial is not available, so the live feed is Azure Event Hubs. Measured from a cloud session through its proxy: no loss, p50 2.5–3.3 s, p95 4.6–7.3 s (pessimistic; re-measure from Container Apps).
+6. ~~**Latency spike:** Fabric trial, Eventstream → local Python consumer; time the hop.~~ Resolved 2026-10-09: the Fabric trial is not available, so the live feed is Azure Event Hubs. Measured from a cloud session through its proxy: no loss, p50 2.5–3.3 s, p95 4.6–7.3 s (pessimistic; re-measure from Container Apps). Re-measured 2026-10-10 from Container Apps: one row per message capped the live job at ~350 rows a second, below a 25x stream; tracking rows are now packed (docs/azure-setup.md, Measured 2026-10-10).
 
 **Done when:** all 5 scenarios pass detection tests locally.
 

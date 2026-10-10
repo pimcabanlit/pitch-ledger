@@ -11,12 +11,14 @@ from azure.eventhub import EventData, TransportType
 
 from pitch_ledger.feed import FeedMessage, FilePublisher
 from pitch_ledger.infra_adapters.eventhubs import (
+    TRACKING_PER_MESSAGE,
     EventHubsPublisher,
     EventHubsSubscriber,
     client_options,
     from_event_data,
     fully_qualified,
     to_event_data,
+    to_event_datas,
 )
 from pitch_ledger.infra_adapters.feeds import FeedSettings, open_publisher
 
@@ -55,32 +57,47 @@ class FakeProducer:
 def test_publish_keeps_bodies_unchanged_and_splits_full_batches() -> None:
     producer = FakeProducer(capacity=2)
     publisher = EventHubsPublisher(producer, clock=lambda: 12.5)
-    messages = [_msg(clock_ms=i * 1000) for i in range(5)]
+    messages = [_msg(clock_ms=i * 1000, kind="event") for i in range(5)]
     publisher.publish(messages)
     assert [len(b) for b in producer.sent] == [2, 2, 1]
     assert {b.partition_key for b in producer.sent} == {"M0002"}  # order kept per match
     events = [e for b in producer.sent for e in b.events]
     assert [json.loads(e.body_as_str()) for e in events] == [m.row for m in messages]
-    assert events[0].properties == {"kind": "tracking", "sent_at": "12.5"}
+    assert events[0].properties == {"kind": "event", "sent_at": "12.5"}
     publisher.close()
     assert producer.closed
 
 
+def test_tracking_runs_are_packed_in_order_and_unpacked_on_receipt() -> None:
+    n = TRACKING_PER_MESSAGE
+    messages = ([_msg(clock_ms=i) for i in range(n + 3)] + [_msg(clock_ms=500, kind="event")]
+                + [_msg(clock_ms=600 + i) for i in range(2)])  # fmt: skip
+    events = to_event_datas(messages, 7.0)
+    bodies = [json.loads(e.body_as_str()) for e in events]
+    assert [len(b) if isinstance(b, list) else "row" for b in bodies] == [n, 3, "row", 2]
+    assert [e.properties["kind"] for e in events] == ["tracking", "tracking", "event", "tracking"]
+    received = [m for e in events for m in from_event_data(e)]
+    assert received == [FeedMessage(m.kind, m.row, 7.0) for m in messages]  # same order
+
+
 def test_publish_uses_one_partition_key_per_match() -> None:
     producer = FakeProducer(capacity=10)
-    EventHubsPublisher(producer).publish([_msg("M0001"), _msg("M0002"), _msg("M0001")])
+    EventHubsPublisher(producer).publish(
+        [_msg(m, kind="event") for m in ("M0001", "M0002", "M0001")]
+    )
     assert [(b.partition_key, len(b)) for b in producer.sent] == [("M0001", 2), ("M0002", 1)]
 
 
 def test_received_events_convert_back_and_foreign_events_are_skipped() -> None:
-    message = from_event_data(to_event_data(_msg(kind="event"), 3.25))
-    assert message == FeedMessage("event", _msg().row, 3.25)
+    messages = from_event_data(to_event_data(_msg(kind="event"), 3.25))
+    assert messages == [FeedMessage("event", _msg().row, 3.25)]
     foreign = EventData("{}")
     foreign.properties = {b"kind": b"telemetry"}  # bytes keys, as some transports deliver
-    assert from_event_data(foreign) is None
-    broken = EventData("not json")
-    broken.properties = {"kind": "event"}
-    assert from_event_data(broken) is None
+    assert from_event_data(foreign) == []
+    for body in ("not json", "[1, 2]"):
+        broken = EventData(body)
+        broken.properties = {"kind": "tracking"}
+        assert from_event_data(broken) == []
 
 
 class FakeConsumer:
@@ -99,11 +116,11 @@ class FakeConsumer:
 
 
 def test_subscriber_yields_feed_messages_and_records_errors() -> None:
-    consumer = FakeConsumer([to_event_data(_msg(clock_ms=1), 1.0), EventData("{}"),
-                             to_event_data(_msg(clock_ms=2), 1.0)])  # fmt: skip
+    packed = to_event_datas([_msg(clock_ms=2), _msg(clock_ms=3)], 1.0)
+    consumer = FakeConsumer([to_event_data(_msg(clock_ms=1), 1.0), EventData("{}"), *packed])
     subscriber = EventHubsSubscriber(consumer, clock=lambda: 1.2)
     got = list(subscriber.messages(idle_timeout_s=0.5))
-    assert [d.message.row["clock_ms"] for d in got] == [1, 2]
+    assert [d.message.row["clock_ms"] for d in got] == [1, 2, 3]
     assert got[0].latency_ms == pytest.approx(200)
     assert subscriber.ready.is_set()
     assert subscriber.last_error == "RuntimeError: link detached"
