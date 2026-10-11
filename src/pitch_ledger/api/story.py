@@ -32,6 +32,7 @@ from pitch_ledger.validation.insight_rules import unsupported_numbers
 
 PRODUCER_ACTIONS = {"producer_approve", "producer_block"}
 DRAFT_ACTIONS = {"draft", "fallback"}
+COPY_CHECK = "copy_check"  # its fallbacks: on-screen versions that use template text
 VERDICTS = {"approve", "correct", "block"}
 AUTO_RULE = "auto-approval rule"
 
@@ -117,13 +118,16 @@ def _stages(
     after = next((w for w in windows if w.label == "after"), None)
     span = f" ({after.start_minute:.0f}'–{after.end_minute:.0f}')" if after else ""  # noqa: RUF001
     computed = len(trigger.metrics) if trigger else len(insight.metrics)
-    drafts = [s for s in steps if s.action in DRAFT_ACTIONS]
+    # The insight's own drafts; the copy check's fallbacks concern on-screen versions.
+    text_steps = [s for s in steps if s.action in DRAFT_ACTIONS and s.agent != COPY_CHECK]
+    drafts = [s for s in text_steps if s.action == "draft"]
     revisions = sum(s.action == "revise" for s in steps)
     agent = insight.created_by_agent
-    if drafts:
-        explained = f"{len(drafts)} draft{'s' * (len(drafts) > 1)} by the {agent}"
-        if any(s.action == "fallback" for s in drafts):
-            explained += " (template fallback used)"
+    if text_steps:
+        explained = (f"{len(drafts)} draft{'s' * (len(drafts) != 1)} by the {agent}"
+                     if drafts else f"Template copy (the {agent} was unavailable)")  # fmt: skip
+        if drafts and any(s.action == "fallback" for s in text_steps):
+            explained += "; the headline and explanation on air are template copy"
     else:
         explained = "Template copy from computed numbers (low-risk type, no model)"
     verdict = insight.audit_status.value
@@ -142,6 +146,11 @@ def _stages(
         if overlays
         else "Not on air"
     )
+    templated = sum(len(s.findings) for s in steps
+                    if s.agent == COPY_CHECK and s.action == "fallback")  # fmt: skip
+    if overlays and templated:
+        published += (f"; {templated} of them from templates (the model's text failed the "
+                      "number or style check)")  # fmt: skip
     return [
         StoryStage(key="detected", label="Detected", done=True,
                    detail=f"{rule.capitalize()} at {minute}"),
@@ -223,7 +232,7 @@ def build_broadcast(
         graphics=graphics,
         audit=BroadcastAudit(
             status=insight.audit_status.value,
-            drafts=sum(a.action in DRAFT_ACTIONS for a in audits),
+            drafts=sum(a.action in DRAFT_ACTIONS and a.actor != COPY_CHECK for a in audits),
             revisions=sum(a.action == "revise" for a in audits),
             approval=approval_label(insight.approved_by),
             model_version=insight.model_version,

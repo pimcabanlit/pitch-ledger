@@ -135,6 +135,24 @@ def test_insight_story_traces_an_aired_insight_without_producer_identity(
     assert story["trigger"]["rule_id"] == "momentum_shift" and len(story["evidence"]) == 33
     assert sum(story["evidence_counts"].values()) == 33 and len(story["overlays"]) == 15
 
+    assert stages["explained"]["detail"] == "2 drafts by the explainer"  # the planted, the fix
+
+    # Two on-screen versions that fell back to templates do not make the insight a template.
+    from pitch_ledger.schema import AuditRecord
+
+    ledger = FileLedger(data_dir / "M0002" / "ledger")
+    ledger.add_audit(AuditRecord(
+        audit_id=ledger.next_id("M0002", "A"), match_id="M0002", insight_id=insight_id,
+        trigger_id=view["insight"]["trigger_id"], round=0, actor="copy_check",
+        action="fallback", findings=["single_metric/es: two figures", "single_metric/fil: x"],
+    ))  # fmt: skip
+    ledger.flush()
+    stages = {s["key"]: s for s in client.get(f"/api/v1/insights/{insight_id}/story").json()[
+        "stages"]}  # fmt: skip
+    assert stages["explained"]["detail"] == "2 drafts by the explainer"
+    assert stages["published"]["detail"].endswith("; 2 of them from templates (the model's text "
+                                                  "failed the number or style check)")  # fmt: skip
+
     package = client.get(f"/api/v1/insights/{insight_id}/broadcast").json()
     assert package["format"] == "pitch-ledger.broadcast/1"
     assert package["metrics"] == story["insight"]["metrics"] and len(package["graphics"]) == 15

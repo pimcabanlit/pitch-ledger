@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from pitch_ledger.agents.auditor import Auditor
+from pitch_ledger.agents.auditor import Auditor, not_a_problem
 from pitch_ledger.agents.contracts import InsightDraft, ReviewVerdict
 from pitch_ledger.agents.flow import Services, decide, explain_and_audit, localize, template_insight
 from pitch_ledger.agents.model_manager import ModelManager, ModelSettings
@@ -125,6 +125,33 @@ def test_review_can_send_back_wording(cases: list[Case]) -> None:
     assert insight.audit_status == "corrected"
     assert _actions(svc, insight) == ["draft", "check", "review", "revise", "draft", "check",
                                       "review", "correct"]  # fmt: skip
+
+
+def test_review_findings_that_are_not_problems_do_not_send_a_draft_back(
+    cases: list[Case],
+) -> None:
+    """Findings from a Foundry live run: rounding notes and confirmations, with "revise"."""
+    case = _case(cases, "M0005", "player_form")
+    noise = [
+        "The draft states the goal was at 9', but the metric minute is 8.8, which should be "
+        "rounded to 9' for consistency.",
+        "The draft claims Corrowmere Town had the better chances with a team xG of 0.35, which "
+        "is supported by the metrics, so no issue there.",
+        "The headline is accurate and supported by the metrics and signals.",
+        "The draft is neutral and respectful and safe for broadcast.",
+    ]
+    reviewer = ScriptedChatClient([ReviewVerdict(verdict="revise", issues=noise).model_dump_json()])
+    svc = _services(case, {"auditor": reviewer})
+    insight = asyncio.run(explain_and_audit(case.trigger, case.facts, svc))
+    assert insight.audit_status == "approved"
+    assert _actions(svc, insight) == ["draft", "check", "review", "approve"]
+
+
+def test_not_a_problem_keeps_real_objections() -> None:
+    assert not not_a_problem("The headline is accurate, but it claims a cause the data lacks.")
+    assert not not_a_problem("The draft says the goal equalized, contradicting goal_before.")
+    assert not not_a_problem("Claims he is injured.")
+    assert not_a_problem("The minute 30.5 should be rounded to 30'.")
 
 
 def test_localize_five_modes_three_languages(cases: list[Case]) -> None:

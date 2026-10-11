@@ -173,7 +173,7 @@ FastAPI (`pitch_ledger.api`, `pitch-ledger api`); OpenAPI docs at `/api/v1/docs`
 | Agent | Job | Model tier | Pattern |
 | --- | --- | --- | --- |
 | Explainer | What happened, then why it matters (a comparison, the match state, the opponent's response), from metrics and context signals chosen in code; cites evidence events | Stronger | Sequential; maker in maker-checker loop |
-| Auditor | Recomputes every number; checks editorial form in code (length, clichés, unsupported claims, repetition); a model checks claims, tone, neutrality; approve, correct or block | Stronger | Checker (max 2 rounds; style-only failures air as template copy) |
+| Auditor | Recomputes every number; checks editorial form in code (length, clichés, unsupported claims, repetition, gendered pronouns); a model checks claims, tone, neutrality. Reviewer findings that only note rounding or confirm something is right are dropped in code, so they never force a revision | Stronger | Checker (max 2 rounds; style-only failures air as template copy) |
 | Narrator | Half-time and full-time recaps: do the chances back the scoreline, how the match moved | Stronger | Handoff at breaks; output audited |
 | Personalizer | Analyst, casual, club, player and single-metric versions: same facts, different depth and angle | Small, fast | One call for all modes |
 | Translator | Each version into the other languages, numbers unchanged | Small, fast | Concurrent per mode, one call for both languages |

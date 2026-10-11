@@ -190,3 +190,11 @@ def test_signals_give_models_the_context_in_words(cases: list[Case]) -> None:
 )
 def test_a_before_after_pair_counts_once_in_every_language(text: str, count: int) -> None:
     assert figures(text) == count
+
+
+def test_dominating_and_gendered_pronouns_are_caught() -> None:
+    text = "After already dominating chances, L. Haugland scores his second."
+    issues = editorial_issues(text, "overlay")
+    assert any("dominat" in i for i in issues)
+    assert any("gendered pronouns" in i for i in issues)
+    assert editorial_issues("L. Haugland scores again; the scorer's second.", "overlay") == []
