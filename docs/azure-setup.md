@@ -305,11 +305,11 @@ COSMOS_ENDPOINT=https://pitch-ledger-cosmos.documents.azure.com:443/
 
 The endpoint is on the account's Overview page (URI). Cloud sessions: allow **`*.documents.azure.com`** in the environment's network access. Then `uv run pitch-ledger check-ledger` writes, reads and deletes one test document.
 
-### 5. Season history container
+### 5. Season history (match records)
 
-Match records for season facts (one document per finished match) live in a second container, `history`, partition key `/season`. It sits in the same database and shares its throughput, so it costs nothing extra. The Deploy workflow creates it (`infra/modules/history-store.bicep`), and the existing data-plane role already covers it (scope `/`). Settings: `PITCH_LEDGER_HISTORY=cosmos` (the apps and jobs have it). The container name defaults to `history` (`PITCH_LEDGER_COSMOS_HISTORY_CONTAINER`).
+Match records for season facts (one document per finished match) live in the same `ledger` container, in a partition per season (`history:2026-27`). No match's ledger partition can reach it, so a replay that empties a match leaves the records alone. No container is added: a separate `history` container was tried first, and the account's 1000 RU/s free limit refused it (the deploy reported that it would raise the total to 1600 RU/s). The existing data-plane role covers it. Setting: `PITCH_LEDGER_HISTORY=cosmos` (the apps and jobs have it).
 
-Fill it once with the six demo matches: `uv run pitch-ledger generate-all --out data`, then `uv run pitch-ledger history build --data data --history cosmos --store adx`. After that, replays and the live job keep each match's record themselves.
+Fill it once with the six demo matches: `uv run pitch-ledger generate-all --out data`, then `uv run pitch-ledger history build --data data --history cosmos`. Add `--store adx` once the season-history tables exist in ADX. After that, replays and the live job keep each match's record themselves.
 
 ## Trigger queue: Azure Service Bus (Basic)
 

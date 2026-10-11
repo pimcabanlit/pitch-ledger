@@ -5,8 +5,8 @@
 - ``PITCH_LEDGER_QUEUE``: ``memory`` (default) or ``servicebus``
   (``PITCH_LEDGER_SERVICEBUS_NAMESPACE``, queue ``triggers``).
 - ``PITCH_LEDGER_HISTORY``: where match records are kept, ``file`` (default;
-  ``<data>/history/records.jsonl``) or ``cosmos`` (same account and database, container
-  ``history``).
+  ``<data>/history/records.jsonl``) or ``cosmos`` (the ledger's container, one partition
+  per season).
 """
 
 from pathlib import Path
@@ -32,7 +32,6 @@ class LedgerQueueSettings(BaseSettings):
     cosmos_database: str = "pitchledger"
     cosmos_container: str = "ledger"
     history: Literal["file", "cosmos"] = "file"
-    cosmos_history_container: str = "history"
     queue: Literal["memory", "servicebus"] = "memory"
     servicebus_namespace: str | None = None  # <name>.servicebus.windows.net
     servicebus_queue: str = "triggers"
@@ -79,7 +78,7 @@ def open_ledger(settings: LedgerQueueSettings, fresh_match: str) -> InMemoryLedg
 def describe_history(settings: LedgerQueueSettings) -> str:
     if settings.history == "file":
         return "file"
-    return f"cosmos {settings.cosmos_database}/{settings.cosmos_history_container}"
+    return f"cosmos {settings.cosmos_database}/{settings.cosmos_container} (history:<season>)"
 
 
 def open_history(settings: LedgerQueueSettings, data_dir: Path) -> HistoryStore:
@@ -93,7 +92,7 @@ def open_history(settings: LedgerQueueSettings, data_dir: Path) -> HistoryStore:
     return CosmosHistory.connect(
         settings.cosmos_endpoint,
         settings.cosmos_database,
-        settings.cosmos_history_container,
+        settings.cosmos_container,
         settings.key(),
     )
 

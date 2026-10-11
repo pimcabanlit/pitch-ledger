@@ -103,22 +103,27 @@ class FakeContainer:
 
     def query_items(self, query: str, **kwargs: Any) -> list[dict[str, Any]]:
         self.queries.append({"query": query, **kwargs})
-        competition = kwargs["parameters"][0]["value"]
-        season = kwargs["partition_key"]
+        kind, competition = (p["value"] for p in kwargs["parameters"])
+        part = kwargs["partition_key"]
         return [d for d in self.docs.values()
-                if d["season"] == season and d["competition"] == competition]  # fmt: skip
+                if d["match_id"] == part and d["kind"] == kind
+                and d["competition"] == competition]  # fmt: skip
 
     def delete_item(self, item: str, partition_key: str) -> None:
         self.docs.pop(item, None)
 
 
 def test_cosmos_history_one_document_per_match_read_by_season(m0001: Built, m0002: Built) -> None:
+    """Records share the ledger container, in a partition per season that no match's
+    ledger (partition M0001, M0002, ...) can reach."""
     container = FakeContainer()
     store = CosmosHistory(container)
     store.put(_record(m0002))
     store.put(_record(m0001))
     store.put(_record(m0002))
-    assert sorted(container.docs) == ["M0001", "M0002"]  # id = match ID, upserted
+    assert sorted(container.docs) == ["record-M0001", "record-M0002"]  # upserted per match
+    assert {d["match_id"] for d in container.docs.values()} == {"history:2026-27"}
     found = store.season("Harbour Coast League", "2026-27")
     assert [r.match_id for r in found] == ["M0001", "M0002"] and found[1] == _record(m0002)
-    assert container.queries[-1]["partition_key"] == "2026-27"  # one partition per season
+    assert container.queries[-1]["partition_key"] == "history:2026-27"
+    assert store.season("Harbour Coast League", "2025-26") == []

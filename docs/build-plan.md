@@ -123,7 +123,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 
    Done 2026-10-11. Storage:
    - one record per finished match (result, team and player match stats, goals), built from the match rows by the engine;
-   - kept in a Cosmos DB `history` container (partition `/season`, shared free throughput) and in the ADX tables `MatchResults`, `TeamMatchStats` and `PlayerMatchStats`;
+   - kept in the Cosmos DB ledger container, in a partition per season (`history:2026-27`), and in the ADX tables `MatchResults`, `TeamMatchStats` and `PlayerMatchStats`;
    - scorecard runs in `EvalRuns` (`evaluate --store`); insight outcomes stay in `InsightStatus`;
    - written by replays, by the live service at full time, and by `history build`;
    - the demo matches are one matchday a week from 2026-08-22.
