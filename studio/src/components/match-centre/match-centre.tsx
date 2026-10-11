@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Pause, Play, Radio, RotateCcw, Star } from "lucide-react";
+import { Pause, Play, Radio, RotateCcw } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -40,7 +40,7 @@ import {
 import { METRIC_KEYS, METRICS, metricLabel, metricUnit, type MetricKey } from "@/lib/metrics";
 import { usePreferences } from "@/lib/preferences";
 import { useRealtime } from "@/lib/realtime";
-import { cn, minuteLabel } from "@/lib/utils";
+import { minuteLabel } from "@/lib/utils";
 
 const MODE_LABELS: Record<Mode, string> = {
   casual: "Casual fan",
@@ -140,7 +140,6 @@ function Centre({
   const [prefs, setPrefs] = usePreferences();
   const { mode, language, metric } = prefs;
   const [club, setClub] = useState("all");
-  const [viewOpen, setViewOpen] = useState(false); // phones: the Your view pickers, collapsed
   const [insightsOnly, setInsightsOnly] = useState(false);
   const stop = useCallback(() => setPlaying(false), []);
   const [t, setT] = useReplayClock(axis.total, speed, playing, stop);
@@ -180,8 +179,6 @@ function Centre({
   );
   const followed = prefs.player && players.has(prefs.player) ? players.get(prefs.player)! : null;
   const favourite = (team: string) => prefs.clubs.includes(team);
-  const toggleFavourite = (team: string) =>
-    setPrefs({ clubs: favourite(team) ? prefs.clubs.filter((c) => c !== team) : [...prefs.clubs, team] });
   const keep = useCallback((team: string | null | undefined) => club === "all" || !team || team === club, [club]);
 
   const times = useMemo(() => timeline.events.map((e) => toAxis(axis, e.period, e.clock_ms)), [timeline, axis]);
@@ -274,17 +271,8 @@ function Centre({
   const theirMoments = followed
     ? insights.filter((i) => i.t <= tick && i.overlay.data.player_id === followed.player_id).reverse()
     : [];
-  const viewSummary = [
-    MODE_LABELS[mode],
-    LANGUAGES.find((l) => l.code === language)?.label ?? language,
-    club === "all" ? null : teams[club]?.short_name,
-    METRICS[metric].label,
-    followed ? `Following ${followed.display_name}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
   const metricSelect = (id: string) => (
-    <Select id={id} value={metric} onChange={(e) => (setPrefs({ metric: e.target.value as MetricKey }), setViewOpen(false))}>
+    <Select id={id} value={metric} onChange={(e) => setPrefs({ metric: e.target.value as MetricKey })}>
       {METRIC_KEYS.map((k) => (
         <option key={k} value={k}>
           {METRICS[k].label}
@@ -303,51 +291,13 @@ function Centre({
         {match.home.name} v {match.away.name}
       </h1>
 
-      <Card
-        className="sticky top-[var(--header-h)] z-30 p-3 shadow-md md:p-4"
-        aria-labelledby="your-view"
-      >
-        <button
-          type="button"
-          onClick={() => setViewOpen(!viewOpen)}
-          aria-expanded={viewOpen}
-          aria-controls="your-view-pickers"
-          className="flex w-full items-center gap-2 text-left text-sm md:hidden"
-        >
-          <span className="shrink-0 font-semibold">Your view</span>
-          <span className="min-w-0 flex-1 truncate text-slate-600">{viewSummary}</span>
-          <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", viewOpen && "rotate-180")} aria-hidden />
-        </button>
-        <div id="your-view-pickers" className={cn(viewOpen ? "mt-3 block" : "hidden", "md:mt-0 md:block")}>
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h2 id="your-view" className="hidden text-sm font-semibold md:block">
-            Your view
-          </h2>
-          <span className="text-xs text-slate-500">Remembered on this device</span>
-          <div className="flex flex-wrap gap-1.5 sm:ml-auto" role="group" aria-label="Favourite clubs">
-            {[match.home, match.away].map((team) => (
-              <button
-                key={team.team_id}
-                type="button"
-                onClick={() => toggleFavourite(team.team_id)}
-                aria-pressed={favourite(team.team_id)}
-                className={cn(
-                  "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
-                  favourite(team.team_id)
-                    ? "border-amber-300 bg-amber-50 text-amber-900"
-                    : "border-slate-300 text-slate-600 hover:bg-slate-50",
-                )}
-              >
-                <Star className={cn("h-3.5 w-3.5", favourite(team.team_id) && "fill-amber-400 text-amber-500")} aria-hidden />
-                {team.short_name}
-                <span className="sr-only"> favourite club</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      <Card className="p-3 md:p-4" aria-labelledby="your-view">
+        <h2 id="your-view" className="sr-only">
+          Your view (remembered on this device)
+        </h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Field label="Mode" tip={<InfoTip term="modes" align="start" />}>
-            <Select value={mode} onChange={(e) => (setPrefs({ mode: e.target.value as Mode }), setViewOpen(false))}>
+            <Select value={mode} onChange={(e) => setPrefs({ mode: e.target.value as Mode })}>
               {MODES.map((m) => (
                 <option key={m} value={m}>
                   {MODE_LABELS[m]}
@@ -356,7 +306,7 @@ function Centre({
             </Select>
           </Field>
           <Field label="Language">
-            <Select value={language} onChange={(e) => (setPrefs({ language: e.target.value }), setViewOpen(false))}>
+            <Select value={language} onChange={(e) => setPrefs({ language: e.target.value })}>
               {LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
                   {l.label}
@@ -365,7 +315,7 @@ function Centre({
             </Select>
           </Field>
           <Field label="Show">
-            <Select value={club} onChange={(e) => (setClub(e.target.value), setViewOpen(false))}>
+            <Select value={club} onChange={(e) => setClub(e.target.value)}>
               <option value="all">Both clubs</option>
               {[match.home, match.away].map((team) => (
                 <option key={team.team_id} value={team.team_id}>
@@ -378,7 +328,7 @@ function Centre({
           <Field label="Follow a player" tip={<InfoTip term="follow" />}>
             <Select
               value={followed?.player_id ?? ""}
-              onChange={(e) => (setPrefs({ player: e.target.value || null }), setViewOpen(false))}
+              onChange={(e) => setPrefs({ player: e.target.value || null })}
             >
               <option value="">Nobody</option>
               {[match.home, match.away].map((team) => (
@@ -398,7 +348,6 @@ function Centre({
           <Field label="Your metric" tip={<InfoTip term={METRICS[metric].term} align="end" />}>
             {metricSelect("metric-view")}
           </Field>
-        </div>
         </div>
       </Card>
 

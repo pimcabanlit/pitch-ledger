@@ -8,15 +8,33 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api, type MatchSummary, type Team } from "@/lib/api";
 import { usePreferences } from "@/lib/preferences";
+import { cn } from "@/lib/utils";
 
-function TeamRow({ team, score, favourite }: { team: Team; score: number | null; favourite: boolean }) {
+function TeamRow({
+  team,
+  score,
+  favourite,
+  onToggle,
+}: {
+  team: Team;
+  score: number | null;
+  favourite: boolean;
+  onToggle: () => void;
+}) {
   return (
     <div className="flex items-center gap-2 font-medium">
       <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: team.primary_color }} />
       <span className="truncate">{team.name}</span>
-      {favourite && (
-        <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-500" aria-label="Favourite club" />
-      )}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={favourite}
+        aria-label={`Favourite club: ${team.name}`}
+        title={favourite ? "Favourite club (listed first)" : "Mark as a favourite club"}
+        className="relative z-10 -m-1 shrink-0 rounded p-1 text-slate-300 hover:text-amber-500 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+      >
+        <Star className={cn("h-3.5 w-3.5", favourite && "fill-amber-400 text-amber-500")} aria-hidden />
+      </button>
       <span className="ml-auto text-lg tabular-nums">{score ?? "–"}</span>
     </div>
   );
@@ -36,7 +54,9 @@ function MatchCardSkeleton() {
 export function MatchList() {
   const [matches, setMatches] = useState<MatchSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [{ clubs }] = usePreferences();
+  const [{ clubs }, setPrefs] = usePreferences();
+  const toggle = (team: string) =>
+    setPrefs({ clubs: clubs.includes(team) ? clubs.filter((c) => c !== team) : [...clubs, team] });
   const isFavourite = (m: MatchSummary) => clubs.includes(m.home.team_id) || clubs.includes(m.away.team_id);
 
   const load = useCallback(() => {
@@ -76,26 +96,39 @@ export function MatchList() {
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {[...matches.filter(isFavourite), ...matches.filter((m) => !isFavourite(m))].map((m) => (
         <li key={m.match_id}>
-          <Link href={`/matches/${m.match_id}`} className="group block h-full">
-            <Card className="flex h-full flex-col gap-2 p-4 transition-shadow group-hover:shadow-md">
-              <div className="text-xs text-slate-500">
-                {m.match_id} · {new Date(m.kickoff_utc).toLocaleDateString()} · {m.venue}
-              </div>
-              <TeamRow team={m.home} score={m.score_home} favourite={clubs.includes(m.home.team_id)} />
-              <TeamRow team={m.away} score={m.score_away} favourite={clubs.includes(m.away.team_id)} />
-              <div className="mt-auto flex items-center gap-1 pt-1 text-xs text-slate-500">
-                {m.aired_insights !== null && (
-                  <>
-                    <BookCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
-                    {m.aired_insights} aired {m.aired_insights === 1 ? "insight" : "insights"}
-                  </>
-                )}
-                <span className="ml-auto flex items-center text-slate-600 group-hover:text-slate-900">
-                  Watch <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-                </span>
-              </div>
-            </Card>
-          </Link>
+          <Card className="relative flex h-full flex-col gap-2 p-4 transition-shadow has-[a:hover]:shadow-md">
+            <div className="text-xs text-slate-500">
+              {m.match_id} · {new Date(m.kickoff_utc).toLocaleDateString()} · {m.venue}
+            </div>
+            <TeamRow
+              team={m.home}
+              score={m.score_home}
+              favourite={clubs.includes(m.home.team_id)}
+              onToggle={() => toggle(m.home.team_id)}
+            />
+            <TeamRow
+              team={m.away}
+              score={m.score_away}
+              favourite={clubs.includes(m.away.team_id)}
+              onToggle={() => toggle(m.away.team_id)}
+            />
+            <div className="mt-auto flex items-center gap-1 pt-1 text-xs text-slate-500">
+              {m.aired_insights !== null && (
+                <>
+                  <BookCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />
+                  {m.aired_insights} aired {m.aired_insights === 1 ? "insight" : "insights"}
+                </>
+              )}
+              {/* The whole card opens the match; the stars sit above this link. */}
+              <Link
+                href={`/matches/${m.match_id}`}
+                className="ml-auto flex items-center text-slate-600 after:absolute after:inset-0 after:rounded-lg hover:text-slate-900 focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-slate-400"
+              >
+                Watch<span className="sr-only">: {m.home.name} v {m.away.name}</span>
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+              </Link>
+            </div>
+          </Card>
         </li>
       ))}
     </ul>
