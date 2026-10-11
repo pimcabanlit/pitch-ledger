@@ -2,17 +2,21 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { BookCheck, ChevronRight } from "lucide-react";
+import { BookCheck, ChevronRight, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api, type MatchSummary, type Team } from "@/lib/api";
+import { usePreferences } from "@/lib/preferences";
 
-function TeamRow({ team, score }: { team: Team; score: number | null }) {
+function TeamRow({ team, score, favourite }: { team: Team; score: number | null; favourite: boolean }) {
   return (
     <div className="flex items-center gap-2 font-medium">
       <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: team.primary_color }} />
       <span className="truncate">{team.name}</span>
+      {favourite && (
+        <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-500" aria-label="Favourite club" />
+      )}
       <span className="ml-auto text-lg tabular-nums">{score ?? "–"}</span>
     </div>
   );
@@ -32,6 +36,8 @@ function MatchCardSkeleton() {
 export function MatchList() {
   const [matches, setMatches] = useState<MatchSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [{ clubs }] = usePreferences();
+  const isFavourite = (m: MatchSummary) => clubs.includes(m.home.team_id) || clubs.includes(m.away.team_id);
 
   const load = useCallback(() => {
     api.matches().then(setMatches, (e: Error) => setError(e.message));
@@ -68,15 +74,15 @@ export function MatchList() {
 
   return (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {matches.map((m) => (
+      {[...matches.filter(isFavourite), ...matches.filter((m) => !isFavourite(m))].map((m) => (
         <li key={m.match_id}>
           <Link href={`/matches/${m.match_id}`} className="group block h-full">
             <Card className="flex h-full flex-col gap-2 p-4 transition-shadow group-hover:shadow-md">
               <div className="text-xs text-slate-500">
                 {m.match_id} · {new Date(m.kickoff_utc).toLocaleDateString()} · {m.venue}
               </div>
-              <TeamRow team={m.home} score={m.score_home} />
-              <TeamRow team={m.away} score={m.score_away} />
+              <TeamRow team={m.home} score={m.score_home} favourite={clubs.includes(m.home.team_id)} />
+              <TeamRow team={m.away} score={m.score_away} favourite={clubs.includes(m.away.team_id)} />
               <div className="mt-auto flex items-center gap-1 pt-1 text-xs text-slate-500">
                 {m.aired_insights !== null && (
                   <>

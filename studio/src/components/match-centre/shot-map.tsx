@@ -1,4 +1,4 @@
-import type { Side } from "@/components/match-centre/control-chart";
+import type { Side } from "@/components/match-centre/metric-chart";
 import { ChartPitch, svgY } from "@/components/match-centre/pitch";
 import { type Axis, toAxis } from "@/components/match-centre/replay";
 import type { ShotPoint } from "@/lib/api";

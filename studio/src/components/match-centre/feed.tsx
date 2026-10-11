@@ -13,6 +13,8 @@ export interface FeedItem {
   text?: string;
   color: string;
   insightId?: string;
+  chips?: string[]; // figures for the viewer's chosen metric that this insight carries
+  mine?: boolean; // about the followed player
 }
 
 const ICONS = {
@@ -32,7 +34,10 @@ export function Feed({ items, onJump }: { items: FeedItem[]; onJump: (t: number)
       {items.map((item) => {
         const Icon = ICONS[item.kind];
         return (
-          <li key={item.id} className={item.kind === "insight" ? "bg-sky-50/60" : undefined}>
+          <li
+            key={item.id}
+            className={`${item.kind === "insight" ? "bg-sky-50/60" : ""} ${item.mine ? "border-l-2 border-sky-400" : ""}`}
+          >
             <div className="flex gap-3 px-4 py-2.5">
               <button
                 onClick={() => onJump(item.t)}
@@ -49,6 +54,15 @@ export function Feed({ items, onJump }: { items: FeedItem[]; onJump: (t: number)
               <div className="min-w-0 flex-1">
                 <p className={`text-sm ${item.kind === "goal" ? "font-semibold" : ""}`}>{item.title}</p>
                 {item.text && <p className="text-sm leading-snug text-slate-700">{item.text}</p>}
+                {item.chips && item.chips.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {item.chips.map((chip) => (
+                      <span key={chip} className="rounded-full bg-white px-2 py-0.5 font-mono text-[11px] text-slate-700 ring-1 ring-slate-200">
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {item.insightId && (
                   <Link href={`/insights/${item.insightId}`} className="text-xs text-sky-700 hover:underline">
                     How we know →

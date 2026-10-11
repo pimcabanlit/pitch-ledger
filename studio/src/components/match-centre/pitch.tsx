@@ -11,7 +11,9 @@ export interface Dot {
   y: number;
   color: string;
   label: string;
-  highlight?: boolean;
+  highlight?: boolean; // the player in the caption on screen
+  followed?: boolean; // the player the viewer follows
+  name?: string; // shown beside the dot (only while a caption names the player)
 }
 
 function Markings({ color = "rgba(255,255,255,0.75)" }: { color?: string }) {
@@ -73,7 +75,8 @@ export function Pitch({
         <Markings />
         {dots.map((d) => (
           <g key={d.id} transform={`translate(${d.x} ${sy(d.y)})`}>
-            {d.highlight && <circle r={3} fill="none" stroke="#fde047" strokeWidth={0.5} />}
+            {d.followed && <circle r={2.6} fill="none" stroke="#38bdf8" strokeWidth={0.6} strokeDasharray="1.2 0.6" />}
+            {d.highlight && <circle r={3.4} fill="none" stroke="#fde047" strokeWidth={0.5} />}
             <circle r={1.7} fill={d.color} stroke="white" strokeWidth={0.35} />
             <text
               textAnchor="middle"
@@ -87,6 +90,27 @@ export function Pitch({
             </text>
           </g>
         ))}
+        {dots
+          .filter((d) => d.name)
+          .map((d) => (
+            <text
+              key={`name-${d.id}`}
+              x={d.x}
+              y={sy(d.y) + (d.y > H - 8 ? 5.6 : -4.4)}
+              textAnchor={d.x < 12 ? "start" : d.x > W - 12 ? "end" : "middle"}
+              dominantBaseline="central"
+              fontSize={2.4}
+              fontWeight={600}
+              fill="white"
+              stroke="#0f172a"
+              strokeWidth={0.7}
+              strokeLinejoin="round"
+              paintOrder="stroke"
+              style={{ pointerEvents: "none" }}
+            >
+              {d.name}
+            </text>
+          ))}
         {ball && (
           <circle
             cx={ball.x}
