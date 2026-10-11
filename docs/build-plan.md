@@ -110,6 +110,15 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - an `aria-live` caption for screen readers.
 
    Checked at 1280 px and 390 px. This closed requirements-map gaps 1, 2, 5 and 6 and the chart half of gap 4.
+
+   Open: **On-pitch scoreboard (broadcast score bug).** Move the Match Centre scoreboard from its own card onto the pitch, as a slim bar centred at the bottom of the picture, like a TV score bug:
+   - home colour dot and name, the score as of the replay clock, away name and colour dot;
+   - the match minute and the half (1st half, 2nd half, Full-time);
+   - no venue.
+
+   The insight caption (lower third) moves up so the two never overlap. On phones the bar stays readable: short club names (NBR, CRW), with the caption below the pitch as today. The separate scoreboard card is removed.
+
+   Open: **Sticky "Your view" panel.** The Match Centre's *Your view* panel (mode, language, show, follow a player, your metric, favourite clubs) stays pinned under the site header while the page scrolls, so the viewer can change a setting while looking at the feed or the charts. On phones the five pickers would fill the screen, so there it collapses to a one-line summary bar (e.g. "Club focus · English · Control") that opens the pickers on a tap.
 3. **Quality: requirement-by-requirement map.** A `docs/requirements-map.md` mapping every point of the challenge (section 4.1: the five pipeline stages (a)–(e) including the personalization examples, real-time intelligence (player identification, pass quality, speed metrics, auto-eventing), narrative generation, explainability, data innovation, multi-language) to what Pitch Ledger does. Each row gets a status:
    - **Implemented**, with where it lives and how to see it;
    - **Partial**, with what is missing;
