@@ -11,6 +11,9 @@ from pitch_ledger.engine.recompute import recompute_trigger
 from pitch_ledger.matchlab.generator import SimulatedMatch
 from pitch_ledger.schema import TrackingSample, Trigger
 
+FILTERED = "<filtered>"
+"""A scripted reply the content filter cut (finish reason ``content_filter``)."""
+
 
 class ScriptedChatClient(FunctionInvocationLayer[Any], BaseChatClient[Any]):
     """Returns each scripted reply in turn (an Exception is raised instead of returned).
@@ -29,8 +32,9 @@ class ScriptedChatClient(FunctionInvocationLayer[Any], BaseChatClient[Any]):
         if isinstance(reply, Exception):
             raise reply
         usage = UsageDetails(input_token_count=100, output_token_count=20)
+        finish = "content_filter" if reply == FILTERED else "stop"  # a reply the filter cut
         return ChatResponse(messages=[Message(role="assistant", contents=[reply])],
-                            usage_details=usage)  # fmt: skip
+                            usage_details=usage, finish_reason=finish)  # fmt: skip
 
 
 class SimStats:

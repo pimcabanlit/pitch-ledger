@@ -15,6 +15,8 @@ neutrality). Findings go back to the Explainer, at most twice; then the insight 
 
 from dataclasses import dataclass, field
 
+from opentelemetry import trace
+
 from pitch_ledger.agents import prompts
 from pitch_ledger.agents.contracts import Facts, InsightDraft, ReviewRequest, ReviewVerdict
 from pitch_ledger.agents.editorial import draft_issues
@@ -24,6 +26,7 @@ from pitch_ledger.schema import Trigger
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 
 MAX_REVISIONS = 2
+_tracer = trace.get_tracer("pitch_ledger")  # a no-op unless tracing is configured
 
 
 @dataclass
@@ -52,6 +55,13 @@ class Auditor:
 
     async def check(self, draft: InsightDraft, trigger: Trigger) -> list[str]:
         """Deterministic checks; an empty list means the numbers may air."""
+        with _tracer.start_as_current_span("audit check (code)") as span:
+            findings = await self._check(draft, trigger)
+            span.set_attributes({"pitch_ledger.passed": not findings,
+                                 "pitch_ledger.findings": findings[:5]})  # fmt: skip
+            return findings
+
+    async def _check(self, draft: InsightDraft, trigger: Trigger) -> list[str]:
         findings = []
         unknown = [k for k in draft.metric_keys if k not in trigger.metrics]
         findings += [f"metric '{k}' is not one of the trigger's metrics" for k in unknown]

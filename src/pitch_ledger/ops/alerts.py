@@ -118,10 +118,12 @@ def review_insight(desk: OpsDesk, insight_id: str | None) -> list[OpsAlert]:
     if fallbacks:
         findings = [f for a in fallbacks for f in a.findings]
         budget = any("budget spent" in f for f in findings)
+        filtered = any("content filter" in f for f in findings)  # model_manager.CONTENT_FILTERED
         steps = ", ".join(sorted({a.actor for a in fallbacks}))
-        lead = "Model call budget spent: " if budget else ""
+        lead = ("Model call budget spent: " if budget else
+                "Content filter: " if filtered else "")  # fmt: skip
         raised.append(desk.raise_alert(
-            insight.match_id, "model_fallback", "warning" if budget else "info",
+            insight.match_id, "model_fallback", "warning" if budget or filtered else "info",
             f"{lead}template copy used for {where} ({steps}): {'; '.join(findings[:3])}",
             [insight.insight_id, *(a.audit_id for a in fallbacks)],
         ))  # fmt: skip

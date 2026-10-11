@@ -78,6 +78,15 @@ def test_review_insight_reads_blocks_and_fallbacks_off_the_audit_trail() -> None
     assert review_insight(desk, "M0002-I0099") == [] and review_insight(desk, None) == []
 
 
+def test_a_content_filter_fallback_is_a_named_warning() -> None:
+    ledger = InMemoryLedger()
+    desk = _desk(ledger)
+    insight = _insight(ledger)
+    _audit(ledger, insight, "explainer", "fallback", ["explainer: blocked by the content filter"])
+    [alert] = review_insight(desk, insight.insight_id)
+    assert alert.severity == "warning" and alert.message.startswith("Content filter: ")
+
+
 def test_dead_lettered_trigger_is_critical() -> None:
     trigger = Trigger(trigger_id="M0002-T0007", match_id="M0002", period=1, clock_ms=600_000,
                       insight_type="key_moment", rule_id="goal",

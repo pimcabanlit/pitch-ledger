@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from pitch_ledger.agents import copy
 from pitch_ledger.agents.auditor import Auditor
@@ -178,3 +182,37 @@ def test_failures_retry_then_dead_letter(m0002: list[Case]) -> None:
         {"trigger_id": momentum.trigger_id, "deliveries": 3,
          "errors": ["ConnectionError: stats server gone"] * 3}
     ]  # fmt: skip
+
+
+@pytest.fixture(scope="module")
+def spans() -> InMemorySpanExporter:
+    """Collect the spans the process emits (the global provider can be set only once)."""
+    provider = trace.get_tracer_provider()
+    if not isinstance(provider, TracerProvider):
+        provider = TracerProvider()
+        trace.set_tracer_provider(provider)
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    return exporter
+
+
+def test_each_trigger_and_decision_is_one_traced_span(
+    m0002: list[Case], spans: InMemorySpanExporter
+) -> None:
+    orch = _orchestrator(m0002)
+    spans.clear()
+    outcome = asyncio.run(orch.process(_trigger(m0002, "goal")))
+    assert outcome.insight_id is not None
+    asyncio.run(orch.decide(outcome.insight_id, "producer_kim"))
+    finished = {s.name: s for s in spans.get_finished_spans()}
+    root = finished["insight goal"]
+    attrs = dict(root.attributes or {})
+    assert attrs["pitch_ledger.rule_id"] == "goal" and attrs["pitch_ledger.status"] == "pending"
+    assert attrs["pitch_ledger.insight_id"] == outcome.insight_id
+    check = finished["audit check (code)"]
+    assert check.parent is not None and check.context.trace_id == root.context.trace_id
+    assert dict(check.attributes or {})["pitch_ledger.passed"] is True
+    decision = dict(finished["producer decision"].attributes or {})
+    assert decision["pitch_ledger.decision"] == "approve"
+    assert decision["pitch_ledger.status"] == "aired"
+    assert "producer_kim" not in str(decision)  # the person stays in the ledger, not traces

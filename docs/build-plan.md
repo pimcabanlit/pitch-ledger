@@ -74,7 +74,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 5. Web PubSub live push (built 2026-10-09: change signals per match group, negotiate endpoints, Studio hook with polling fallback).
 6. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps. Written 2026-10-10: `Dockerfile`, `studio/Dockerfile`, `infra/main.bicep` (+ modules), `.github/workflows/deploy.yml`; first deploy waits on the owner's one-time setup (docs/azure-setup.md, Deployment).
 7. ADX dashboard (control room) over the event store, tile queries kept in the repo; ops-alert records raised by the engine, orchestrator, queue and model manager, shown and acknowledged in the producer console (built 2026-10-10: feed gap and lag, validation at live ingest, blocked insights, dead letters, model fallbacks; `stream --fault-at` stages a fault for the demo).
-8. Managed identities, key auth disabled, content-safety policies, Application Insights and Foundry tracing.
+8. Managed identities, key auth disabled, content-safety policies, Application Insights and Foundry tracing. Built 2026-10-11: OpenTelemetry tracing (one trace per trigger and producer decision, agent spans nested) to Application Insights with Entra-only ingestion, read by Foundry's Tracing page; content-filter handling and `check-models --safety`; `infra/enterprise-controls.sh` switches key auth off on every service (docs/azure-setup.md, Enterprise controls).
 
 **Done when:** the public link replays a match end to end in Azure.
 

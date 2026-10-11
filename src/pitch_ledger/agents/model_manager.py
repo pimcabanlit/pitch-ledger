@@ -8,6 +8,10 @@
 - Cost controls: an output-token cap per role and a call budget per run (paid providers).
 - Reliability: one retry on an error or an unparseable reply, then ``ModelUnavailable``
   so the caller falls back to template copy built from code-computed numbers.
+- Content safety: the Foundry content filter screens every prompt and reply. A blocked
+  prompt or filtered reply is not retried (the same input would be blocked again); it
+  raises ``ModelUnavailable`` naming the content filter, so the fallback and its ops alert
+  say why.
 """
 
 import asyncio
@@ -21,10 +25,11 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from agent_framework import Agent, SupportsChatGetResponse
+from agent_framework.exceptions import ChatClientContentFilterException
 from pydantic import AliasChoices, BaseModel, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from pitch_ledger.agents.contracts import CopyText, PingRequest
+from pitch_ledger.agents.contracts import CopyText, PingRequest, SafetyProbe
 from pitch_ledger.agents.offline import OfflineChatClient
 from pitch_ledger.core.checks import Check, short_error
 
@@ -72,7 +77,11 @@ class ModelSettings(BaseSettings):
 
 
 class ModelUnavailable(RuntimeError):
-    """No usable reply (budget spent, provider error twice, or unparseable output)."""
+    """No usable reply (budget spent, provider error twice, unparseable output, or the
+    content filter)."""
+
+
+CONTENT_FILTERED = "blocked by the content filter"
 
 
 @dataclass
@@ -81,12 +90,14 @@ class Usage:
     failures: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    filtered: int = 0  # prompts or replies the content filter blocked
     by_role: Counter[str] = field(default_factory=Counter)
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "calls": self.calls,
             "failures": self.failures,
+            "filtered": self.filtered,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "by_role": dict(self.by_role),
@@ -197,7 +208,14 @@ class ModelManager:
                 details = response.usage_details or {}
                 self.usage.input_tokens += int(details.get("input_token_count") or 0)
                 self.usage.output_tokens += int(details.get("output_token_count") or 0)
+                if response.finish_reason == "content_filter":
+                    raise ChatClientContentFilterException("reply filtered")
                 return parse_json(response.text, reply)
+            except ChatClientContentFilterException as exc:  # a retry would be blocked too
+                self.usage.failures += 1
+                self.usage.filtered += 1
+                log.warning("%s call %s: %s", role, CONTENT_FILTERED, exc)
+                raise ModelUnavailable(f"{role}: {CONTENT_FILTERED}") from exc
             except Exception as exc:  # provider error, timeout or unparseable reply
                 self.usage.failures += 1
                 last = exc
@@ -206,6 +224,19 @@ class ModelManager:
 
 
 # Configuration check (``pitch-ledger check-models``) -----------------------------------
+
+
+async def _probe(manager: ModelManager, deployment: str, role: Role) -> Check:
+    """Pass only when the content filter blocks the prompt-injection probe."""
+    name = f"content filter on {deployment}"
+    try:
+        await manager.complete(role, PING_INSTRUCTIONS, SafetyProbe(), CopyText)
+    except ModelUnavailable as exc:
+        if CONTENT_FILTERED in str(exc):
+            return Check(name, True, "prompt-injection probe blocked")
+        return Check(name, False, _short(exc.__cause__ or exc))
+    return Check(name, False, "probe not blocked: turn on Prompt Shields for jailbreak attacks")
+
 
 ENDPOINT_PATTERN = re.compile(r"^https://[\w-]+\.services\.ai\.azure\.com/api/projects/[\w.-]+/?$")
 TOKEN_SCOPE = "https://ai.azure.com/.default"
@@ -268,9 +299,12 @@ def check_settings() -> tuple[list[Check], ModelSettings | None]:
 async def check_models(
     clients: dict[str, SupportsChatGetResponse[Any]] | None = None,
     credential: Any = None,
+    safety: bool = False,
 ) -> list[Check]:
     """Settings, Entra ID sign-in and one tiny call per deployment (at most 4 calls with
-    retries). ``clients`` and ``credential`` replace the real ones in tests."""
+    retries). With ``safety``, also one prompt-injection probe per deployment, which the
+    content filter must block. ``clients`` and ``credential`` replace the real ones in
+    tests."""
     checks, settings = check_settings()
     if settings is None or settings.model_provider == "offline":
         return checks
@@ -306,6 +340,9 @@ async def check_models(
             except ModelUnavailable as exc:
                 ok, detail = False, _short(exc.__cause__ or exc)
             checks.append(Check(f"deployment {deployment}", ok, detail))
+        if safety:
+            for deployment, role in tiers.items():
+                checks.append(await _probe(manager, deployment, role))
         usage = manager.usage
         checks.append(
             Check(

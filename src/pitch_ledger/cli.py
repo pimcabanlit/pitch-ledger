@@ -47,6 +47,15 @@ def _write(spec: MatchSpec, out: Path) -> None:
         print(f"  wrote {path}")
 
 
+def _start_tracing(service: str) -> None:
+    """Send agent and insight spans to Application Insights when PITCH_LEDGER_TRACING=azure."""
+    from pitch_ledger.infra_adapters.telemetry import TelemetrySettings, configure_tracing
+
+    settings = TelemetrySettings()
+    if configure_tracing(service, settings):
+        print(f"tracing: {settings.describe()}")
+
+
 def cmd_generate(args: argparse.Namespace) -> int:
     known = [s.value for s in ScenarioId]
     if args.scenario not in known:
@@ -193,6 +202,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
 
     from pitch_ledger.agents.replay import ReplayOptions, replay_match
 
+    _start_tracing("pitch-ledger-replay")
     only = tuple(x.strip() for x in args.only.split(",") if x.strip()) if args.only else None
     options = ReplayOptions(
         approve=args.approve,
@@ -338,7 +348,7 @@ def cmd_check_models(args: argparse.Namespace) -> int:
 
     from pitch_ledger.agents.model_manager import check_models
 
-    checks = asyncio.run(check_models())
+    checks = asyncio.run(check_models(safety=args.safety))
     for check in checks:
         print(f"[{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
     return 0 if all(c.ok for c in checks) else 1
@@ -536,6 +546,7 @@ def cmd_live(args: argparse.Namespace) -> int:
     from pitch_ledger.ledger import FileLedger, InMemoryLedger
     from pitch_ledger.live.service import LiveOptions, LiveService
 
+    _start_tracing("pitch-ledger-live")
     feed = _feed_settings(args)
     overrides = {k: v for k, v in (("ledger", args.ledger), ("queue", args.queue)) if v}
     services = LedgerQueueSettings(**overrides)
@@ -612,11 +623,21 @@ def cmd_check_push(args: argparse.Namespace) -> int:
     return 0 if all(c.ok for c in checks) else 1
 
 
+def cmd_check_tracing(args: argparse.Namespace) -> int:
+    from pitch_ledger.infra_adapters.telemetry import TelemetrySettings, check_tracing
+
+    checks = check_tracing(TelemetrySettings())
+    for check in checks:
+        print(f"[{'PASS' if check.ok else 'FAIL'}] {check.name}: {check.detail}")
+    return 0 if all(c.ok for c in checks) else 1
+
+
 def cmd_api(args: argparse.Namespace) -> int:
     import uvicorn
 
     from pitch_ledger.api.app import create_app
 
+    _start_tracing("pitch-ledger-api")  # producer decisions run the agents
     uvicorn.run(create_app(), host=args.host, port=args.port)
     return 0
 
@@ -693,6 +714,11 @@ def build_parser() -> argparse.ArgumentParser:
     chk = sub.add_parser(
         "check-models", help="check model settings, Entra ID sign-in and each deployment"
     )
+    chk.add_argument(
+        "--safety",
+        action="store_true",
+        help="also send a prompt-injection probe the content filter must block",
+    )
     chk.set_defaults(func=cmd_check_models)
 
     feeds = ["file", "eventhubs"]
@@ -756,6 +782,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     ckp = sub.add_parser("check-push", help="check Web PubSub settings, sign-in and a send")
     ckp.set_defaults(func=cmd_check_push)
+
+    ckt = sub.add_parser("check-tracing", help="check tracing settings, sign-in and a test span")
+    ckt.set_defaults(func=cmd_check_tracing)
 
     api = sub.add_parser("api", help="serve the /api/v1 API (Uvicorn)")
     api.add_argument("--host", default="127.0.0.1", help="bind address (default 127.0.0.1)")

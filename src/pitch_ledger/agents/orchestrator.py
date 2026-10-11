@@ -39,6 +39,7 @@ from agent_framework import (
     WorkflowContext,
     handler,
 )
+from opentelemetry import trace
 
 from pitch_ledger.agents import copy
 from pitch_ledger.agents.contracts import Facts
@@ -333,6 +334,35 @@ def first_momentum(triggers: Iterable[Trigger]) -> str | None:
     )
 
 
+_tracer = trace.get_tracer("pitch_ledger")
+"""One span per trigger or producer decision; the agents' and workflow steps' spans nest
+under it. A no-op unless tracing is configured (``infra_adapters.telemetry``)."""
+
+
+def _span_name(message: TriggerJob | ProducerDecision) -> str:
+    if isinstance(message, TriggerJob):
+        return f"insight {message.trigger.rule_id}"
+    return "producer decision"
+
+
+def _job_attributes(message: TriggerJob | ProducerDecision) -> dict[str, str]:
+    if isinstance(message, TriggerJob):
+        t = message.trigger
+        return {"pitch_ledger.match_id": t.match_id, "pitch_ledger.trigger_id": t.trigger_id,
+                "pitch_ledger.rule_id": t.rule_id,
+                "pitch_ledger.insight_type": t.insight_type.value}  # fmt: skip
+    # The decision, not the person: producer identities stay in the ledger's audit trail.
+    return {"pitch_ledger.insight_id": message.insight_id,
+            "pitch_ledger.decision": "approve" if message.approve else "block"}  # fmt: skip
+
+
+def _outcome_attributes(outcome: Outcome) -> dict[str, str | int]:
+    return {"pitch_ledger.route": outcome.route, "pitch_ledger.status": outcome.status,
+            "pitch_ledger.insight_id": outcome.insight_id or "",
+            "pitch_ledger.audit_status": outcome.audit_status or "",
+            "pitch_ledger.overlays": outcome.overlays}  # fmt: skip
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -395,11 +425,14 @@ class Orchestrator:
         )
 
     async def run(self, message: TriggerJob | ProducerDecision) -> Outcome:
-        result = await self.workflow.run(message)
-        outcomes = [o for o in result.get_outputs() if isinstance(o, Outcome)]
-        if len(outcomes) != 1:
-            raise RuntimeError(f"expected one outcome, got {len(outcomes)}")
-        return outcomes[0]
+        with _tracer.start_as_current_span(_span_name(message)) as span:
+            span.set_attributes(_job_attributes(message))
+            result = await self.workflow.run(message)
+            outcomes = [o for o in result.get_outputs() if isinstance(o, Outcome)]
+            if len(outcomes) != 1:
+                raise RuntimeError(f"expected one outcome, got {len(outcomes)}")
+            span.set_attributes(_outcome_attributes(outcomes[0]))
+            return outcomes[0]
 
     async def process(self, trigger: Trigger) -> Outcome:
         return await self.run(TriggerJob(trigger))

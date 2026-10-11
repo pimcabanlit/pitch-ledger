@@ -503,6 +503,43 @@ Local runs: put `STUDIO_ENTRA_CLIENT_ID`, `STUDIO_API_SCOPE=api://<api-client-id
 
 Work accounts from organizations that block user consent may see "Need admin approval"; personal Microsoft accounts are never blocked.
 
+## Enterprise controls: tracing, content safety, key-less access
+
+**What you get:** every insight as a trace in the Foundry portal (Tracing), a content filter proven to block prompt injection, and key-based access switched off everywhere, so only Microsoft Entra ID works. **Cost:** Application Insights is workspace-based on `pitch-ledger-logs`, so the workspace's 0.1 GB/day cap bounds it (at most about 3 GB a month, inside the 5 GB monthly free grant): expected $0. If traces ever hit the cap, container logs also pause until the next day. Content filters and switching keys off are free.
+
+### 1. Application Insights (automatic)
+
+The Deploy workflow creates `pitch-ledger-insights` (Application Insights on the Log Analytics workspace, key-based ingestion off) and gives every backend container `PITCH_LEDGER_TRACING=azure`, `PITCH_LEDGER_TRACE_CONTENT=true` (prompts and replies on the spans; the data is synthetic) and `APPLICATIONINSIGHTS_CONNECTION_STRING` (where to send; not a credential, since ingestion needs Entra ID). Bicep parameters `tracing` and `traceContent` turn them off.
+
+### 2. Roles and key-less access (you, once, in Cloud Shell)
+
+Portal → the Cloud Shell icon (top bar) → **Bash** → paste the whole of `infra/enterprise-controls.sh` (or upload it and run `bash enterprise-controls.sh`). It:
+
+1. gives `pitch-ledger-apps` and `pitch-ledger-dev` **Monitoring Metrics Publisher** on `pitch-ledger-insights` (needed to send traces with Entra ID);
+2. sets `disableLocalAuth=true` on Foundry (`inside-the-game`), Cosmos DB, Event Hubs, Service Bus and Web PubSub, and prints each new value;
+3. removes **Azure AI Administrator** from `pitch-ledger-dev` (it keeps Foundry User and its data roles), and lists the roles it keeps;
+4. prints the Application Insights connection string. To run `check-tracing` from a Claude Code cloud session, add it to the cloud environment's variables as `APPLICATIONINSIGHTS_CONNECTION_STRING`, with `PITCH_LEDGER_TRACING=azure`.
+
+After keys are off, the portal's data browsers sign you in with Entra ID too: Cosmos DB Data Explorer needs a Cosmos data role for your account, and Service Bus Explorer needs **Authentication type: Microsoft Entra ID**.
+
+### 3. Show traces in Foundry (you, once)
+
+Foundry portal → your project → **Tracing** (under Observe / Monitoring) → **Connect** → pick `pitch-ledger-insights` → Connect. Traces then appear there a few minutes after a run: one per trigger (`insight goal`, `insight momentum_shift`, …) and per producer decision, with the workflow steps, each agent's model calls (tokens, latency, prompt and reply) and the Auditor's code check nested under it. Application Insights → **Transaction search** shows the same spans.
+
+### 4. Verify
+
+```
+uv run pitch-ledger check-models --safety   # deployments reply; the prompt-injection probe is blocked
+uv run pitch-ledger check-tracing           # settings, Entra sign-in, one test span accepted
+uv run pitch-ledger check-ledger && uv run pitch-ledger check-queue && uv run pitch-ledger check-push
+```
+
+Then run a match in Azure (portal → Container Apps jobs → `pitch-ledger-replay` → Run now, about 170 Foundry calls, a few US cents) and open Foundry → Tracing.
+
+### 5. Optional: a named, stricter content filter
+
+The default filter already blocks jailbreak attempts (`check-models --safety` passes on it). For an explicit policy: Foundry portal → **Guardrails + controls** → **Content filters** → **Create** → name `pitch-ledger-broadcast` → Input: keep Hate, Sexual, Violence and Self-harm at Medium, Prompt Shields for jailbreak attacks **Annotate and block**, for indirect attacks **Annotate and block** → Output: the same severities, Protected material for text **Annotate and block** → apply to the `gpt-4.1-mini` deployment → Create. Then re-run `check-models --safety`. (Stricter severities than Medium may block ordinary football language such as "strike" or "shot", which would show as *Content filter* ops alerts.)
+
 ## Lessons learned (first live run, 2026-10-09)
 
 Each problem below blocked the first live run. Read the error, find the matching row, apply the fix.
@@ -548,10 +585,10 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 
 - [x] Cosmos DB and Service Bus created; `check-ledger` (write, read, delete in 1.2 s) and `check-queue` (send, receive, complete in 4.4 s) pass; full M0002 replay with `--ledger cosmos --queue servicebus` (offline models): 56 triggers through the queue, no dead letters, 18 insights aired, 270 overlays, planted error caught; read back from Cosmos in a new process (56 triggers, 18 insights, 70 audits, 270 overlays) (2026-10-09).
 
-- [ ] Remove the Azure AI Administrator role from `pitch-ledger-dev` (least privilege).
+- [ ] Enterprise controls: run `infra/enterprise-controls.sh` (tracing role, key auth off on Foundry, Cosmos DB, Event Hubs, Service Bus and Web PubSub, Azure AI Administrator removed from `pitch-ledger-dev`), connect `pitch-ledger-insights` in Foundry → Tracing, then verify (Enterprise controls, steps 2–4). Content filter verified 2026-10-11: the default filter blocks the prompt-injection probe.
 - [ ] Put a calendar reminder a week before the client secret expires.
 - [ ] Confirm a budget alert exists on the subscription.
-- [ ] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User. Turn off key auth on the Foundry resource. Put all resources in Bicep under `infra/`. (2026-10-10: `infra/main.bicep` and the Deploy workflow written; do the Deployment steps above.)
+- [x] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User, and every resource is in Bicep under `infra/` (verified by the live runs, 2026-10-10). Key auth off: see Enterprise controls.
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
 - [x] Event Hubs: namespace `pitch-ledger-feed`, hub `match-events`, Data Sender and Data Receiver roles; verified with `listen` + `stream` (2026-10-09).
 - [ ] Event Hubs: delete the namespace after judging (Nov 20).

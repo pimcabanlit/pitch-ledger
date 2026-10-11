@@ -1,6 +1,7 @@
 // Pitch Ledger on Azure Container Apps: the app platform around the data services.
 //
-// Creates: a Log Analytics workspace (daily cap), a Container Apps environment
+// Creates: a Log Analytics workspace (daily cap), Application Insights on it (tracing;
+// Entra ID ingestion only), a Container Apps environment
 // (consumption, scale to zero), one user-assigned managed identity for every app and job,
 // (optionally) its data-plane roles on the data services and Foundry, the API and Studio apps,
 // and three manually started jobs (live service, Match Lab feed, replay).
@@ -52,6 +53,12 @@ param cosmosAccount string = 'pitch-ledger-cosmos'
 param cosmosDatabase string = 'pitchledger'
 param cosmosContainer string = 'ledger'
 param webPubSubName string = 'pitch-ledger-push'
+
+@description('Send agent and insight traces to Application Insights (the Foundry portal Tracing page reads them).')
+param tracing bool = true
+
+@description('Record prompts and model replies on the traces. The data is synthetic with fictional names; turn off for real data.')
+param traceContent bool = true
 
 @description('Foundry resource (AI Services account) whose models the agents call.')
 param foundryAccount string = 'inside-the-game'
@@ -177,6 +184,34 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
+// Tracing: workspace-based, so the workspace's daily cap bounds its cost too. Key-based
+// ingestion is off: the apps identity sends with Microsoft Entra ID and needs Monitoring
+// Metrics Publisher on this resource (infra/enterprise-controls.sh, or assignRoles).
+resource insights 'Microsoft.Insights/components@2020-02-02' = if (tracing) {
+  name: '${prefix}-insights'
+  location: location
+  tags: tags
+  kind: 'other'
+  properties: {
+    Application_Type: 'other'
+    WorkspaceResourceId: logs.id
+    IngestionMode: 'LogAnalytics'
+    DisableLocalAuth: true
+  }
+}
+
+var monitoringMetricsPublisher = '3913510d-42f4-4e42-8a64-420c390055eb'
+
+resource insightsPublisher 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (tracing && assignRoles) {
+  name: guid(insights.id, identity.id, monitoringMetricsPublisher)
+  scope: insights
+  properties: {
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', monitoringMetricsPublisher)
+  }
+}
+
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: '${prefix}-env'
   location: location
@@ -222,7 +257,15 @@ var backendEnv = concat(
     : [
         { name: 'ADX_CLUSTER_URI', value: adxClusterUri }
         { name: 'ADX_DATABASE', value: adxDatabase }
+      ],
+  tracing
+    ? [
+        { name: 'PITCH_LEDGER_TRACING', value: 'azure' }
+        { name: 'PITCH_LEDGER_TRACE_CONTENT', value: string(traceContent) }
+        // Where to send, not a credential: key-based ingestion is off on the resource.
+        { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights!.properties.ConnectionString }
       ]
+    : []
 )
 
 var identityConfig = {
@@ -381,3 +424,5 @@ output studioUrl string = 'https://${studio.properties.configuration.ingress.fqd
 output identityClientId string = identity.properties.clientId
 output identityPrincipalId string = identity.properties.principalId
 output environmentName string = environment.name
+output insightsName string = tracing ? insights.name : ''
+

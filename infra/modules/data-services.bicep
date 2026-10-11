@@ -5,6 +5,9 @@
 // Costs: Event Hubs Basic has a monthly base charge (about US$11); Service Bus Basic is
 // per operation; Cosmos DB uses the free tier (one free-tier account per subscription);
 // Web PubSub Free has no charge (one Free unit per subscription).
+//
+// Key-based access is off on every service: the apps sign in with Microsoft Entra ID only
+// (the live resources get the same setting from infra/enterprise-controls.sh).
 
 param location string
 param eventHubsNamespace string
@@ -22,7 +25,7 @@ resource eventHubs 'Microsoft.EventHub/namespaces@2024-01-01' = {
   location: location
   tags: tags
   sku: { name: 'Basic', tier: 'Basic', capacity: 1 }
-  properties: { minimumTlsVersion: '1.2' }
+  properties: { minimumTlsVersion: '1.2', disableLocalAuth: true }
 }
 
 resource hub 'Microsoft.EventHub/namespaces/eventhubs@2024-01-01' = {
@@ -39,7 +42,7 @@ resource serviceBus 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
   location: location
   tags: tags
   sku: { name: 'Basic', tier: 'Basic' }
-  properties: { minimumTlsVersion: '1.2' }
+  properties: { minimumTlsVersion: '1.2', disableLocalAuth: true }
 }
 
 resource queue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
@@ -64,6 +67,7 @@ resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' = {
     locations: [{ locationName: location, failoverPriority: 0 }]
     consistencyPolicy: { defaultConsistencyLevel: 'Session' }
     minimalTlsVersion: 'Tls12'
+    disableLocalAuth: true
   }
 }
 
@@ -92,5 +96,5 @@ resource webPubSub 'Microsoft.SignalRService/webPubSub@2024-03-01' = {
   location: location
   tags: tags
   sku: { name: 'Free_F1', tier: 'Free', capacity: 1 }
-  properties: {}
+  properties: { disableLocalAuth: true }
 }

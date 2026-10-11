@@ -47,7 +47,7 @@ flowchart TB
     studio -- approvals, acknowledgements --> orch
 ```
 
-Across every service: Microsoft Entra ID (managed identities, producer sign-in), Log Analytics (Application Insights to come), GitHub Actions, Cost Management budget alerts; Key Vault only if a secret ever appears (none today: every service is reached with a managed identity).
+Across every service: Microsoft Entra ID (managed identities, producer sign-in), Log Analytics and Application Insights (tracing), GitHub Actions, Cost Management budget alerts; Key Vault only if a secret ever appears (none today: every service is reached with a managed identity).
 
 ## How one moment flows
 
@@ -136,7 +136,7 @@ The feed, queue, ledger and store are the same interfaces as everywhere else (Ev
 - **Ingest validation in the live service:** every row goes through the row and sequence rules once the match reference has arrived. A feed joined mid-match (`stream --start-min`) cannot know the lineup or the previous sequence number, so it gets the rules that need no earlier rows; end-of-match checks run at full time of a complete match.
 - **Console:** an ops panel above the insight queue (open alerts first, severity, message, references; an insight reference opens that insight) where the producer acknowledges each alert; acknowledged alerts stay listed, dimmed. Without push it refreshes with the queue every 10 s.
 - **Demo:** `stream --fault-at MIN` sends one off-pitch row at that minute and then pauses the feed 12 s, so the live service raises a validation reject and a feed gap.
-- **Production path:** Application Insights logs and Azure Monitor alert rules for out-of-hours notification; Activator on the `OpsAlerts` table with Fabric.
+- **Production path:** Azure Monitor alert rules on the Application Insights traces for out-of-hours notification; Activator on the `OpsAlerts` table with Fabric.
 
 ## API (`/api/v1`)
 
@@ -184,12 +184,12 @@ Failure handling: a model error retries once, then falls back to a plain templat
 - **No numbers from the model.** Every figure comes from code via read-only MCP tools; the Auditor recomputes before air.
 - **Evidence on every insight**, stored in the Cosmos DB ledger with continuous backup.
 - **Human in the loop:** Entra ID sign-in; only the producer role approves or blocks, and acknowledges ops alerts.
-- **Managed identities, no keys**; Key Vault only for secrets that cannot use Entra ID.
-- **Content safety** policies on every model deployment, as code.
+- **Managed identities, no keys:** key-based access is switched off on Foundry, Cosmos DB, Event Hubs, Service Bus, Web PubSub and Application Insights (`infra/enterprise-controls.sh`; the Bicep for a fresh environment sets the same), so only Microsoft Entra ID works; Key Vault only for secrets that cannot use Entra ID (none today).
+- **Content safety:** the Foundry content filter screens every prompt and reply (harm categories, Prompt Shields for jailbreaks). `check-models --safety` proves it by sending a prompt-injection probe that must be blocked. A blocked prompt or filtered reply is not retried; the insight falls back to template copy and a *Content filter* ops alert says why.
 - **Agents, prompts and infrastructure as code**, deployed by GitHub Actions; model versions pinned.
 - **Data validation** at ingest; rejects raise ops alerts.
 - **Evaluations:** planted scenarios as a test suite (detection rate, false alerts, factual accuracy), tracked in Foundry.
-- **Observability:** Application Insights, Log Analytics, Foundry tracing from event to overlay; ADX dashboard for match and pipeline health; ops alerts in the producer console.
+- **Observability:** OpenTelemetry tracing to Application Insights, read by the Foundry portal's Tracing page: one trace per trigger (rule, insight, route, status) with Agent Framework's spans nested under it (workflow steps, each agent run and model call with tokens, and the Auditor's code check with its findings), and one per producer decision (the decision, not the person). Prompts and replies are recorded because the data is synthetic (`PITCH_LEDGER_TRACE_CONTENT`; off for real data). Library auto-instrumentation stays off, so the feed and ledger writes add no spans; the Log Analytics daily cap bounds the cost. Plus the ADX dashboard for match and pipeline health and ops alerts in the producer console.
 - **Cost controls:** token caps per agent, small model for rewrites, budget alerts, scale-to-zero, Azure Data Explorer free cluster, Event Hubs on the Basic tier.
 
 ## Deployment (Azure Container Apps)
@@ -197,8 +197,8 @@ Failure handling: a model error retries once, then falls back to a plain templat
 - **Images:** two, built by the Deploy workflow and pushed to GitHub Container Registry (public): `pitch-ledger` (Python: API, live service, Match Lab feed, replay; the six demo matches are generated into the image at build time, so they match the repo's seeds) and `pitch-ledger-studio` (Next.js standalone server). Both run as non-root users.
 - **Apps:** `pitch-ledger-studio` (external HTTPS ingress) forwards `/api/v1/*` to `pitch-ledger-api` by its in-environment name; the API has internal ingress only. Both scale to zero (Consumption plan, inside the free grant; the first request after idle waits for a cold start). The API runs one replica (the decision rate limit is per process).
 - **Jobs (manual):** `pitch-ledger-live` (the live service: Event Hubs → engine → Service Bus → agents → Cosmos DB, ADX and Web PubSub), `pitch-ledger-feed` (streams a match from the image to Event Hubs) and `pitch-ledger-replay`. Started from the portal or `az containerapp job start`; a Studio button to start a replay is a later step.
-- **Identity:** one user-assigned managed identity for every app and job (created and granted once by the owner with `infra/grant-roles.sh`; the deploy identity is Contributor only), with the data-plane roles only (Event Hubs Data Sender and Receiver, Service Bus Data Sender and Receiver, Cosmos DB Built-in Data Contributor, Web PubSub Service Owner, Foundry User; ADX Ingestor and Viewer by KQL). No keys, connection strings or Key Vault secrets.
-- **Infrastructure as code:** `infra/main.bicep` (Log Analytics with a daily cap, environment, identity, role grants, apps, jobs) references the hand-made data services and never changes them; `infra/modules/data-services.bicep` declares them for a fresh environment (`createDataServices=true`). CI compiles and lints the Bicep on every push.
+- **Identity:** one user-assigned managed identity for every app and job (created and granted once by the owner with `infra/grant-roles.sh` and `infra/enterprise-controls.sh`; the deploy identity is Contributor only), with the data-plane roles only (Event Hubs Data Sender and Receiver, Service Bus Data Sender and Receiver, Cosmos DB Built-in Data Contributor, Web PubSub Service Owner, Foundry User, Monitoring Metrics Publisher on Application Insights; ADX Ingestor and Viewer by KQL). No keys, connection strings or Key Vault secrets.
+- **Infrastructure as code:** `infra/main.bicep` (Log Analytics with a daily cap, Application Insights on it with Entra-only ingestion, environment, identity, role grants, apps, jobs) references the hand-made data services and never changes them; `infra/modules/data-services.bicep` declares them for a fresh environment (`createDataServices=true`). CI compiles and lints the Bicep on every push.
 - **Pipeline:** CI green on `main` → Deploy workflow: build and push both images (tagged with the commit SHA) → `az deployment group create` signed in by OpenID Connect (a federated credential on a deploy-only app registration with Contributor on the resource group) → smoke test of `/api/v1/health` through the Studio.
 - **Known limits:** match details (score, last minute) come from the match files in the image, so during a live run the fan view's header shows the final score while insights arrive live; the live service runs per match as a job rather than as an always-on app.
 

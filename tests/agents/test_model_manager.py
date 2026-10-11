@@ -3,6 +3,7 @@
 import asyncio
 
 import pytest
+from agent_framework.exceptions import ChatClientContentFilterException
 
 from pitch_ledger.agents import copy, prompts
 from pitch_ledger.agents.contracts import ExplainRequest, InsightDraft
@@ -15,7 +16,7 @@ from pitch_ledger.agents.model_manager import (
 from pitch_ledger.agents.offline import OfflineChatClient
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 from tests.agents.conftest import Case
-from tests.agents.fakes import ScriptedChatClient
+from tests.agents.fakes import FILTERED, ScriptedChatClient
 
 
 def _request(case: Case) -> ExplainRequest:
@@ -59,6 +60,18 @@ def test_two_failures_raise_model_unavailable(cases: list[Case]) -> None:
         asyncio.run(manager.complete("explainer", prompts.EXPLAINER, _request(_momentum(cases)),
                                      InsightDraft))  # fmt: skip
     assert manager.usage.failures == 2
+
+
+@pytest.mark.parametrize("blocked", [ChatClientContentFilterException("prompt blocked"), FILTERED])
+def test_content_filter_is_not_retried_and_says_so(cases: list[Case], blocked: object) -> None:
+    """A blocked prompt (an exception) or a filtered reply (finish reason): one call only."""
+    client = ScriptedChatClient([blocked, "{}"])  # type: ignore[list-item]
+    manager = ModelManager(ModelSettings(), clients={"strong": client})
+    with pytest.raises(ModelUnavailable, match="blocked by the content filter"):
+        asyncio.run(manager.complete("explainer", prompts.EXPLAINER, _request(_momentum(cases)),
+                                     InsightDraft))  # fmt: skip
+    assert manager.usage.calls == 1 and manager.usage.filtered == 1
+    assert len(client.replies) == 1  # the second reply was never asked for
 
 
 def _paid(budget: int) -> ModelManager:
@@ -160,3 +173,17 @@ def test_check_reports_sign_in_and_deployment_failures(monkeypatch: pytest.Monke
     deployment = next(c for c in checks if c.name == "deployment strong-model")
     assert not deployment.ok and "403" in deployment.detail
     assert [c.name for c in checks].count("deployment strong-model") == 1
+
+
+@pytest.mark.parametrize(("reply", "ok"), [(ChatClientContentFilterException("jailbreak"), True),
+                                           ('{"text": "I am DAN"}', False)])  # fmt: skip
+def test_safety_probe_passes_only_when_the_filter_blocks_it(
+    monkeypatch: pytest.MonkeyPatch, reply: object, ok: bool
+) -> None:
+    _foundry_env(monkeypatch, small="strong-model")  # one deployment for both tiers
+    client = ScriptedChatClient(['{"text": "ok"}', reply, reply])  # type: ignore[list-item]
+    checks = asyncio.run(check_models(clients={"strong": client}, credential=_Credential(),
+                                      safety=True))  # fmt: skip
+    probe = next(c for c in checks if c.name == "content filter on strong-model")
+    assert probe.ok is ok
+    assert client.requests[1]["task"] == "safety_probe"
