@@ -557,6 +557,8 @@ The default filter already blocks jailbreak attempts (`check-models --safety` pa
 
 The rows are also written to `data/foundry_eval_rows.jsonl`; `--dry-run` stops there. Each set of criteria is one evaluation (`pitch-ledger-insights`, `pitch-ledger-insights-code`, `…-safety`); every publish adds a run, so runs compare over time. Sign-in: Entra ID with Foundry User on the project (nothing new to grant). The reads from Cosmos are read-only.
 
+**To view them** in the Foundry portal, your own account needs a data role too (Owner manages the resource but cannot read evaluations: *PermissionDenied: Principal does not have access to API/Operation*). Azure portal → resource `inside-the-game` (type Foundry) → **Access control (IAM)** → **Add role assignment** → **Foundry User** (shown as *Azure AI User* on some screens) → your account → Review + assign; it applies within minutes. The evaluations live in the **new Foundry** experience (toggle *New Foundry* at the top, or *Start building* on the classic portal's banner) → **Build** → **Evaluations**. Granted 2026-10-11.
+
 ### Verified (2026-10-11)
 
 | Run | Rows | Result |
