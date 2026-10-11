@@ -536,6 +536,12 @@ uv run pitch-ledger check-ledger && uv run pitch-ledger check-queue && uv run pi
 
 Then run a match in Azure (portal → Container Apps jobs → `pitch-ledger-replay` → Run now, about 170 Foundry calls, a few US cents) and open Foundry → Tracing.
 
+### Verified (2026-10-11)
+
+- `infra/enterprise-controls.sh` ran in Cloud Shell: Monitoring Metrics Publisher for `pitch-ledger-apps` and `pitch-ledger-dev`; `disableLocalAuth=true` on `inside-the-game`, `pitch-ledger-cosmos`, `pitch-ledger-feed`, `pitch-ledger-bus` and `pitch-ledger-push`; Azure AI Administrator removed from `pitch-ledger-dev` (it keeps the Event Hubs, Service Bus and Web PubSub data roles, Foundry User and Monitoring Metrics Publisher).
+- With keys off, every check passes with Entra ID: `check-models --safety` (deployment replies; prompt-injection probe blocked by the default content filter), `check-ledger`, `check-queue`, `check-push`, `check-store`, and `listen --feed eventhubs` connects.
+- `pitch-ledger-insights` connected in Foundry → Tracing. The `pitch-ledger-replay` job (M0002 with Foundry: 54 triggers, 14 aired, 4 corrected by the Auditor, none blocked) produced `insight …` traces: `insight goal` → `workflow.run` → `executor.process explain_audit` → `invoke_agent explainer` → `chat gpt-4.1-mini` (model `gpt-4.1-mini-2025-04-14`, 4.2 s, 1,372 tokens, prompt with the code-computed signals and the JSON draft citing its evidence event) → `audit check (code)` → `invoke_agent auditor`. Traces appear a few minutes after a run. The list's Input/Output columns stay empty for the top-level span (only the agent spans carry content).
+
 ### 5. Optional: a named, stricter content filter
 
 The default filter already blocks jailbreak attempts (`check-models --safety` passes on it). For an explicit policy: Foundry portal → **Guardrails + controls** → **Content filters** → **Create** → name `pitch-ledger-broadcast` → Input: keep Hate, Sexual, Violence and Self-harm at Medium, Prompt Shields for jailbreak attacks **Annotate and block**, for indirect attacks **Annotate and block** → Output: the same severities, Protected material for text **Annotate and block** → apply to the `gpt-4.1-mini` deployment → Create. Then re-run `check-models --safety`. (Stricter severities than Medium may block ordinary football language such as "strike" or "shot", which would show as *Content filter* ops alerts.)
@@ -585,7 +591,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 
 - [x] Cosmos DB and Service Bus created; `check-ledger` (write, read, delete in 1.2 s) and `check-queue` (send, receive, complete in 4.4 s) pass; full M0002 replay with `--ledger cosmos --queue servicebus` (offline models): 56 triggers through the queue, no dead letters, 18 insights aired, 270 overlays, planted error caught; read back from Cosmos in a new process (56 triggers, 18 insights, 70 audits, 270 overlays) (2026-10-09).
 
-- [ ] Enterprise controls: run `infra/enterprise-controls.sh` (tracing role, key auth off on Foundry, Cosmos DB, Event Hubs, Service Bus and Web PubSub, Azure AI Administrator removed from `pitch-ledger-dev`), connect `pitch-ledger-insights` in Foundry → Tracing, then verify (Enterprise controls, steps 2–4). Content filter verified 2026-10-11: the default filter blocks the prompt-injection probe.
+- [x] Enterprise controls (2026-10-11): `infra/enterprise-controls.sh` run (tracing role, key auth off on Foundry, Cosmos DB, Event Hubs, Service Bus and Web PubSub, Azure AI Administrator removed from `pitch-ledger-dev`); every check passes with Entra ID only; content filter blocks the prompt-injection probe; traces visible in Foundry → Tracing (Enterprise controls, Verified).
 - [ ] Put a calendar reminder a week before the client secret expires.
 - [ ] Confirm a budget alert exists on the subscription.
 - [x] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User, and every resource is in Bicep under `infra/` (verified by the live runs, 2026-10-10). Key auth off: see Enterprise controls.
