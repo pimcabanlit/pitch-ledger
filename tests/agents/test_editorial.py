@@ -13,6 +13,7 @@ from pitch_ledger.agents.editorial import (
     mode_issues,
     sentences,
 )
+from pitch_ledger.engine.season import has_season_facts
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 from tests.agents.conftest import Case
 
@@ -91,11 +92,14 @@ def test_every_template_passes_the_editorial_check(cases: list[Case]) -> None:
     for case in cases:
         key = copy.copy_key(case.trigger)
         values = {**case.trigger.metrics, **case.facts.names()}
-        assert draft_issues(copy.headline(key, values), copy.explanation(key, values)) == [], key
+        season = has_season_facts(case.trigger.metrics)  # the season may then be named
+        headline, explanation = copy.headline(key, values), copy.explanation(key, values)
+        assert draft_issues(headline, explanation, season=season) == [], key
         for mode in copy.MODES:
             for language in copy.LANGUAGES:
                 text = copy.mode_text(key, mode, language, values)
-                assert editorial_issues(text, "overlay", language) == [], (key, mode, text)
+                issues = editorial_issues(text, "overlay", language, season=season)
+                assert issues == [], (key, mode, text)
 
 
 def test_modes_differ_and_casual_stays_light(cases: list[Case]) -> None:

@@ -7,6 +7,7 @@ model usage, timings). Ops alerts for blocked insights, template fallbacks and d
 go to the same ledger.
 """
 
+import contextlib
 import json
 import time
 from contextlib import AsyncExitStack
@@ -28,6 +29,7 @@ from pitch_ledger.agents.orchestrator import (
 )
 from pitch_ledger.agents.queue import TriggerQueue
 from pitch_ledger.engine.detector import detect
+from pitch_ledger.history import HistoryStore, MatchNotFinished, build_record, season_for
 from pitch_ledger.ledger import FileLedger, InMemoryLedger
 from pitch_ledger.matchlab.io import read_match, write_triggers
 from pitch_ledger.mcp_server.client import LocalStats, McpStats
@@ -91,14 +93,18 @@ async def replay_match(
     options: ReplayOptions | None = None,
     ledger: InMemoryLedger | None = None,
     queue: TriggerQueue | None = None,
+    history: HistoryStore | None = None,
 ) -> ReplayRun:
     """``ledger`` and ``queue`` replace the local file ledger and in-memory queue (the CLI
-    passes the Cosmos DB and Service Bus adapters)."""
+    passes the Cosmos DB and Service Bus adapters). With ``history``, goals and the full-time
+    recap carry season facts from earlier matches, and the match's own record is kept there
+    afterwards."""
     options = options or ReplayOptions()
     files = read_match(match_dir)
     events = [Event.model_validate(e) for e in files.events]
     tracking = [TrackingSample.model_validate(s) for s in files.tracking]
-    triggers = clock_order(detect(files.match, events, tracking))
+    season = season_for(files.match, history)
+    triggers = clock_order(detect(files.match, events, tracking, season=season))
     write_triggers(match_dir, triggers)
     context = MatchContext(files.match, files.teams, files.players, {e.event_id: e for e in events})
     match_id = files.match.match_id
@@ -111,9 +117,9 @@ async def replay_match(
         models = await stack.enter_async_context(ModelManager(_settings(options)))
         stats: LocalStats | McpStats
         if options.stats == "mcp":
-            stats = await stack.enter_async_context(McpStats(match_dir))
+            stats = await stack.enter_async_context(McpStats(match_dir, season))
         else:
-            stats = LocalStats(StatsTools(match_dir))
+            stats = LocalStats(StatsTools(match_dir, season))
         svc = Services(
             match_id, models, Auditor(models, stats), ledger, injected(triggers, options.inject)
         )
@@ -140,10 +146,14 @@ async def replay_match(
         "inject_error_for": sorted(svc.inject_error_for),
         "only": list(options.only) if options.only else None,
         "triggers": len(triggers),
+        "season_matches": season.match_ids if season else None,
         "usage": models.usage.as_dict(),
         "ops_alerts": len(ledger.alerts(match_id)),
         **report.as_dict(),
     }
+    if history is not None:
+        with contextlib.suppress(MatchNotFinished):  # a partial match has no result to keep
+            history.put(build_record(files.match, events, tracking))
     run = ReplayRun(match_id, triggers, ledger, report, summary)
     if isinstance(ledger, FileLedger):
         ledger.flush()

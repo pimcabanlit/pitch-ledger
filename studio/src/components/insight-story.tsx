@@ -376,6 +376,12 @@ function NumbersPanel({ story }: { story: Story }) {
             {story.trigger?.detector && <> · detector: {label(story.trigger.detector)}</>}
           </p>
         )}
+        {(story.trigger?.season_matches.length ?? 0) > 0 && (
+          <p className="text-xs text-slate-600">
+            Season facts from the earlier matches {story.trigger?.season_matches.join(", ")} (their match
+            records, recomputed by the Auditor).
+          </p>
+        )}
         <div>
           <h3 className="mb-2 text-xs font-semibold text-slate-600">
             Evidence: {story.evidence.length} feed events

@@ -120,6 +120,20 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 4. **Historical data.** Keep each match's results so future games can use them: per-match summaries, team and player match stats, insights and their audit outcomes, scorecard and evaluation results. Store them durably, append-only, keyed by match, season and club. That means extending the ADX event store and the Cosmos ledger rather than a new service.
 
    The engine and agents can then use history in context (e.g. "first hat-trick this season", form over the last five matches). Every historical figure stays computed in code and cited, never recalled by a model. The current "no data on seasons or records" rule in the prompts changes only once that data exists. Lakehouse history stays a stretch goal.
+
+   Done 2026-10-11. Storage:
+   - one record per finished match (result, team and player match stats, goals), built from the match rows by the engine;
+   - kept in a Cosmos DB `history` container (partition `/season`, shared free throughput) and in the ADX tables `MatchResults`, `TeamMatchStats` and `PlayerMatchStats`;
+   - scorecard runs in `EvalRuns` (`evaluate --store`); insight outcomes stay in `InsightStatus`;
+   - written by replays, by the live service at full time, and by `history build`;
+   - the demo matches are one matchday a week from 2026-08-22.
+
+   Season facts in goals and full-time recaps:
+   - the scorer's league goals and the first hat-trick of the season;
+   - form over the last five league matches;
+   - the last meeting this season.
+
+   They come only from matches that kicked off earlier. The trigger cites those matches, and the Auditor recomputes the facts from the same records. "Season" is allowed in copy only when an insight carries season facts.
 5. **Cost monitoring.** Partly in place today:
    - per-service cost notes and observed model costs (docs/azure-setup.md);
    - per-run model call and token counts;

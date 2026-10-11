@@ -36,8 +36,14 @@ from pitch_ledger.agents.model_manager import ModelManager, ModelSettings
 from pitch_ledger.agents.orchestrator import MatchContext, Orchestrator, Outcome
 from pitch_ledger.agents.queue import Delivery, TriggerQueue
 from pitch_ledger.eventstore.port import EventStore
-from pitch_ledger.eventstore.rows import FeedHealthMeter, insight_status_row, trigger_row
+from pitch_ledger.eventstore.rows import (
+    FeedHealthMeter,
+    history_rows,
+    insight_status_row,
+    trigger_row,
+)
 from pitch_ledger.feed.port import Delivered, FeedSubscriber
+from pitch_ledger.history import HistoryStore, MatchNotFinished, build_record, season_for
 from pitch_ledger.ledger import FileLedger, InMemoryLedger
 from pitch_ledger.live.engine import LiveMatch, rejected
 from pitch_ledger.matchlab.io import EVENTS_JSONL, MATCH_FILE, TRACKING_JSONL, TRIGGERS_JSONL
@@ -102,7 +108,10 @@ class LiveService:
         options: LiveOptions | None = None,
         clock: Callable[[], float] = time.monotonic,
         notifier: Notifier | None = None,
+        history: HistoryStore | None = None,
     ) -> None:
+        """``history``: match records; a match's season facts come from earlier records,
+        and its own record is kept there at full time."""
         self.subscriber, self.queue, self.ledger, self.store = (
             subscriber,
             trigger_queue,
@@ -114,6 +123,7 @@ class LiveService:
         self.report = LiveReport()
         self.meter = FeedHealthMeter()
         self.notifier: Notifier = notifier or NullNotifier()
+        self.history = history
         self.desk = OpsDesk(ledger, store, self.notifier)
         self.watch = FeedWatch(self.desk, self.options.gap_s, self.options.lag_p95_ms)
         self._validated: set[str] = set()  # matches whose end-of-match checks ran
@@ -207,6 +217,7 @@ class LiveService:
             if live.full_time and live.match_id not in self._validated:
                 self._validated.add(live.match_id)
                 self.watch.validated(live.match_id, live.finish_validation())
+                await self._keep_record(live)
             if not final and self._inbox.empty():  # rows waiting: the feed is not silent
                 period, clock_ms = live.position()
                 where = minute_label(period, clock_ms)
@@ -241,6 +252,8 @@ class LiveService:
                     self._loaded.add(match_id)
                     await asyncio.to_thread(self.ledger.load, match_id)
                 self._take(item)
+                if item.message.kind == "match":
+                    await self._load_season(match_id)
             if done or self.clock() - last_tick >= self.options.tick_s:
                 await self._tick(final=done)
                 last_tick = self.clock()
@@ -249,6 +262,30 @@ class LiveService:
         for fh in self._handles.values():
             fh.close()
         self._ingest_done.set()
+
+    async def _load_season(self, match_id: str) -> None:
+        """The match's earlier records this season, once its reference has arrived."""
+        live = self.matches.get(match_id)
+        if self.history is None or live is None or live.match is None or live.season is not None:
+            return
+        live.season = await asyncio.to_thread(season_for, live.match, self.history)
+
+    async def _keep_record(self, live: LiveMatch) -> None:
+        """At full time: the match's record, to the history store and the event store."""
+        match = live.match
+        if match is None or (self.history is None and self.store is None):
+            return
+        try:
+            record = await asyncio.to_thread(
+                build_record, match, list(live.events), list(live.tracking)
+            )
+        except MatchNotFinished:
+            return
+        if self.history is not None:
+            await asyncio.to_thread(self.history.put, record)
+        if self.store is not None:
+            for table, rows in history_rows(record, time.time()).items():
+                self.store.append(table, rows)
 
     # Worker ----------------------------------------------------------------------
     async def _process(self, models: ModelManager, delivery: Delivery) -> Outcome:
@@ -261,6 +298,7 @@ class LiveService:
             list(live.events),
             list(live.tracking),
             list(live.emitted),
+            live.season,
         )
         stats = LocalStats(tools)
         inject = {trigger.trigger_id} & self._injected

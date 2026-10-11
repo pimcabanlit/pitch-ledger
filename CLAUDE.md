@@ -84,6 +84,7 @@ pitch-ledger/
     mcp_server/              read-only stats tools
     agents/                  model_manager, explainer, auditor, narrator, personalizer, translator, orchestrator, overlay builder
     ledger/                  insight ledger repository (Cosmos + in-memory)
+    history/                 season history: match records, file/memory stores, league table (Cosmos in infra_adapters)
     api/                     FastAPI app (/api/v1)
     infra_adapters/          event hubs (also Fabric Eventstream endpoints), azure data explorer, service bus, cosmos, web pubsub
   studio/                    Next.js app
@@ -108,8 +109,10 @@ uv run pitch-ledger validate data/M0001  # every rule; exit 1 on any reject (--n
 uv run pitch-ledger realism data/M0001   # compare against realism bands (--strict: exit 1 if out)
 uv run pitch-ledger detect data/M0002    # triggers.jsonl + scenario check; exit 1 on a miss or false alert (--all)
 uv run pitch-ledger mcp data/M0002       # read-only stats tools as an MCP server (stdio)
-uv run pitch-ledger replay data/M0002 --approve --inject-error   # agents -> data/M0002/ledger (--provider foundry, --only, --budget, --local-stats)
-uv run pitch-ledger evaluate              # scorecard -> data/scorecard.json; exit 1 if a gate fails (--match M0002, --sweep N)
+uv run pitch-ledger replay data/M0002 --approve --inject-error   # agents -> data/M0002/ledger (--provider foundry, --only, --budget, --local-stats, --history file|cosmos|none: season facts from earlier matches)
+uv run pitch-ledger evaluate              # scorecard -> data/scorecard.json; exit 1 if a gate fails (--match M0002, --sweep N, --store adx: keep the run in EvalRuns)
+uv run pitch-ledger history build --data data   # a match record per finished match -> history store (--history file|cosmos, --store adx)
+uv run pitch-ledger history show --data data    # the season's results and league table from the records
 uv run pitch-ledger foundry-eval --ledger cosmos   # every aired insight -> Foundry evaluations: code checks + groundedness, coherence, fluency (--match, --no-judges, --safety, --dry-run)
 uv run pitch-ledger check-models          # model settings, Entra ID sign-in, one tiny call per deployment; exit 1 on a FAIL
 uv run pitch-ledger check-models --safety # also a prompt-injection probe the content filter must block
@@ -132,7 +135,7 @@ az bicep build --file infra/main.bicep && az bicep lint --file infra/main.bicep 
 az deployment group create -g <resource-group> --parameters infra/main.bicepparam   # deploy by hand (normally the Deploy workflow)
 ```
 
-Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `alerts.jsonl`, `run.json`). Scenario definitions live in `scenarios/<scenario_id>.yaml`.
+Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `alerts.jsonl`, `run.json`). Season history: `data/history/records.jsonl` (one match record per line). Scenario definitions live in `scenarios/<scenario_id>.yaml`; `scenarios/matches.yaml` gives the demo matches their seeds and weekly kick-offs.
 
 ## Definition of done for any change
 

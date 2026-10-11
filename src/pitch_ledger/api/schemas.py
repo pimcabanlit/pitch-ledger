@@ -130,6 +130,7 @@ class StoryTrigger(BaseModel):
     detector: str | None
     metrics: dict[str, int | float]
     windows: list[StoryWindow]
+    season_matches: list[str] = []  # earlier matches this season behind any season facts
 
 
 class InsightStory(BaseModel):

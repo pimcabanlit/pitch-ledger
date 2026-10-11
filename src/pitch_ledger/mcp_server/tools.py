@@ -14,6 +14,7 @@ from pitch_ledger.engine import MatchEngine, physical, shot_xg
 from pitch_ledger.engine.detector import detect
 from pitch_ledger.engine.metrics import is_counted_pass
 from pitch_ledger.engine.recompute import recompute_trigger
+from pitch_ledger.engine.season import SeasonView
 from pitch_ledger.engine.timeline import turnovers
 from pitch_ledger.matchlab.io import TRIGGERS_JSONL, read_match, read_triggers
 from pitch_ledger.schema import Event, TrackingSample, Trigger
@@ -25,8 +26,10 @@ MAX_EVENTS = 300
 class StatsTools:
     """Tool implementations for a match directory (loaded lazily, cached)."""
 
-    def __init__(self, match_dir: Path | str) -> None:
+    def __init__(self, match_dir: Path | str, season: SeasonView | None = None) -> None:
+        """``season``: earlier matches this season (season facts on goals and recaps)."""
         self.match_dir = Path(match_dir)
+        self.season = season
 
     @classmethod
     def snapshot(
@@ -36,9 +39,10 @@ class StatsTools:
         events: list[Event],
         tracking: list[TrackingSample],
         triggers: list[Trigger],
+        season: SeasonView | None = None,
     ) -> "StatsTools":
         """Tools over data already in memory (the live service's view of a match so far)."""
-        tools = cls(match_dir)
+        tools = cls(match_dir, season)
         tools.__dict__.update(
             _files=files,
             events=events,
@@ -68,7 +72,7 @@ class StatsTools:
         if (self.match_dir / TRIGGERS_JSONL).exists():
             found = read_triggers(self.match_dir)
         else:
-            found = detect(self._files.match, self.events, self.tracking)
+            found = detect(self._files.match, self.events, self.tracking, season=self.season)
         return {t.trigger_id: t for t in found}
 
     # Tools -------------------------------------------------------------------
@@ -136,7 +140,9 @@ class StatsTools:
     def recompute_trigger(self, trigger_id: str) -> dict[str, int | float]:
         """Every metric of a trigger recomputed from raw rows up to its moment."""
         trigger = self.triggers[trigger_id]
-        return recompute_trigger(trigger, self._files.match, self.events, self.tracking)
+        return recompute_trigger(
+            trigger, self._files.match, self.events, self.tracking, season=self.season
+        )
 
     def recompute_metric(self, trigger_id: str, metric: str) -> dict[str, Any]:
         """One metric recomputed, next to the value the trigger states."""

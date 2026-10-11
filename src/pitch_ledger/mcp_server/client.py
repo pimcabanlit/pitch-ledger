@@ -2,6 +2,7 @@
 
 import json
 import sys
+import tempfile
 from contextlib import AsyncExitStack
 from pathlib import Path
 from typing import Any, Protocol
@@ -9,6 +10,7 @@ from typing import Any, Protocol
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from pitch_ledger.engine.season import SeasonView
 from pitch_ledger.mcp_server.tools import StatsTools
 
 
@@ -37,10 +39,17 @@ class LocalStats:
 class McpStats:
     """Gateway that talks to ``pitch-ledger mcp`` over stdio (one server per match)."""
 
-    def __init__(self, match_dir: Path | str) -> None:
-        self.params = StdioServerParameters(
-            command=sys.executable, args=["-m", "pitch_ledger.mcp_server", str(match_dir)]
-        )
+    def __init__(self, match_dir: Path | str, season: SeasonView | None = None) -> None:
+        """``season``: handed to the server as a file, so it recomputes season facts from
+        the same earlier matches as the caller."""
+        args = ["-m", "pitch_ledger.mcp_server", str(match_dir)]
+        self._tmp: tempfile.TemporaryDirectory[str] | None = None
+        if season is not None:
+            self._tmp = tempfile.TemporaryDirectory(prefix="pitch-ledger-season-")
+            path = Path(self._tmp.name) / "season.jsonl"
+            path.write_text("".join(r.model_dump_json() + "\n" for r in season.records), "utf-8")
+            args.append(str(path))
+        self.params = StdioServerParameters(command=sys.executable, args=args)
         self._stack = AsyncExitStack()
         self.session: ClientSession | None = None
         self.calls = 0
@@ -54,6 +63,9 @@ class McpStats:
     async def __aexit__(self, *exc: object) -> None:
         await self._stack.aclose()
         self.session = None
+        if self._tmp is not None:
+            self._tmp.cleanup()
+            self._tmp = None
 
     async def call(self, tool: str, **arguments: Any) -> Any:
         if self.session is None:

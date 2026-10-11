@@ -103,3 +103,25 @@ def test_replay_writes_the_ledger(
     assert run["provider"] == "offline" and run["producer"] == "producer_demo"
     assert run["overlays"] == 15 * run["counts"]["status"]["aired"] > 0
     assert (copy / "triggers.jsonl").exists()
+
+
+def test_history_build_show_and_a_replay_with_the_season(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data = tmp_path / "data"
+    assert main(["generate", "--seed", "4211", "--out", str(data / "M0001"),
+                 "--kickoff", "2026-08-22T14:00:00+00:00"]) == 0  # fmt: skip
+    assert main(["generate", "--scenario", "late_collapse", "--seed", "4212",
+                 "--out", str(data / "M0002")]) == 0  # fmt: skip
+    capsys.readouterr()
+    assert main(["history", "build", "--data", str(data), "--history", "file"]) == 0
+    assert (data / "history" / "records.jsonl").exists()
+    assert main(["history", "show", "--data", str(data), "--history", "file"]) == 0
+    out = capsys.readouterr().out
+    assert "Harbour Coast League 2026-27: 2 matches" in out and "T01  2  1  1  0" in out
+    assert main(["replay", str(data / "M0002"), "--approve", "--local-stats",
+                 "--history", "file"]) == 0  # fmt: skip
+    assert "season: earlier matches M0001" in capsys.readouterr().out
+    run = json.loads((data / "M0002" / "ledger" / "run.json").read_text("utf-8"))
+    assert run["season_matches"] == ["M0001"]
+    assert run["counts"]["status"].get("blocked", 0) == 0

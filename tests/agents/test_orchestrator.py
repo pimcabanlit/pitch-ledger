@@ -42,7 +42,7 @@ def m0002_dir(m0002: list[Case], tmp_path_factory: pytest.TempPathFactory) -> Pa
 def _orchestrator(m0002: list[Case], stats: Any = None, **kwargs: Any) -> Orchestrator:
     sim = m0002[0].sim
     models = ModelManager(ModelSettings())
-    stats = stats or SimStats(sim, [c.trigger for c in m0002], m0002[0].tracking)
+    stats = stats or SimStats(sim, [c.trigger for c in m0002], m0002[0].tracking, m0002[0].season)
     svc = Services("M0002", models, Auditor(models, stats), InMemoryLedger())
     context = MatchContext(sim.match, sim.teams, sim.players, {e.event_id: e for e in sim.events})
     return Orchestrator(svc, context, **kwargs)

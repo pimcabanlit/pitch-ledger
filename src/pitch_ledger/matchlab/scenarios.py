@@ -29,7 +29,7 @@ from pitch_ledger.core.config import get_settings
 from pitch_ledger.matchlab.styles import NEUTRAL, ModifierProvider, Modifiers, SendOff
 from pitch_ledger.schema import Scenario
 from pitch_ledger.schema.enums import EffectOp, ScenarioId
-from pitch_ledger.schema.types import MatchId, TeamId
+from pitch_ledger.schema.types import MatchId, TeamId, UtcTimestamp
 
 TEAM_EFFECTS: dict[str, tuple[EffectOp, str]] = {
     "pass_success": (EffectOp.ADD, "pass_success_add"),
@@ -49,7 +49,7 @@ PLAYER_EFFECTS: dict[str, tuple[EffectOp, str]] = {
 
 
 class ManifestMatch(BaseModel):
-    """One demo match: who plays, which scenario is planted, and the seed."""
+    """One demo match: who plays, which scenario is planted, the seed and the kick-off."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -58,6 +58,7 @@ class ManifestMatch(BaseModel):
     home_team_id: TeamId
     away_team_id: TeamId
     seed: int
+    kickoff: UtcTimestamp | None = None  # season order; None: the generator's default
 
 
 @dataclass(frozen=True)

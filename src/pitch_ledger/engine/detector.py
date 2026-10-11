@@ -26,6 +26,10 @@ percentages, speeds and distances, two for xG).
   airs (auto-approved) when it is the hardest so far in the match |
 | half_time_recap / full_time_recap | recap | at each period end |
 
+Given the season so far (earlier matches' records), goals and the full-time recap also carry
+season facts (``engine.season``): the scorer's league goals, season firsts, form and the
+earlier meeting.
+
 Speed-badge cap: one speed badge airs per team per half, plus any later one that is the
 fastest of its kind (shot or top speed) so far in the match, the first of each kind
 included. Milestone and pass-quality badges air on firsts and records only (see the rows
@@ -48,6 +52,7 @@ from pitch_ledger.engine.metrics import (
 )
 from pitch_ledger.engine.momentum import MomentumAlert, MomentumConfig, momentum_alerts
 from pitch_ledger.engine.physical import HSR_LOW_KMH
+from pitch_ledger.engine.season import SeasonView, goal_metrics, recap_metrics
 from pitch_ledger.engine.windows import MatchEngine, match_minute
 from pitch_ledger.schema import (
     CardDetails,
@@ -116,9 +121,14 @@ def _window(period: int, start_ms: int, end_ms: int) -> dict[str, int]:
 class Detector:
     """Runs every rule over one match."""
 
-    def __init__(self, match: Match, config: DetectorConfig | None = None) -> None:
+    def __init__(
+        self, match: Match, config: DetectorConfig | None = None, season: SeasonView | None = None
+    ) -> None:
+        """``season``: earlier matches this season, for season facts on goals and the
+        full-time recap (``engine.season``); none, no season facts."""
         self.match = match
         self.config = config or DetectorConfig()
+        self.season = season
 
     def detect(
         self, events: Sequence[Event], tracking: Sequence[TrackingSample] = ()
@@ -282,6 +292,13 @@ class Detector:
                 regain = rm.goal_regain(e, engine.events)
                 if regain is not None and regain.event_id not in assist:
                     assist.append(regain.event_id)
+                metrics = rm.goal(e, self.match.home_team_id, engine.events)
+                context: dict[str, Any] = {}
+                if self.season is not None:
+                    extra = goal_metrics(self.season, e, int(metrics.get("player_goals", 0)))
+                    if extra:
+                        metrics |= extra
+                        context["season"] = self.season.context()
                 out.append(
                     _Draft(
                         e.period,
@@ -290,8 +307,9 @@ class Detector:
                         InsightType.KEY_MOMENT,
                         "goal",
                         InsightSubject(team_id=e.team_id, player_id=e.player_id),
-                        rm.goal(e, self.match.home_team_id, engine.events),
+                        metrics,
                         (e.event_id, *assist),
+                        context,
                     )
                 )
             elif e.event_type is EventType.CARD and e.outcome in SENDING_OFF and e.team_id:
@@ -515,6 +533,12 @@ class Detector:
                 engine, e, self.match.home_team_id, self.match.away_team_id
             )
             rule = "half_time_recap" if e.period == 1 else "full_time_recap"
+            context: dict[str, Any] = {}
+            if rule == "full_time_recap" and self.season is not None:
+                extra = recap_metrics(self.season, self.match, e.score_home, e.score_away)
+                if extra:
+                    metrics |= extra
+                    context["season"] = self.season.context()
             out.append(
                 _Draft(
                     e.period,
@@ -525,6 +549,7 @@ class Detector:
                     InsightSubject(),
                     metrics,
                     tuple(evidence),
+                    context,
                 )
             )
         return out
@@ -584,6 +609,7 @@ def detect(
     events: Sequence[Event],
     tracking: Sequence[TrackingSample] = (),
     config: DetectorConfig | None = None,
+    season: SeasonView | None = None,
 ) -> list[Trigger]:
-    """Run every detector rule over a match."""
-    return Detector(match, config).detect(events, tracking)
+    """Run every detector rule over a match (``season``: earlier matches, for season facts)."""
+    return Detector(match, config, season).detect(events, tracking)

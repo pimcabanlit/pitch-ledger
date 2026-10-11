@@ -30,11 +30,18 @@ from pitch_ledger.agents.facts import build_facts
 from pitch_ledger.agents.replay import ReplayOptions, ReplayRun, replay_match
 from pitch_ledger.engine.detector import detect
 from pitch_ledger.engine.evaluation import check_detection
-from pitch_ledger.engine.recompute import recompute_trigger
+from pitch_ledger.engine.recompute import NotRecomputable, recompute_trigger
+from pitch_ledger.engine.season import SeasonView, has_season_facts
 from pitch_ledger.engine.windows import match_minute
+from pitch_ledger.history import InMemoryHistory, build_record, season_for
 from pitch_ledger.ledger import InMemoryLedger
 from pitch_ledger.matchlab.build import build_match
-from pitch_ledger.matchlab.generator import MatchSpec, SimulatedMatch, simulate_match
+from pitch_ledger.matchlab.generator import (
+    DEFAULT_KICKOFF,
+    MatchSpec,
+    SimulatedMatch,
+    simulate_match,
+)
 from pitch_ledger.matchlab.io import write_match
 from pitch_ledger.matchlab.scenarios import ManifestMatch, load_manifest, load_scenario, plan_for
 from pitch_ledger.schema import Insight, TrackingSample
@@ -51,6 +58,7 @@ def _spec(entry: ManifestMatch, seed: int | None = None) -> MatchSpec:
         away_team_id=entry.away_team_id,
         seed=entry.seed if seed is None else seed,
         scenario_id=entry.scenario_id.value,
+        kickoff_utc=entry.kickoff or DEFAULT_KICKOFF,
     )
 
 
@@ -65,6 +73,7 @@ class _Match:
     tracking: list[TrackingSample]
     clean: ReplayRun
     planted: ReplayRun
+    season: SeasonView | None = None
 
 
 # Sections ---------------------------------------------------------------------------------
@@ -125,7 +134,7 @@ def detection_section(matches: Sequence[_Match], sweep_seeds: int) -> dict[str, 
 
 def insight_checks(
     ledger: InMemoryLedger, sim: SimulatedMatch, tracking: Sequence[TrackingSample],
-    insight: Insight,
+    insight: Insight, season: SeasonView | None = None,
 ) -> dict[str, list[str]]:  # fmt: skip
     """Independent code checks on one aired insight, by name; an empty list passed.
 
@@ -133,11 +142,16 @@ def insight_checks(
     - numbers: every number in the headline and explanation is one of its metrics;
     - evidence: cited events exist and belong to the trigger;
     - overlays: every number in every overlay recomputes (in its language);
-    - editorial: the headline and explanation pass the house-style check."""
+    - editorial: the headline and explanation pass the house-style check.
+
+    ``season``: the earlier matches' records, for season facts."""
     trigger = ledger.get_trigger(insight.trigger_id or "")
     if trigger is None:
         return {"recompute": ["no trigger"]}
-    fresh = recompute_trigger(trigger, sim.match, sim.events, list(tracking))
+    try:
+        fresh = recompute_trigger(trigger, sim.match, sim.events, list(tracking), season=season)
+    except NotRecomputable as exc:
+        return {"recompute": [str(exc)]}
     text = f"{insight.headline}\n{insight.explanation}"
     event_ids = {e.event_id for e in sim.events}
     in_moment = set(insight.evidence_event_ids) <= set(trigger.evidence_event_ids) & event_ids
@@ -149,13 +163,14 @@ def insight_checks(
         "overlays": [f"overlay {o.overlay_id} ({o.language}): {n}"
                      for o in ledger.overlays(insight.insight_id)
                      for n in unsupported_numbers(o.text, fresh.values(), o.language)],
-        "editorial": draft_issues(insight.headline, insight.explanation),
+        "editorial": draft_issues(insight.headline, insight.explanation,
+                                  season=has_season_facts(trigger.metrics)),
     }  # fmt: skip
 
 
 def _insight_problems(m: _Match, run: ReplayRun, insight: Insight) -> list[str]:
     """What an independent recompute finds wrong with an aired insight (empty: accurate)."""
-    checks = insight_checks(run.ledger, m.sim, m.tracking, insight)
+    checks = insight_checks(run.ledger, m.sim, m.tracking, insight, m.season)
     return [p for name in ("recompute", "numbers", "evidence", "overlays")
             for p in checks.get(name, [])]  # fmt: skip
 
@@ -173,7 +188,10 @@ def demo_match(match_id: str) -> tuple[SimulatedMatch, list[TrackingSample]]:
 
 
 def evaluation_rows(
-    ledger: InMemoryLedger, sim: SimulatedMatch, tracking: Sequence[TrackingSample]
+    ledger: InMemoryLedger,
+    sim: SimulatedMatch,
+    tracking: Sequence[TrackingSample],
+    season: SeasonView | None = None,
 ) -> list[dict[str, str]]:
     """One row per aired insight, for an evaluation service: the moment (query), what the
     agents were given (context: the code-computed metrics, names and signals, and the cited
@@ -194,7 +212,7 @@ def evaluation_rows(
         who = (names.get("player") if trigger.subject.player_id else None) or names.get(
             "team", "the match"
         )
-        checks = insight_checks(ledger, sim, tracking, insight)
+        checks = insight_checks(ledger, sim, tracking, insight, season)
         context = [
             "Metrics computed in code (exact): "
             + ", ".join(f"{k}={v}" for k, v in insight.metrics.items()),
@@ -311,12 +329,14 @@ def editorial_section(matches: Sequence[_Match]) -> dict[str, Any]:
             overlays = ledger.overlays(insight.insight_id)
             if not overlays:
                 continue
-            found = draft_issues(insight.headline, insight.explanation)
+            trigger = ledger.get_trigger(insight.trigger_id or "")
+            season = trigger is not None and has_season_facts(trigger.metrics)
+            found = draft_issues(insight.headline, insight.explanation, season=season)
             issues += [f"{insight.insight_id}: {f}" for f in found]
             by_language: dict[str, list[str]] = {}
             for o in overlays:
                 texts += 1
-                problems = editorial_issues(o.text, "overlay", o.language)
+                problems = editorial_issues(o.text, "overlay", o.language, season=season)
                 issues += [f"{o.overlay_id} ({o.language}): {f}" for f in problems]
                 by_language.setdefault(o.language, []).append(o.text)
             for group in by_language.values():
@@ -399,15 +419,19 @@ def gates(card: dict[str, Any]) -> list[Gate]:
 
 
 async def _run_match(
-    entry: ManifestMatch, root: Path, provider: Literal["offline", "foundry"] | None
+    entry: ManifestMatch,
+    built: tuple[SimulatedMatch, list[TrackingSample]],
+    root: Path,
+    provider: Literal["offline", "foundry"] | None,
+    history: InMemoryHistory,
 ) -> _Match:
-    sim, tracking = build_match(_spec(entry))
+    sim, tracking = built
     match_dir = root / entry.match_id
     write_match(match_dir, sim.match, sim.teams, sim.players, sim.events, tracking)
     common: dict[str, Any] = {"stats": "local", "write": False, "provider": provider}
-    clean = await replay_match(match_dir, ReplayOptions(approve=True, **common))
-    planted = await replay_match(match_dir, ReplayOptions(inject="all", **common))
-    return _Match(entry, sim, tracking, clean, planted)
+    clean = await replay_match(match_dir, ReplayOptions(approve=True, **common), history=history)
+    planted = await replay_match(match_dir, ReplayOptions(inject="all", **common), history=history)
+    return _Match(entry, sim, tracking, clean, planted, season_for(sim.match, history))
 
 
 def build_scorecard(
@@ -416,8 +440,13 @@ def build_scorecard(
     provider: Literal["offline", "foundry"] | None = None,
 ) -> dict[str, Any]:
     entries = list(matches) if matches is not None else load_manifest()
+    built = {e.match_id: build_match(_spec(e)) for e in entries}
+    # The season: every match's record, so each match sees the ones that kicked off before.
+    history = InMemoryHistory([build_record(sim.match, sim.events, tracking)
+                               for sim, tracking in built.values()])  # fmt: skip
     with tempfile.TemporaryDirectory() as tmp:
-        runs = [asyncio.run(_run_match(e, Path(tmp), provider)) for e in entries]
+        runs = [asyncio.run(_run_match(e, built[e.match_id], Path(tmp), provider, history))
+                for e in entries]  # fmt: skip
     card: dict[str, Any] = {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "matches": [e.match_id for e in entries],

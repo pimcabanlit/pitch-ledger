@@ -25,7 +25,7 @@ def _services(case: Case, clients: dict[str, ScriptedChatClient] | None = None,
               trigger: Trigger | None = None, inject: bool = False) -> Services:  # fmt: skip
     models = ModelManager(ModelSettings(), clients=dict(clients or {}))
     original = case.trigger
-    stats = SimStats(case.sim, [original], case.tracking)
+    stats = SimStats(case.sim, [original], case.tracking, case.season)
     inject_for = {(trigger or original).trigger_id} if inject else set()
     return Services(case.trigger.match_id, models, Auditor(models, stats), InMemoryLedger(),
                     inject_error_for=inject_for)  # fmt: skip

@@ -234,6 +234,29 @@ Fire at a score of 10; onset is when the score last left zero. At most one alert
 
 **Player physical** (from tracking): distance covered (km), high-speed running (m), sprints (entries into > 25.2 km/h), top speed (km/h).
 
+## Season history
+
+**Match records** (`src/pitch_ledger/schema/history.py`, built by `history/records.py`). Each finished match gets one record, computed from its own rows by the engine and never typed in or taken from a model. Rebuilding a record from the same files gives the same record. A record holds:
+- the match: competition, season, kick-off, clubs, final score;
+- one line per team: venue, goals for and against, result, shots, on target, xG, possession, passes, pass accuracy (the full-time recap's numbers);
+- one line per player who touched the ball or was tracked: goals, shots, xG, passes, completed, accuracy, distance, top speed, sprints (as the stats tools count them);
+- every goal, with the event that scored it;
+- the players with three or more goals.
+
+Records are keyed by competition and season and ordered by kick-off. The demo matches are one matchday a week from 2026-08-22 (`scenarios/matches.yaml`). A kick-off changes only the events' `feed_ts_utc`, never the football. Records are kept in `<data>/history/records.jsonl` locally, or in the Cosmos DB container `history` (partition key `/season`, one document per match). They are also kept as rows in the event-store tables below. A replay keeps its match's record, and so does the live service at full time; `history build` writes them for every finished match folder.
+
+**Season facts** (`src/pitch_ledger/engine/season.py`). A match sees only records of the same competition and season that kicked off before it, so its season facts never change once it is played. Facts appear only when a club has played earlier in the season.
+
+| Metric | On | Definition |
+| --- | --- | --- |
+| `team_matches_before` | goal | earlier league matches of the scorer's club this season |
+| `season_goals` | goal | the scorer's league goals this season, this one included |
+| `season_hat_tricks_before` | goal completing a hat-trick | hat-tricks earlier in the league season (0: the first of the season) |
+| `home_form_played`, `_wins`, `_draws`, `_losses` (and `away_…`) | full-time recap | the club's last league matches, up to 5, this one included |
+| `h2h_home_goals`, `h2h_away_goals` | full-time recap | the last earlier meeting this season, as goals by today's home and away clubs |
+
+A trigger that uses season facts lists the earlier matches in `context.season` (competition, season, match IDs). The Auditor recomputes the same metrics from the same records. It refuses (not recomputable) when the records it can see are not exactly those matches. The copy may then speak of the season ("It completes the first hat-trick of the league season", "It takes the scorer to 4 league goals this season", "Last 3 league matches: won 2, drew 1, lost 0", "Corrowmere Town lost the last meeting this season 1-4"). Without season facts the word "season" is still an unsupported claim. Records, careers and earlier seasons stay unsupported always.
+
 ## Output contracts
 
 **insight** (written by agents, checked by the Auditor)
@@ -374,6 +397,12 @@ The analytical copy for KQL queries and the control-room dashboard; Cosmos DB st
 | `OpsAlerts` | ops alert raised, and again when acknowledged: kind, severity, message, references, raised time, acknowledged by | `live` (feed, validation, worker), `store` (a replay's alerts) |
 | `FeedHealth` | match per wall-clock minute: messages received, p50 / p95 / max send-to-receive latency | `listen --store` |
 | `StoreCheck` | `check-store` test write | `check-store` |
+| `MatchResults` | finished match: competition, season, kick-off, clubs, score, hat-tricks | `store`, `history build --store`, `live` at full time |
+| `TeamMatchStats` | team per finished match: the record's team line | as `MatchResults` |
+| `PlayerMatchStats` | player per finished match: the record's player line | as `MatchResults` |
+| `EvalRuns` | scorecard run: matches, gates, pass or fail, summary sections | `evaluate --store` |
+
+The season-history tables are append-only. Storing a match again adds identical rows, so a query takes the latest row per key (`arg_max(recorded_at, *) by match_id, team_id` and so on). Insight outcomes per match are in `InsightStatus` (join on `match_id` for the season).
 
 ## Validation rules
 
@@ -393,7 +422,7 @@ Run at ingest before any agent sees an event (`validate` for a match directory; 
 | Match | Exactly one period_start and one period_end per period | Reject |
 | Match | Totals within realism bands (below) | Flag |
 | Insight | Every number in an insight's text appears in `metrics` and recomputes from its evidence | Block insight |
-| Insight | Editorial form (`agents/editorial.py`): headline at most 10 words; explanation at most 2 sentences and 320 characters; on-screen text at most 140 characters (160 in es/fil); no clichés; no claims the data cannot back (seasons, records, history, injuries, causes, predictions); no repetition | Revise; template copy if only the form still fails |
+| Insight | Editorial form (`agents/editorial.py`): headline at most 10 words; explanation at most 2 sentences and 320 characters; on-screen text at most 140 characters (160 in es/fil); no clichés; no claims the data cannot back (records, careers, earlier seasons, injuries, causes, predictions; the season itself only when the insight carries season facts); no repetition | Revise; template copy if only the form still fails |
 | Copy | Every number in each personalized or translated overlay text matches a recomputed trigger metric | Retry once, then template copy |
 
 Numbers are compared at the precision they are written with ("64" matches 64.3; "6.2" matches 6.2, not 6.3). An exact half may be rounded either way: a minute of 30.5 may be written 30 or 31 (captions write 31'). In decimal-comma languages (Spanish) "79,3" is read as 79.3, and their copy uses no thousands separator; English and Filipino use a decimal point. Signs, units and percent marks are ignored; identifiers such as T02 are not numbers.

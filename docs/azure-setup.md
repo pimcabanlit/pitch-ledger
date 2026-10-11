@@ -226,7 +226,7 @@ From a cloud session, as `pitch-ledger-dev`: Entra ID token for the cluster, `pr
 
 1. **Create the tables (you, once):** open the free cluster's query editor on `matchdata`, paste the whole of `infra/adx/tables.kql` (or the output of `uv run pitch-ledger store-schema`) and run it. It creates every table, its JSON mapping, streaming ingestion and a 10-second batching fallback. Re-running is safe. The result lists each command; a failed line (for example if the free cluster refuses a policy) shows its error.
 2. **Check:** `uv run pitch-ledger check-store` (verified 2026-10-09: all PASS, test write readable after 3.5 s, so streaming ingestion works on the free cluster) reports settings, sign-in, roles, tables, and one test write read back.
-3. **Load a match:** `uv run pitch-ledger store data/M0002 --store adx` (events, tracking, engine snapshots, triggers, insight status). Live: `uv run pitch-ledger listen --store adx` also writes rows and feed health.
+3. **Load a match:** `uv run pitch-ledger store data/M0002 --store adx` (events, tracking, engine snapshots, triggers, insight status, and the season-history rows of a finished match). The season-history tables (`MatchResults`, `TeamMatchStats`, `PlayerMatchStats`, `EvalRuns`) came later (2026-10-11): re-run `infra/adx/tables.kql` once to add them (safe; existing tables are kept). Live: `uv run pitch-ledger listen --store adx` also writes rows and feed health.
 4. **Dashboard:** see the next section.
 
 ### Dashboard (control room), step by step
@@ -304,6 +304,12 @@ COSMOS_ENDPOINT=https://pitch-ledger-cosmos.documents.azure.com:443/
 ```
 
 The endpoint is on the account's Overview page (URI). Cloud sessions: allow **`*.documents.azure.com`** in the environment's network access. Then `uv run pitch-ledger check-ledger` writes, reads and deletes one test document.
+
+### 5. Season history container
+
+Match records for season facts (one document per finished match) live in a second container, `history`, partition key `/season`. It sits in the same database and shares its throughput, so it costs nothing extra. The Deploy workflow creates it (`infra/modules/history-store.bicep`), and the existing data-plane role already covers it (scope `/`). Settings: `PITCH_LEDGER_HISTORY=cosmos` (the apps and jobs have it). The container name defaults to `history` (`PITCH_LEDGER_COSMOS_HISTORY_CONTAINER`).
+
+Fill it once with the six demo matches: `uv run pitch-ledger generate-all --out data`, then `uv run pitch-ledger history build --data data --history cosmos --store adx`. After that, replays and the live job keep each match's record themselves.
 
 ## Trigger queue: Azure Service Bus (Basic)
 
