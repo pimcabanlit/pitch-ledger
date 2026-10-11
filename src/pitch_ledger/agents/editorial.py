@@ -30,19 +30,24 @@ CLICHES = (
 
 UNSUPPORTED = {
     "en": (
-        r"\bseasons?\b", r"\brecords?\b", r"\bfirst time\b", r"\bcareer\b", r"\bhistor",
+        r"\brecords?\b", r"\bfirst time\b", r"\bcareer\b", r"\bhistor",
         r"\bbecause of\b", r"\bdue to\b", r"\bcaused\b", r"\binjur", r"\balways\b",
         r"\bnever\b", r"\bwill (?:win|lose|score|go on)\b", r"\bcertainly\b",
         r"\bdefinitely\b", r"\bfans will\b",
     ),
     "es": (
-        r"\btemporadas?\b", r"\br[ée]cords?\b", r"\bhist[óo]ric", r"\bdebido a\b",
+        r"\br[ée]cords?\b", r"\bhist[óo]ric", r"\bdebido a\b",
         r"\blesi[óo]n", r"\bsiempre\b", r"\bnunca\b",
     ),
-    "fil": (r"\bseason\b", r"\brecord\b", r"\bdahil sa\b", r"\bkasaysayan\b", r"\bpalagi\b"),
+    "fil": (r"\brecord\b", r"\bdahil sa\b", r"\bkasaysayan\b", r"\bpalagi\b"),
 }  # fmt: skip
-"""Claims the data cannot back: there is no history, season or injury data, and an
-insight may describe what coincided, not assert what caused it or what will happen."""
+"""Claims the data cannot back: there is no data on records, careers, earlier seasons or
+injuries, and an insight may describe what coincided, not assert what caused it or what will
+happen."""
+
+SEASON_WORDS = {"en": r"\bseasons?\b", "es": r"\btemporadas?\b", "fil": r"\bseason\b"}
+"""The season may be mentioned only when the insight carries season facts (metrics from this
+season's earlier matches, ``engine.season``)."""
 
 FORM_RULES = {
     "en": (
@@ -93,8 +98,11 @@ def _norm(text: str) -> str:
     return re.sub(r"[^\w]+", " ", text.lower()).strip()
 
 
-def editorial_issues(text: str, kind: Kind, language: str = "en") -> list[str]:
-    """Form problems in one text; an empty list means it may air."""
+def editorial_issues(
+    text: str, kind: Kind, language: str = "en", season: bool = False
+) -> list[str]:
+    """Form problems in one text; an empty list means it may air (``season``: the insight
+    carries season facts, so the season may be mentioned)."""
     issues: list[str] = []
     stripped = text.strip()
     if not stripped:
@@ -121,7 +129,10 @@ def editorial_issues(text: str, kind: Kind, language: str = "en") -> list[str]:
     for pattern, why in FORM_RULES.get(language, ()):
         if re.search(pattern, stripped, re.IGNORECASE):
             issues.append(f"STYLE: {why}")
-    for pattern in UNSUPPORTED.get(language, ()):
+    patterns = list(UNSUPPORTED.get(language, ()))
+    if not season and language in SEASON_WORDS:
+        patterns.append(SEASON_WORDS[language])
+    for pattern in patterns:
         if m := re.search(pattern, low):
             issues.append(f"STYLE: unsupported claim '{m.group(0)}' (no such data)")
     seen: set[str] = set()
@@ -143,9 +154,10 @@ def mode_issues(text: str, mode: str) -> list[str]:
     return []
 
 
-def draft_issues(headline: str, explanation: str) -> list[str]:
+def draft_issues(headline: str, explanation: str, season: bool = False) -> list[str]:
     """Headline and explanation rules, plus: the explanation must not restate the headline."""
-    issues = editorial_issues(headline, "headline") + editorial_issues(explanation, "explanation")
+    issues = editorial_issues(headline, "headline", season=season)
+    issues += editorial_issues(explanation, "explanation", season=season)
     head = _norm(headline)
     if head and head in _norm(explanation):
         issues.append("STYLE: the explanation repeats the headline")

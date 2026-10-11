@@ -121,6 +121,7 @@ Not asked for, but they make the output trustworthy and operable, the case for *
 | Key-less access: Entra ID only on Foundry, Cosmos DB, Event Hubs, Service Bus, Web PubSub and Application Insights | **Beyond the brief** | docs/azure-setup.md, *Enterprise controls* |
 | Infrastructure as code (Bicep), CI and deploy (GitHub Actions), scale to zero | **Beyond the brief** | `infra/`, `.github/workflows/` |
 | Cost controls: token caps, call budgets, small model for rewrites, speed-badge cap, log caps | **Beyond the brief** | docs/architecture.md, *Cost plan* |
+| Season history: one record per finished match (result, team and player stats, goals) in Cosmos DB and ADX, and scorecard runs in ADX. Audited season facts in insights: the scorer's league goals, the first hat-trick of the season, form over the last five matches, the last meeting | **Beyond the brief** | `pitch-ledger history show`; ADX tables `MatchResults`, `TeamMatchStats`, `PlayerMatchStats`, `EvalRuns`; M0002's hat-trick insight |
 
 ## Gaps to close in Phase 5
 

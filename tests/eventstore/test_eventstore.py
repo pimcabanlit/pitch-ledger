@@ -63,6 +63,16 @@ def test_export_match_writes_every_table(match_dir: Path, tmp_path: Path) -> Non
     lines = (tmp_path / "TeamState.jsonl").read_text().splitlines()
     assert len(lines) == counts["TeamState"]
     assert set(json.loads(lines[0])) == {name for name, _ in TABLES["TeamState"]}
+    # A finished match also writes its season-history rows.
+    assert (counts["MatchResults"], counts["TeamMatchStats"]) == (1, 2)
+    assert counts["PlayerMatchStats"] >= 22
+    result = json.loads((tmp_path / "MatchResults.jsonl").read_text())
+    final = files.events[-1]
+    assert (result["score_home"], result["score_away"]) == (
+        final["score_home"],
+        final["score_away"],
+    )
+    assert (result["match_id"], result["season"]) == ("M0007", "2026-27")
 
 
 def test_team_state_rows_are_the_engine_windows(match_dir: Path) -> None:

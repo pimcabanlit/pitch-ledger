@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from pitch_ledger.agents.contracts import CopySet
 from pitch_ledger.agents.editorial import editorial_issues, mode_issues
 from pitch_ledger.agents.model_manager import ModelManager, ModelUnavailable, Role
+from pitch_ledger.engine.season import has_season_facts
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 
 ATTEMPTS = 2
@@ -35,7 +36,7 @@ def copy_problems(
         return ["numbers not in metrics: empty text"]
     bad = unsupported_numbers(text, metrics.values(), language)
     problems = [f"numbers not in metrics: {', '.join(bad)}"] if bad else []
-    problems += editorial_issues(text, "overlay", language)
+    problems += editorial_issues(text, "overlay", language, season=has_season_facts(metrics))
     return problems + (mode_issues(text, mode) if mode else [])
 
 

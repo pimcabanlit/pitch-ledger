@@ -6,6 +6,7 @@ after a replay, each insight's status and the ops alerts. ``FeedHealthMeter`` tu
 deliveries into per-minute latency rows.
 """
 
+import contextlib
 import math
 from collections import defaultdict
 from collections.abc import Iterable
@@ -19,8 +20,11 @@ from pitch_ledger.engine.detector import detect
 from pitch_ledger.engine.windows import MatchEngine, TeamWindow, match_minute
 from pitch_ledger.eventstore.port import EventStore
 from pitch_ledger.eventstore.tables import project
+from pitch_ledger.history.records import MatchNotFinished, build_record
 from pitch_ledger.matchlab.io import TRIGGERS_JSONL, read_match, read_triggers
 from pitch_ledger.schema import Event, Insight, Match, OpsAlert, TrackingSample, Trigger
+from pitch_ledger.schema.history import MatchRecord
+from pitch_ledger.schema.types import format_utc
 
 WINDOW_MS = 5 * 60_000
 STEP_MS = 60_000
@@ -67,6 +71,37 @@ def trigger_row(t: Trigger) -> dict[str, Any]:
     }  # fmt: skip
 
 
+def history_rows(record: MatchRecord, recorded_at: float) -> dict[str, list[dict[str, Any]]]:
+    """A match record as rows for the season-history tables."""
+    key = {"match_id": record.match_id, "competition": record.competition,
+           "season": record.season, "kickoff_utc": format_utc(record.kickoff_utc)}  # fmt: skip
+    at = {"recorded_at": _utc(recorded_at)}
+    match = {
+        **key, "home_team_id": record.home_team_id, "away_team_id": record.away_team_id,
+        "score_home": record.score_home, "score_away": record.score_away,
+        "hat_tricks": record.hat_tricks, "record_version": record.record_version, **at,
+    }  # fmt: skip
+    return {
+        "MatchResults": [match],
+        "TeamMatchStats": [{**key, **t.model_dump(), **at} for t in record.teams],
+        "PlayerMatchStats": [{**key, **p.model_dump(), **at} for p in record.players],
+    }
+
+
+def eval_run_row(card: dict[str, Any], kind: str, recorded_at: float) -> dict[str, Any]:
+    """A scorecard (or Foundry evaluation) run for the ``EvalRuns`` table."""
+    generated = str(card.get("generated_at") or _utc(recorded_at))
+    summary = {k: card[k] for k in ("detection", "accuracy", "planted", "editorial", "usage")
+               if k in card}  # fmt: skip
+    if isinstance(summary.get("detection"), dict):  # per-match detail stays in the file
+        summary["detection"] = {k: v for k, v in summary["detection"].items() if k != "demo"}
+    return {
+        "run_id": f"{kind}-{generated}", "kind": kind, "generated_at": generated,
+        "passed": bool(card.get("passed")), "matches": card.get("matches", []),
+        "gates": card.get("gates", {}), "summary": summary, "recorded_at": _utc(recorded_at),
+    }  # fmt: skip
+
+
 def insight_status(insight: Insight) -> str:
     if insight.audit_status.value == "blocked":
         return "blocked"
@@ -100,13 +135,16 @@ def _ledger_lines(match_dir: Path, name: str) -> list[str]:
 def export_match(
     match_dir: Path, store: EventStore, with_tracking: bool = True, recorded_at: float = 0.0
 ) -> dict[str, int]:
-    """Write a match directory to the store; returns rows written per table."""
+    """Write a match directory to the store; returns rows written per table. A finished
+    match also gets its season-history rows (built from its tracking even when the raw
+    tracking rows are not uploaded)."""
     files = read_match(match_dir, with_tracking=with_tracking)
     events = [Event.model_validate(e) for e in files.events]
+    raw_tracking = files.tracking if with_tracking else read_match(match_dir).tracking
+    tracking = [TrackingSample.model_validate(s) for s in raw_tracking]
     if (match_dir / TRIGGERS_JSONL).exists():
         triggers = read_triggers(match_dir)
     else:
-        tracking = [TrackingSample.model_validate(s) for s in files.tracking]
         triggers = detect(files.match, events, tracking)
     insights = [Insight.model_validate_json(x) for x in _ledger_lines(match_dir, "insights")]
     alerts = [OpsAlert.model_validate_json(x) for x in _ledger_lines(match_dir, "alerts")]
@@ -119,6 +157,8 @@ def export_match(
         "InsightStatus": [insight_status_row(i, recorded) for i in insights],
         "OpsAlerts": [project("OpsAlerts", a.model_dump(mode="json")) for a in alerts],
     }
+    with contextlib.suppress(MatchNotFinished):  # a partial match has no result yet
+        tables |= history_rows(build_record(files.match, events, tracking), recorded)
     for table, rows in tables.items():
         for chunk in _chunks(rows):
             store.append(table, chunk)

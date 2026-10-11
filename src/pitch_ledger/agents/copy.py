@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from pitch_ledger.agents import phrases
+from pitch_ledger.engine.season import SEASON_METRICS
 from pitch_ledger.schema import Trigger
 from pitch_ledger.schema.enums import AudienceMode
 
@@ -53,7 +54,8 @@ def _modes(**by_mode: Lang) -> dict[str, Lang]:
 def _recap(label_en: str, short_en: str, label_es: str, short_es: str, label_fil: str) -> RuleCopy:
     score = "{home} {score_home}-{score_away} {away}"
     ft = short_en == "FT"
-    tail = "{second_half}" if ft else "{possession_note}"
+    tail = "{ft_tail}" if ft else "{possession_note}"
+    form = "{home_form_note}" if ft else ""
     verdict, casual = (
         ("{verdict_ft}", "{casual_verdict_ft}") if ft else ("{verdict}", "{casual_verdict}")
     )
@@ -76,11 +78,11 @@ def _recap(label_en: str, short_en: str, label_es: str, short_es: str, label_fil
             ),
             club_focus=_l(
                 f"{label_en} for {{home}}: {{score_home}}-{{score_away}} against {{away}}, "
-                "with {possession_home:0}% of the ball.",
+                f"with {{possession_home:0}}% of the ball.{form}",
                 f"{label_es} para {{home}}: {{score_home}}-{{score_away}} ante {{away}}, "
-                "con el {possession_home:0} % del balón.",
+                f"con el {{possession_home:0}} % del balón.{form}",
                 f"{label_fil} para sa {{home}}: {{score_home}}-{{score_away}} kontra "
-                "{away}, hawak ang bola {possession_home:0}% ng oras.",
+                f"{{away}}, hawak ang bola {{possession_home:0}}% ng oras.{form}",
             ),
             player_focus=_l(
                 f"{label_en}: {score}, {{shots_home}} shots to {{shots_away}}.",
@@ -707,11 +709,16 @@ def used_metrics(
     key: str, metrics: Mapping[str, float], values: Mapping[str, object] | None = None
 ) -> list[str]:
     """Metric names the headline and explanation use (after any fallback and phrase
-    choice; pass the full ``values`` so phrases that depend on names choose as rendered)."""
+    choice; pass the full ``values`` so phrases that depend on names choose as rendered).
+    A season claim in words ("the first hat-trick of the league season") cites the season
+    metrics behind it."""
     values = values if values is not None else metrics
     rule = CATALOGUE[resolve_key(key, values)]
     text = expand(rule.headline, values, "en") + " " + expand(rule.explanation, values, "en")
-    return sorted((template_fields(text) - NAME_FIELDS) & set(metrics))
+    used = (template_fields(text) - NAME_FIELDS) & set(metrics)
+    if re.search(r"\bseason\b", text):
+        used |= set(metrics) & SEASON_METRICS
+    return sorted(used)
 
 
 def signals(key: str, values: Mapping[str, object]) -> list[str]:
@@ -738,4 +745,11 @@ def signals(key: str, values: Mapping[str, object]) -> list[str]:
             before = ""
         if before:
             out.append(f"goal_before: {before}")
+    for name in phrases.SEASON_SIGNALS:  # season facts from earlier matches, when given
+        try:
+            text = fill("{" + name + "}", values, "en")
+        except (KeyError, ValueError):
+            continue
+        if text:
+            out.append(f"{name}: {text}")
     return out

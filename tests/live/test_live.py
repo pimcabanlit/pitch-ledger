@@ -190,3 +190,32 @@ def test_a_feed_joined_mid_match_raises_no_false_rejects(match_dir: Path) -> Non
             if match_minute(m.row) >= 60 and m.row.get("period") == 2:  # lineup changes before
                 results += live.add(m.kind, m.row)
     assert results == [] and live.events and live.full_time
+
+
+def test_live_run_uses_the_season_and_keeps_the_record(match_dir: Path, tmp_path: Path) -> None:
+    from pitch_ledger.history import InMemoryHistory, build_record
+
+    earlier_dir = tmp_path / "data" / "M0001"
+    assert main(["generate", "--seed", "4211", "--out", str(earlier_dir),
+                 "--kickoff", "2026-08-22T14:00:00+00:00"]) == 0  # fmt: skip
+    earlier = read_match(earlier_dir)
+    history = InMemoryHistory([build_record(
+        earlier.match, [Event.model_validate(e) for e in earlier.events],
+        [TrackingSample.model_validate(s) for s in earlier.tracking],
+    )])  # fmt: skip
+    feed = InMemoryFeed()
+    stream_match(match_dir, feed, speed=10_000, sleep=lambda s: None)
+    ledger, store = InMemoryLedger(), FileEventStore(tmp_path / "store")
+    options = LiveOptions(approve=True, provider="offline", tick_s=0.05, idle_s=0.5,
+                          only=("key_moment", "recap"))  # fmt: skip
+    service = LiveService(feed, InMemoryTriggerQueue(), ledger, store, tmp_path / "live", options,
+                          history=history)  # fmt: skip
+    asyncio.run(service.run())
+    store.close()
+    goals = [i for i in ledger.insights("M0002") if "season_goals" in i.metrics]
+    assert goals and all(i.audit_status.value != "blocked" for i in ledger.insights("M0002"))
+    hat_trick = next(i for i in ledger.insights("M0002") if "season_hat_tricks_before" in i.metrics)
+    assert "first hat-trick of the league season" in hat_trick.explanation
+    kept = history.season("Harbour Coast League", "2026-27")
+    assert [r.match_id for r in kept] == ["M0001", "M0002"]  # its own record, at full time
+    assert len((tmp_path / "store" / "MatchResults.jsonl").read_text().splitlines()) == 1

@@ -7,7 +7,8 @@
 // and three manually started jobs (live service, Match Lab feed, replay).
 //
 // The data services (Event Hubs, Service Bus, Cosmos DB, Web PubSub) and Foundry were
-// created by hand (docs/azure-setup.md) and are referenced, never changed. Set
+// created by hand (docs/azure-setup.md) and are referenced, never changed, except that the
+// Cosmos DB season-history container is added (modules/history-store.bicep). Set
 // createDataServices=true only for a fresh environment: modules/data-services.bicep then
 // creates them with the same settings. The Azure Data Explorer free cluster is not an
 // Azure resource; give the identity its database roles with the KQL in docs/azure-setup.md.
@@ -52,6 +53,7 @@ param serviceBusQueue string = 'triggers'
 param cosmosAccount string = 'pitch-ledger-cosmos'
 param cosmosDatabase string = 'pitchledger'
 param cosmosContainer string = 'ledger'
+param cosmosHistoryContainer string = 'history'
 param webPubSubName string = 'pitch-ledger-push'
 
 @description('Send agent and insight traces to Application Insights (the Foundry portal Tracing page reads them).')
@@ -134,6 +136,19 @@ module dataServices 'modules/data-services.bicep' = if (createDataServices) {
 resource cosmos 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' existing = {
   name: cosmosAccount
   scope: resourceGroup(dataGroup)
+}
+
+// The one addition to the existing data services: the season-history container (match
+// records), in the ledger's database and its shared free throughput.
+module historyStore 'modules/history-store.bicep' = {
+  name: 'history-store'
+  scope: resourceGroup(dataGroup)
+  params: {
+    cosmosAccount: cosmosAccount
+    cosmosDatabase: cosmosDatabase
+    containerName: cosmosHistoryContainer
+  }
+  dependsOn: [dataServices]
 }
 
 resource webPubSub 'Microsoft.SignalRService/webPubSub@2024-03-01' existing = {
@@ -240,6 +255,8 @@ var backendEnv = concat(
     { name: 'COSMOS_ENDPOINT', value: cosmos.properties.documentEndpoint }
     { name: 'PITCH_LEDGER_COSMOS_DATABASE', value: cosmosDatabase }
     { name: 'PITCH_LEDGER_COSMOS_CONTAINER', value: cosmosContainer }
+    { name: 'PITCH_LEDGER_HISTORY', value: 'cosmos' }
+    { name: 'PITCH_LEDGER_COSMOS_HISTORY_CONTAINER', value: cosmosHistoryContainer }
     { name: 'PITCH_LEDGER_QUEUE', value: 'servicebus' }
     { name: 'PITCH_LEDGER_SERVICEBUS_NAMESPACE', value: '${serviceBusNamespace}.servicebus.windows.net' }
     { name: 'PITCH_LEDGER_SERVICEBUS_QUEUE', value: serviceBusQueue }

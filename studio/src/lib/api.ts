@@ -155,6 +155,7 @@ export interface InsightStory {
     detector: string | null;
     metrics: Record<string, number>;
     windows: StoryWindow[];
+    season_matches: string[]; // earlier matches this season behind any season facts
   } | null;
   stages: StoryStage[];
   steps: StoryStep[];

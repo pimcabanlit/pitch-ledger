@@ -7,11 +7,14 @@ from pathlib import Path
 import pytest
 
 from pitch_ledger.cli import main
+from pitch_ledger.history import InMemoryHistory, build_record
+from pitch_ledger.matchlab.build import build_match
 from pitch_ledger.matchlab.scenarios import load_manifest
 from pitch_ledger.scorecard import (
     CHECKS,
     _Match,
     _run_match,
+    _spec,
     accuracy_section,
     coverage_section,
     detection_section,
@@ -22,8 +25,13 @@ from pitch_ledger.scorecard import (
 
 @pytest.fixture(scope="module")
 def runs(tmp_path_factory: pytest.TempPathFactory) -> list[_Match]:
-    entry = next(e for e in load_manifest() if e.match_id == "M0002")
-    return [asyncio.run(_run_match(entry, tmp_path_factory.mktemp("scorecard"), None))]
+    """M0002 against its season so far (M0001's record), so season facts are checked too."""
+    first, entry = (next(e for e in load_manifest() if e.match_id == m) for m in ("M0001", "M0002"))
+    built = build_match(_spec(entry))
+    earlier, earlier_tracking = build_match(_spec(first))
+    history = InMemoryHistory([build_record(earlier.match, earlier.events, earlier_tracking)])
+    run = _run_match(entry, built, tmp_path_factory.mktemp("scorecard"), None, history)
+    return [asyncio.run(run)]
 
 
 def test_sections_on_m0002(runs: list[_Match]) -> None:
@@ -37,6 +45,9 @@ def test_sections_on_m0002(runs: list[_Match]) -> None:
     assert planted["planted"] >= 8 and planted["catch_rate"] == 1.0
     assert planted["wrong_numbers_passed"] == 0 and planted["missed"] == []
     assert coverage_section(runs)["coverage"] == 1.0
+    trick = next(t for t in runs[0].clean.triggers if t.metrics.get("player_goals") == 3)
+    assert trick.metrics["season_hat_tricks_before"] == 0  # checked by the accuracy section
+    assert trick.context["season"]["matches"] == ["M0001"]
 
 
 def test_accuracy_check_flags_a_wrong_number(runs: list[_Match]) -> None:
@@ -65,7 +76,7 @@ def test_evaluate_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
 
 def test_evaluation_rows_carry_the_moment_the_context_and_each_check(runs: list[_Match]) -> None:
     m = runs[0]
-    rows = evaluation_rows(m.clean.ledger, m.sim, m.tracking)
+    rows = evaluation_rows(m.clean.ledger, m.sim, m.tracking, m.season)
     assert len(rows) == accuracy_section(runs)["aired_insights"]
     assert all(r[name] == "pass" for r in rows for name in CHECKS)
     momentum = next(r for r in rows if r["insight_type"] == "momentum_shift")
@@ -84,7 +95,7 @@ def test_evaluation_rows_fail_a_tampered_insight(runs: list[_Match]) -> None:
     tampered = insight.model_copy(update={"metrics": {**insight.metrics, "turnovers_after": 99}})
     ledger.put_insight(tampered)
     try:
-        row = next(r for r in evaluation_rows(ledger, m.sim, m.tracking)
+        row = next(r for r in evaluation_rows(ledger, m.sim, m.tracking, m.season)
                    if r["insight_id"] == insight.insight_id)  # fmt: skip
     finally:
         ledger.put_insight(insight)

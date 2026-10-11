@@ -21,6 +21,7 @@ from pitch_ledger.agents import prompts
 from pitch_ledger.agents.contracts import Facts, InsightDraft, ReviewRequest, ReviewVerdict
 from pitch_ledger.agents.editorial import draft_issues
 from pitch_ledger.agents.model_manager import ModelManager, ModelUnavailable
+from pitch_ledger.engine.season import has_season_facts
 from pitch_ledger.mcp_server.client import StatsGateway
 from pitch_ledger.schema import Trigger
 from pitch_ledger.validation.insight_rules import unsupported_numbers
@@ -78,7 +79,9 @@ class Auditor:
         findings += [f"evidence {i} is not part of this moment" for i in stray]
         if evidence and not draft.evidence_event_ids:
             findings.append("no evidence event IDs cited")
-        findings += draft_issues(draft.headline, draft.explanation)
+        findings += draft_issues(
+            draft.headline, draft.explanation, season=has_season_facts(trigger.metrics)
+        )
         fresh = await self.recomputed(trigger)
         for key, stated in trigger.metrics.items():
             if fresh.get(key) != stated:

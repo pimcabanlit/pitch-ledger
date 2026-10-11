@@ -4,14 +4,19 @@
   ``cosmos`` (``COSMOS_ENDPOINT``, database ``pitchledger``, container ``ledger``).
 - ``PITCH_LEDGER_QUEUE``: ``memory`` (default) or ``servicebus``
   (``PITCH_LEDGER_SERVICEBUS_NAMESPACE``, queue ``triggers``).
+- ``PITCH_LEDGER_HISTORY``: where match records are kept, ``file`` (default;
+  ``<data>/history/records.jsonl``) or ``cosmos`` (same account and database, container
+  ``history``).
 """
 
+from pathlib import Path
 from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pitch_ledger.agents.queue import InMemoryTriggerQueue, TriggerQueue
+from pitch_ledger.history.store import HISTORY_DIR, FileHistory, HistoryStore
 from pitch_ledger.ledger import InMemoryLedger
 
 
@@ -26,6 +31,8 @@ class LedgerQueueSettings(BaseSettings):
     cosmos_key: SecretStr | None = None  # account key (secret); Entra ID when unset
     cosmos_database: str = "pitchledger"
     cosmos_container: str = "ledger"
+    history: Literal["file", "cosmos"] = "file"
+    cosmos_history_container: str = "history"
     queue: Literal["memory", "servicebus"] = "memory"
     servicebus_namespace: str | None = None  # <name>.servicebus.windows.net
     servicebus_queue: str = "triggers"
@@ -66,6 +73,28 @@ def open_ledger(settings: LedgerQueueSettings, fresh_match: str) -> InMemoryLedg
         settings.cosmos_container,
         settings.key(),
         fresh_matches=(fresh_match,),
+    )
+
+
+def describe_history(settings: LedgerQueueSettings) -> str:
+    if settings.history == "file":
+        return "file"
+    return f"cosmos {settings.cosmos_database}/{settings.cosmos_history_container}"
+
+
+def open_history(settings: LedgerQueueSettings, data_dir: Path) -> HistoryStore:
+    """Match records: ``<data_dir>/history/records.jsonl``, or the Cosmos DB container."""
+    if settings.history == "file":
+        return FileHistory(data_dir / HISTORY_DIR)
+    if not settings.cosmos_endpoint:
+        raise ValueError("cosmos history needs COSMOS_ENDPOINT")
+    from pitch_ledger.infra_adapters.cosmos_history import CosmosHistory
+
+    return CosmosHistory.connect(
+        settings.cosmos_endpoint,
+        settings.cosmos_database,
+        settings.cosmos_history_container,
+        settings.key(),
     )
 
 

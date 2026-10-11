@@ -12,6 +12,7 @@ from typing import Any
 from pitch_ledger.engine import rule_metrics as rm
 from pitch_ledger.engine.momentum import MomentumConfig, momentum_alerts
 from pitch_ledger.engine.physical import physical
+from pitch_ledger.engine.season import SeasonView, goal_metrics, recap_metrics
 from pitch_ledger.engine.windows import MatchEngine
 from pitch_ledger.schema import Event, Match, TrackingSample, Trigger
 from pitch_ledger.schema.enums import EventType
@@ -30,14 +31,27 @@ def _window(trigger: Trigger, key: str) -> tuple[int, int, int]:
     return int(raw["period"]), int(raw["start_ms"]), int(raw["end_ms"])
 
 
+def _season(trigger: Trigger, season: SeasonView | None) -> SeasonView | None:
+    """The season view to recompute season facts with, if the trigger used any: it must
+    hold exactly the earlier matches the trigger lists."""
+    claimed: Any = trigger.context.get("season")
+    if not claimed:
+        return None
+    if season is None or season.match_ids != list(claimed.get("matches", [])):
+        raise NotRecomputable(f"{trigger.trigger_id}: season records differ from the trigger's")
+    return season
+
+
 def recompute_trigger(
     trigger: Trigger,
     match: Match,
     events: Sequence[Event],
     tracking: Sequence[TrackingSample] = (),
     momentum_config: MomentumConfig | None = None,
+    season: SeasonView | None = None,
 ) -> Metrics:
-    """Every metric of ``trigger``, recomputed from source rows up to its moment."""
+    """Every metric of ``trigger``, recomputed from source rows up to its moment (and, for
+    season facts, from the earlier matches' records in ``season``)."""
     moment = (trigger.period, trigger.clock_ms)
     upto = [e for e in events if (e.period, e.clock_ms) <= moment]
     samples = [s for s in tracking if (s.period, s.clock_ms) <= moment]
@@ -64,7 +78,10 @@ def recompute_trigger(
         metrics, _ = rm.momentum(engine, team, period, start, onset, now, score, samples)
         return metrics
     if rule == "goal":
-        return rm.goal(evidence[0], home, upto)
+        metrics = rm.goal(evidence[0], home, upto)
+        if (view := _season(trigger, season)) is not None:
+            metrics |= goal_metrics(view, evidence[0], int(metrics.get("player_goals", 0)))
+        return metrics
     if rule == "sending_off":
         return rm.sending_off(evidence[0], home)
     if rule == "sending_off_impact":
@@ -103,6 +120,8 @@ def recompute_trigger(
             if e.event_type is EventType.PERIOD_END and e.period == trigger.period
         )
         metrics, _ = rm.recap(MatchEngine(match, upto), period_end, home, match.away_team_id)
+        if (view := _season(trigger, season)) is not None and rule == "full_time_recap":
+            metrics |= recap_metrics(view, match, period_end.score_home, period_end.score_away)
         return metrics
     if rule == "top_speed":
         player = trigger.subject.player_id
@@ -128,9 +147,10 @@ def recompute_metric(
     match: Match,
     events: Sequence[Event],
     tracking: Sequence[TrackingSample] = (),
+    season: SeasonView | None = None,
 ) -> int | float:
     """One metric of ``trigger``, recomputed from source rows."""
-    metrics = recompute_trigger(trigger, match, events, tracking)
+    metrics = recompute_trigger(trigger, match, events, tracking, season=season)
     if name not in metrics:
         raise NotRecomputable(f"{trigger.trigger_id}: no metric {name}")
     return metrics[name]

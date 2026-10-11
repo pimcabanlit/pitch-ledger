@@ -14,5 +14,6 @@ def _offline_models() -> Iterator[None]:
         patch.setenv("PITCH_LEDGER_STORE", "file")
         patch.setenv("PITCH_LEDGER_LEDGER", "file")
         patch.setenv("PITCH_LEDGER_QUEUE", "memory")
+        patch.setenv("PITCH_LEDGER_HISTORY", "file")
         patch.setenv("PITCH_LEDGER_PUSH", "off")
         yield

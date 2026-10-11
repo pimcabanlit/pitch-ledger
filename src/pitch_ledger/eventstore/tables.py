@@ -2,8 +2,9 @@
 ingestion mappings and the row shapes every store adapter writes.
 
 The event store is the analytical copy (Azure Data Explorer, or local files): the feed's
-raw rows, the engine's metric snapshots, triggers, insight status, ops alerts and feed
-health. Cosmos DB stays the ledger's system of record. Columns follow
+raw rows, the engine's metric snapshots, triggers, insight status, ops alerts, feed health,
+and the season history (match results, team and player match stats, evaluation runs).
+Cosmos DB stays the ledger's system of record. Columns follow
 docs/event-schema.md; ``minute`` columns are match minutes computed in code (period 2
 clock 15:00 is minute 60), so dashboard queries never derive football numbers.
 """
@@ -61,6 +62,35 @@ TABLES: dict[str, tuple[Column, ...]] = {
         ("p50_ms", "real"), ("p95_ms", "real"), ("max_ms", "real"),
     ),
     "StoreCheck": (("check_id", "string"), ("written_at", "datetime")),
+    # Season history: one row per match, per team and per player (append-only; a match
+    # stored again adds identical rows, so queries take the latest per key).
+    "MatchResults": (
+        ("match_id", "string"), ("competition", "string"), ("season", "string"),
+        ("kickoff_utc", "datetime"), ("home_team_id", "string"), ("away_team_id", "string"),
+        ("score_home", "int"), ("score_away", "int"), ("hat_tricks", "dynamic"),
+        ("record_version", "int"), ("recorded_at", "datetime"),
+    ),
+    "TeamMatchStats": (
+        ("match_id", "string"), ("competition", "string"), ("season", "string"),
+        ("kickoff_utc", "datetime"), ("team_id", "string"), ("opponent_id", "string"),
+        ("venue", "string"), ("goals_for", "int"), ("goals_against", "int"),
+        ("result", "string"), ("shots", "int"), ("on_target", "int"), ("xg", "real"),
+        ("possession_pct", "real"), ("passes", "int"), ("pass_accuracy", "real"),
+        ("recorded_at", "datetime"),
+    ),
+    "PlayerMatchStats": (
+        ("match_id", "string"), ("competition", "string"), ("season", "string"),
+        ("kickoff_utc", "datetime"), ("team_id", "string"), ("player_id", "string"),
+        ("goals", "int"), ("shots", "int"), ("xg", "real"), ("passes", "int"),
+        ("passes_completed", "int"), ("pass_accuracy", "real"), ("distance_km", "real"),
+        ("top_speed_kmh", "real"), ("sprints", "int"), ("recorded_at", "datetime"),
+    ),
+    # Evaluation history: each scorecard (and Foundry evaluation) run with its gates.
+    "EvalRuns": (
+        ("run_id", "string"), ("kind", "string"), ("generated_at", "datetime"),
+        ("passed", "bool"), ("matches", "dynamic"), ("gates", "dynamic"),
+        ("summary", "dynamic"), ("recorded_at", "datetime"),
+    ),
 }  # fmt: skip
 
 

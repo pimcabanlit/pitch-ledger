@@ -78,6 +78,11 @@ def _step(record: AuditRecord, allowed: Sequence[float]) -> StoryStep:
     )
 
 
+def _season_matches(trigger: Trigger) -> list[str]:
+    season: Any = trigger.context.get("season")
+    return [str(m) for m in season.get("matches", [])] if isinstance(season, dict) else []
+
+
 def _windows(trigger: Trigger) -> list[StoryWindow]:
     found = []
     for key, label in (("before_window", "before"), ("after_window", "after")):
@@ -178,6 +183,7 @@ def build_story(
             detector=str(detector) if (detector := trigger.context.get("detector")) else None,
             metrics=trigger.metrics,
             windows=_windows(trigger),
+            season_matches=list(_season_matches(trigger)),
         )
     return InsightStory(
         match=match,

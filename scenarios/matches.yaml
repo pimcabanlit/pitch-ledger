@@ -5,10 +5,13 @@
 # for a baseline), and the expected detection within 10 minutes; for red_card also the
 # ten men's possession falling after the card, as it does in 27 of 40 seeds. Seeds
 # regenerate each match exactly.
+# Kick-offs put the matches in season order, one matchday a week (Saturdays, 14:00 UTC), so
+# season facts (a scorer's league goals, firsts, form, earlier meetings) look back on the
+# earlier matches only. A kick-off changes no football: only the events' feed timestamps.
 matches:
-  - {match_id: M0001, scenario_id: none, home_team_id: T01, away_team_id: T02, seed: 4211}
-  - {match_id: M0002, scenario_id: late_collapse, home_team_id: T01, away_team_id: T02, seed: 4212}
-  - {match_id: M0003, scenario_id: high_press_switch, home_team_id: T06, away_team_id: T02, seed: 4213}
-  - {match_id: M0004, scenario_id: red_card, home_team_id: T03, away_team_id: T04, seed: 4213}
-  - {match_id: M0005, scenario_id: hot_streak, home_team_id: T05, away_team_id: T06, seed: 4212}
-  - {match_id: M0006, scenario_id: none, home_team_id: T02, away_team_id: T01, seed: 4212}
+  - {match_id: M0001, scenario_id: none, home_team_id: T01, away_team_id: T02, seed: 4211, kickoff: "2026-08-22T14:00:00Z"}
+  - {match_id: M0002, scenario_id: late_collapse, home_team_id: T01, away_team_id: T02, seed: 4212, kickoff: "2026-08-29T14:00:00Z"}
+  - {match_id: M0003, scenario_id: high_press_switch, home_team_id: T06, away_team_id: T02, seed: 4213, kickoff: "2026-09-05T14:00:00Z"}
+  - {match_id: M0004, scenario_id: red_card, home_team_id: T03, away_team_id: T04, seed: 4213, kickoff: "2026-09-12T14:00:00Z"}
+  - {match_id: M0005, scenario_id: hot_streak, home_team_id: T05, away_team_id: T06, seed: 4212, kickoff: "2026-09-19T14:00:00Z"}
+  - {match_id: M0006, scenario_id: none, home_team_id: T02, away_team_id: T01, seed: 4212, kickoff: "2026-09-26T14:00:00Z"}

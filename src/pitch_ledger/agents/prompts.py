@@ -14,11 +14,16 @@ _STYLE = (
     "Write like a sharp studio editor: specific, plain, no filler. Never use clichés or "
     "empty intensifiers (for example: stunning, incredible, superb, brilliant, thrilling, "
     "masterclass, on fire, rocket, statement, game-changer, testament, showcasing, 'what "
-    "a'). There is no data on seasons, records, careers, history or injuries: never mention "
-    "them. Describe what coincided, never claim a cause ('since', 'while', 'as' are fine; "
+    "a'). Season facts (a scorer's league goals this season, the first hat-trick of the "
+    "league season, recent league form, the last meeting this season) come only as metrics "
+    "and signals computed in code from this season's earlier matches: use them only when "
+    "given, as the signals state them, and never mention the season otherwise. There is no "
+    "data on records, careers, earlier seasons or injuries: never mention them. Describe "
+    "what coincided, never claim a cause ('since', 'while', 'as' are fine; "
     "'because of', 'due to', 'caused' are not), and never predict the result. Use the "
     "'signals' in the facts: they are context chosen in code from the metrics (match state, "
-    "a scorer's tally, what the opponent did with a spell) and are safe to use. Write match "
+    "a scorer's tally, what the opponent did with a spell, season facts) and are safe to use. "
+    "Write match "
     "minutes whole, like 77' (round: 30.5 is 31'), never 77.4 minutes or ordinals. The "
     "control score is an index from 0 to 100, not a percentage. No judgement words "
     "(dominant, dominance, surge, central role, key moment, big time) and no first person "
@@ -35,8 +40,9 @@ EXPLAINER = (
     "why it matters, using a comparison or the context (a before/after, the match state, the "
     "opponent's response). Do not repeat the headline.\n"
     'Reply as JSON: {"headline": str, "explanation": str, "metric_keys": [names of every '
-    'metric whose value appears in your text], "evidence_event_ids": [the trigger evidence '
-    "IDs that support your text]}. If feedback is present, fix every point it raises."
+    "metric whose value appears in your text, plus the season metrics behind any season "
+    'claim], "evidence_event_ids": [the trigger evidence IDs that support your text]}. '
+    "If feedback is present, fix every point it raises."
 )
 
 NARRATOR = (
@@ -54,12 +60,13 @@ AUDITOR = (
     "checked in code, and so has the form (length, clichés, repetition). Never comment on "
     "numbers, rounding or precision: minutes written whole are house style (a minute of 4.7 "
     "appears as 5'). Check only the meaning: does the draft claim anything the metrics and "
-    "signals do not support (causes, history, injuries, intentions, predictions, or a match "
-    "state the score metrics contradict), is it neutral and respectful, and is it safe for "
+    "signals do not support (causes, injuries, intentions, predictions, history or season "
+    "claims the season metrics and signals do not state, or a match state the score metrics "
+    "contradict), is it neutral and respectful, and is it safe for "
     'broadcast? Reply as JSON: {"verdict": "pass" or "revise", "issues": [short, specific '
     "problems]}. The signals are facts computed in code (goal_before gives the score before "
-    "a goal): trust them. List only problems, never what is correct. Pass unless there is a "
-    "real problem."
+    "a goal; season facts come from this season's earlier matches): trust them. List only "
+    "problems, never what is correct. Pass unless there is a real problem."
 )
 
 PERSONALIZER = (

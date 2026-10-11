@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pitch_ledger.engine.detector import detect
+from pitch_ledger.engine.season import SeasonView
 from pitch_ledger.engine.windows import MatchEngine
 from pitch_ledger.eventstore.rows import STEP_MS, WINDOW_MS, team_state_row
 from pitch_ledger.matchlab.io import MatchFiles
@@ -44,6 +45,7 @@ class LiveMatch:
     full_time: bool = False
     in_play: bool = False  # play is on: the last event is not a period end
     validator: MatchValidator | None = None
+    season: SeasonView | None = None  # earlier matches this season (season facts)
     _players: list[Player] = field(default_factory=list)
     _keys: set[tuple[Any, ...]] = field(default_factory=set)
     _snapshot_ms: dict[int, int] = field(default_factory=dict)  # period -> last snapshot end
@@ -130,7 +132,7 @@ class LiveMatch:
         everything = final or self.full_time
         fresh = [
             t
-            for t in detect(match, self.events, self.tracking)
+            for t in detect(match, self.events, self.tracking, season=self.season)
             if trigger_key(t) not in self._keys and (everything or self._settled(t, settle_ms))
         ]
         fresh.sort(key=lambda t: (t.period, t.clock_ms, t.trigger_id))

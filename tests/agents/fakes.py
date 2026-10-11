@@ -8,6 +8,7 @@ from agent_framework import BaseChatClient, ChatResponse, Message, UsageDetails
 from agent_framework._tools import FunctionInvocationLayer
 
 from pitch_ledger.engine.recompute import recompute_trigger
+from pitch_ledger.engine.season import SeasonView
 from pitch_ledger.matchlab.generator import SimulatedMatch
 from pitch_ledger.schema import TrackingSample, Trigger
 
@@ -41,9 +42,14 @@ class SimStats:
     """Stats gateway over an in-memory simulated match (recomputes like the MCP tools)."""
 
     def __init__(
-        self, sim: SimulatedMatch, triggers: Sequence[Trigger], tracking: Sequence[TrackingSample]
+        self,
+        sim: SimulatedMatch,
+        triggers: Sequence[Trigger],
+        tracking: Sequence[TrackingSample],
+        season: SeasonView | None = None,
     ) -> None:
         self.sim = sim
+        self.season = season
         self.triggers = {t.trigger_id: t for t in triggers}
         self.tracking = list(tracking)
         self.calls = 0
@@ -51,7 +57,9 @@ class SimStats:
     async def recompute_trigger(self, trigger_id: str) -> dict[str, int | float]:
         self.calls += 1
         trigger = self.triggers[trigger_id]
-        return recompute_trigger(trigger, self.sim.match, self.sim.events, self.tracking)
+        return recompute_trigger(
+            trigger, self.sim.match, self.sim.events, self.tracking, season=self.season
+        )
 
     async def get_events(self, event_ids: list[str]) -> list[dict[str, Any]]:
         wanted = set(event_ids)

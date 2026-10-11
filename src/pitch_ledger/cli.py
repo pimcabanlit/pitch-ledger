@@ -13,7 +13,7 @@ from pitch_ledger.engine.detector import detect
 from pitch_ledger.engine.evaluation import check_detection
 from pitch_ledger.matchlab.build import build_match
 from pitch_ledger.matchlab.generator import DEFAULT_KICKOFF, MatchSpec
-from pitch_ledger.matchlab.io import read_match, write_match, write_triggers
+from pitch_ledger.matchlab.io import MATCH_FILE, read_match, write_match, write_triggers
 from pitch_ledger.matchlab.scenarios import load_manifest, load_scenario
 from pitch_ledger.schema import Event, TrackingSample, Trigger
 from pitch_ledger.schema.enums import ScenarioId
@@ -21,6 +21,7 @@ from pitch_ledger.validation import RULES, measure, validate_match
 from pitch_ledger.validation.realism import RealismCheck
 
 if TYPE_CHECKING:
+    from pitch_ledger.history import HistoryStore
     from pitch_ledger.infra_adapters.feeds import FeedSettings
     from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
     from pitch_ledger.infra_adapters.stores import StoreSettings
@@ -89,6 +90,7 @@ def cmd_generate_all(args: argparse.Namespace) -> int:
             away_team_id=entry.away_team_id,
             seed=entry.seed,
             scenario_id=entry.scenario_id.value,
+            kickoff_utc=entry.kickoff or DEFAULT_KICKOFF,
         )
         _write(spec, root / entry.match_id)
     return 0
@@ -216,29 +218,38 @@ def cmd_replay(args: argparse.Namespace) -> int:
     )
     from pitch_ledger.infra_adapters.ledger_queue import (
         LedgerQueueSettings,
+        describe_history,
+        open_history,
         open_ledger,
         open_queue,
     )
 
-    overrides = {k: v for k, v in (("ledger", args.ledger), ("queue", args.queue)) if v}
+    overrides = {k: v for k, v in (("ledger", args.ledger), ("queue", args.queue),
+                                   ("history", args.history)) if v and v != "none"}  # fmt: skip
     services = LedgerQueueSettings(**overrides)
-    match_id = read_match(Path(args.match_dir), with_tracking=False).match.match_id
+    match_dir = Path(args.match_dir)
+    match_id = read_match(match_dir, with_tracking=False).match.match_id
     try:
         cloud_ledger = open_ledger(services, fresh_match=match_id)
         queue = open_queue(services)
+        history = None if args.history == "none" else open_history(services, match_dir.parent)
     except ValueError as exc:
-        print(f"ledger/queue settings: {exc}", file=sys.stderr)
+        print(f"ledger/queue/history settings: {exc}", file=sys.stderr)
         return 2
     if services.ledger != "file" or services.queue != "memory":
         print(f"ledger: {services.describe_ledger()}; queue: {services.describe_queue()}")
     try:
-        run = asyncio.run(replay_match(Path(args.match_dir), options, cloud_ledger, queue))
+        run = asyncio.run(replay_match(match_dir, options, cloud_ledger, queue, history))
     finally:
-        for part in (cloud_ledger, queue):
+        for part in (cloud_ledger, queue, history):
             close = getattr(part, "close", None)
             if close is not None:
                 close()
     summary, ledger = run.summary, run.ledger
+    if history is not None:
+        earlier = ", ".join(summary["season_matches"] or []) or "none"
+        print(f"season: earlier matches {earlier} (history {describe_history(services)}); "
+              f"{run.match_id}'s record kept")  # fmt: skip
     counts = run.report.counts()
     routes, status = counts["routes"], counts["status"]
     print(
@@ -304,6 +315,20 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(card, indent=2) + "\n", "utf-8")
+    if args.store:  # keep the run in the evaluation history (EvalRuns)
+        import time
+
+        from pitch_ledger.eventstore.rows import eval_run_row
+        from pitch_ledger.infra_adapters.stores import open_store
+
+        settings = _store_settings(args.store)
+        store = open_store(settings)
+        try:
+            store.append("EvalRuns", [eval_run_row(card, "scorecard", time.time())])
+            store.flush()
+        finally:
+            store.close()
+        print(f"run kept in EvalRuns ({settings.describe()})")
     d, a, p, c, o, u = (
         card[k] for k in ("detection", "accuracy", "planted", "coverage", "outcomes", "usage")
     )
@@ -348,12 +373,18 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 def cmd_foundry_eval(args: argparse.Namespace) -> int:
     import json
 
+    from pitch_ledger.history import season_for
+    from pitch_ledger.infra_adapters.ledger_queue import open_history
     from pitch_ledger.ledger import FileLedger, InMemoryLedger
     from pitch_ledger.matchlab.scenarios import load_manifest
     from pitch_ledger.scorecard import CHECKS, demo_match, evaluation_rows
 
     matches = args.match or [e.match_id for e in load_manifest()]
     ledger_kind = args.ledger or _ledger_settings().ledger
+    # Season facts recompute from the records the replays used: by default the store that
+    # sits with the ledger (Cosmos with a Cosmos ledger).
+    stores = _ledger_settings().model_copy(update={"history": args.history or ledger_kind})
+    history = open_history(stores, Path(args.data))
     rows: list[dict[str, str]] = []
     for match_id in matches:
         ledger: InMemoryLedger
@@ -362,7 +393,7 @@ def cmd_foundry_eval(args: argparse.Namespace) -> int:
         else:
             ledger = FileLedger(Path(args.data) / match_id / "ledger")
         sim, tracking = demo_match(match_id)
-        found = evaluation_rows(ledger, sim, tracking)
+        found = evaluation_rows(ledger, sim, tracking, season_for(sim.match, history))
         print(f"{match_id}: {len(found)} aired insights ({ledger_kind} ledger)")
         rows += found
     failed = {name: sum(r[name] != "pass" for r in rows) for name in CHECKS}
@@ -557,6 +588,100 @@ def _store_settings(store: str | None) -> "StoreSettings":
     return StoreSettings(store=store) if store else StoreSettings()
 
 
+def _history(args: argparse.Namespace, data: Path) -> "HistoryStore":
+    from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings, open_history
+
+    settings = LedgerQueueSettings(history=args.history) if args.history else LedgerQueueSettings()
+    return open_history(settings, data)
+
+
+def cmd_history_build(args: argparse.Namespace) -> int:
+    """A record for every finished match folder: to the history store and, with --store,
+    the event store's season-history tables."""
+    import time
+
+    from pitch_ledger.eventstore.rows import history_rows
+    from pitch_ledger.history import MatchNotFinished, build_record
+    from pitch_ledger.infra_adapters.stores import open_store
+
+    data = Path(args.data)
+    folders = sorted(p for p in data.glob("M[0-9][0-9][0-9][0-9]") if (p / MATCH_FILE).is_file())
+    if args.match:
+        folders = [p for p in folders if p.name in set(args.match)]
+    if not folders:
+        print(f"no match folders in {data}", file=sys.stderr)
+        return 2
+    try:
+        history = _history(args, data)
+        store = open_store(_store_settings(args.store)) if args.store else None
+    except ValueError as exc:
+        print(f"history/store settings: {exc}", file=sys.stderr)
+        return 2
+    try:
+        for folder in folders:
+            files = read_match(folder)
+            events = [Event.model_validate(e) for e in files.events]
+            tracking = [TrackingSample.model_validate(s) for s in files.tracking]
+            try:
+                record = build_record(files.match, events, tracking)
+            except MatchNotFinished:
+                print(f"  {folder.name}: not finished, skipped")
+                continue
+            history.put(record)
+            if store is not None:
+                for table, rows in history_rows(record, time.time()).items():
+                    store.append(table, rows)
+            print(f"  {record.match_id} {record.kickoff_utc:%Y-%m-%d} {record.home_team_id} "
+                  f"{record.score_home}-{record.score_away} {record.away_team_id}: "
+                  f"{len(record.players)} players, {len(record.goals)} goals")  # fmt: skip
+        if store is not None:
+            store.flush()
+    finally:
+        for part in (history, store):
+            close = getattr(part, "close", None)
+            if close is not None:
+                close()
+    return 0
+
+
+def cmd_history_show(args: argparse.Namespace) -> int:
+    """The season's results and league table, from the history store."""
+    from pitch_ledger.history.table import league_table
+
+    data = Path(args.data)
+    try:
+        history = _history(args, data)
+    except ValueError as exc:
+        print(f"history settings: {exc}", file=sys.stderr)
+        return 2
+    try:
+        competition, season = args.competition, args.season
+        if competition is None or season is None:
+            folder = next((p for p in sorted(data.glob("M[0-9][0-9][0-9][0-9]"))
+                           if (p / MATCH_FILE).is_file()), None)  # fmt: skip
+            if folder is None:
+                print("give --competition and --season (no match folder to read them from)")
+                return 2
+            match = read_match(folder, with_tracking=False).match
+            competition, season = competition or match.competition, season or match.season
+        records = history.season(competition, season)
+    finally:
+        close = getattr(history, "close", None)
+        if close is not None:
+            close()
+    print(f"{competition} {season}: {len(records)} matches")
+    for r in records:
+        tricks = f" (hat-trick: {', '.join(r.hat_tricks)})" if r.hat_tricks else ""
+        print(f"  {r.kickoff_utc:%Y-%m-%d} {r.match_id} {r.home_team_id} {r.score_home}-"
+              f"{r.score_away} {r.away_team_id}{tricks}")  # fmt: skip
+    print("  team  P  W  D  L  GF  GA  GD  Pts  form")
+    for row in league_table(records):
+        print(f"  {row.team_id}  {row.played}  {row.won}  {row.drawn}  {row.lost}  "
+              f"{row.goals_for:>2}  {row.goals_against:>2}  {row.goal_difference:>+3}  "
+              f"{row.points:>3}  {''.join(row.form)}")  # fmt: skip
+    return 0
+
+
 def cmd_store_schema(args: argparse.Namespace) -> int:
     from pitch_ledger.eventstore import create_script
 
@@ -626,14 +751,20 @@ def cmd_live(args: argparse.Namespace) -> int:
 
     from pitch_ledger.infra_adapters.cosmos import CosmosLedger
     from pitch_ledger.infra_adapters.feeds import open_subscriber
-    from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings, open_queue
+    from pitch_ledger.infra_adapters.ledger_queue import (
+        LedgerQueueSettings,
+        describe_history,
+        open_history,
+        open_queue,
+    )
     from pitch_ledger.infra_adapters.stores import open_store
     from pitch_ledger.ledger import FileLedger, InMemoryLedger
     from pitch_ledger.live.service import LiveOptions, LiveService
 
     _start_tracing("pitch-ledger-live")
     feed = _feed_settings(args)
-    overrides = {k: v for k, v in (("ledger", args.ledger), ("queue", args.queue)) if v}
+    overrides = {k: v for k, v in (("ledger", args.ledger), ("queue", args.queue),
+                                   ("history", args.history)) if v and v != "none"}  # fmt: skip
     services = LedgerQueueSettings(**overrides)
     out = Path(args.out)
     try:
@@ -657,6 +788,11 @@ def cmd_live(args: argparse.Namespace) -> int:
     else:
         ledger = FileLedger(out / "ledger", fresh=args.fresh)
     store = open_store(_store_settings(args.store), fail_open=True) if args.store else None
+    try:
+        history = None if args.history == "none" else open_history(services, out.parent)
+    except ValueError as exc:
+        print(f"settings: {exc}", file=sys.stderr)
+        return 2
     only = tuple(x.strip() for x in args.only.split(",") if x.strip()) if args.only else None
     options = LiveOptions(
         approve=args.approve, inject_first_momentum=args.inject_error, provider=args.provider,
@@ -664,19 +800,19 @@ def cmd_live(args: argparse.Namespace) -> int:
     )  # fmt: skip
     print(
         f"live: feed {feed.describe()}; queue {services.describe_queue()}; ledger "
-        f"{services.describe_ledger()}; store {args.store or 'off'}; out {out}"
+        f"{services.describe_ledger()}; store {args.store or 'off'}; history "
+        f"{describe_history(services) if history is not None else 'off'}; out {out}"
     )
     from pitch_ledger.infra_adapters.webpubsub import PushSettings, open_notifier
 
     push = PushSettings()
     print(f"  push: {push.describe()}")
-    service = LiveService(
-        subscriber, trigger_queue, ledger, store, out, options, notifier=open_notifier(push)
-    )
+    service = LiveService(subscriber, trigger_queue, ledger, store, out, options,
+                          notifier=open_notifier(push), history=history)  # fmt: skip
     try:
         report = asyncio.run(service.run())
     finally:
-        for part in (subscriber, trigger_queue, store, ledger):
+        for part in (subscriber, trigger_queue, store, ledger, history):
             close = getattr(part, "close", None)
             if close is not None:
                 close()
@@ -787,6 +923,12 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--budget", type=int, help="model call budget for paid providers")
     rep.add_argument("--ledger", choices=["file", "cosmos"], help="ledger (default: settings)")
     rep.add_argument("--queue", choices=["memory", "servicebus"], help="trigger queue")
+    rep.add_argument(
+        "--history",
+        choices=["file", "cosmos", "none"],
+        help="match records for season facts, and where this match's record goes "
+        "(default: settings; none: no season facts)",
+    )
     rep.set_defaults(func=cmd_replay)
 
     ev = sub.add_parser("evaluate", help="scorecard: detection, accuracy, planted errors, coverage")
@@ -794,7 +936,25 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--sweep", type=int, default=5, help="seeds per demo match in the sweep")
     ev.add_argument("--provider", choices=["offline", "foundry"], help="model provider")
     ev.add_argument("--match", action="append", help="limit to these demo match IDs")
+    ev.add_argument(
+        "--store", choices=["file", "adx"], help="also keep the run in the EvalRuns table"
+    )
     ev.set_defaults(func=cmd_evaluate)
+
+    his = sub.add_parser("history", help="season history: match records and the league table")
+    his_sub = his.add_subparsers(dest="history_command", required=True)
+    hb = his_sub.add_parser("build", help="a record for every finished match folder")
+    hb.add_argument("--data", default="data", help="folder of match folders")
+    hb.add_argument("--match", action="append", help="limit to these match IDs")
+    hb.add_argument("--history", choices=["file", "cosmos"], help="history store")
+    hb.add_argument("--store", choices=["file", "adx"], help="also write the event-store tables")
+    hb.set_defaults(func=cmd_history_build)
+    hs = his_sub.add_parser("show", help="the season's results and league table")
+    hs.add_argument("--data", default="data", help="folder of match folders")
+    hs.add_argument("--history", choices=["file", "cosmos"], help="history store")
+    hs.add_argument("--competition", help="default: from the first match folder")
+    hs.add_argument("--season", help="default: from the first match folder, e.g. 2026-27")
+    hs.set_defaults(func=cmd_history_show)
 
     fe = sub.add_parser(
         "foundry-eval",
@@ -802,6 +962,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fe.add_argument("--match", action="append", help="demo match IDs (default: all six)")
     fe.add_argument("--ledger", choices=["file", "cosmos"], help="ledger (default: settings)")
+    fe.add_argument(
+        "--history", choices=["file", "cosmos"], help="match records (default: as the ledger)"
+    )
     fe.add_argument("--data", default="data", help="file ledgers under DATA/<match>/ledger")
     fe.add_argument(
         "--scorecard",
@@ -870,6 +1033,11 @@ def build_parser() -> argparse.ArgumentParser:
     lv.add_argument("--queue", choices=["memory", "servicebus"], help="trigger queue")
     lv.add_argument("--ledger", choices=["file", "cosmos"], help="ledger (default: settings)")
     lv.add_argument("--store", choices=["file", "adx"], help="also write the event store")
+    lv.add_argument(
+        "--history",
+        choices=["file", "cosmos", "none"],
+        help="match records: season facts, and each match's record at full time",
+    )
     lv.add_argument("--approve", action="store_true", help="approve as producer_demo")
     lv.add_argument("--inject-error", action="store_true", help="plant an error (first momentum)")
     lv.add_argument("--provider", choices=["offline", "foundry"], help="model provider")

@@ -136,7 +136,44 @@ def move(values: Values) -> Phrase | None:
     )
 
 
+def _season_tally(values: Values) -> Phrase | None:
+    """The goal in the scorer's league season (only with season facts from earlier matches)."""
+    goals, season = _num(values, "player_goals"), _num(values, "season_goals")
+    if goals is None or season is None:
+        return None
+    if goals == 3 and _num(values, "season_hat_tricks_before") == 0:
+        return _p(
+            "It completes the first hat-trick of the league season",
+            "Con él completa el primer hat-trick de la temporada en la liga",
+            "Kumpleto na ang unang hat-trick ng season sa liga",
+        )
+    if season == 1:
+        return _p(
+            "It is the scorer's first league goal of the season",
+            "Es su primer gol de liga en la temporada",
+            "Ito ang unang goal niya sa liga ngayong season",
+        )
+    if season <= goals:  # every league goal this season came today: the match tally says it
+        return None
+    if goals == 2:
+        return _p(
+            "It is the scorer's second goal of the match and takes them to {season_goals} "
+            "league goals this season",
+            "Es su segundo gol del partido y ya suma {season_goals} goles de liga esta temporada",
+            "Ikalawang goal na niya ito sa laban, {season_goals} na sa liga ngayong season",
+        )
+    if goals == 1:
+        return _p(
+            "It takes the scorer to {season_goals} league goals this season",
+            "Ya suma {season_goals} goles de liga esta temporada",
+            "{season_goals} goal na niya sa liga ngayong season",
+        )
+    return None
+
+
 def _tally(values: Values) -> Phrase | None:
+    if (season := _season_tally(values)) is not None:
+        return season
     goals = _num(values, "player_goals")
     if goals is None or goals < 2:
         return None
@@ -223,8 +260,32 @@ def casual_tally(values: Values) -> Phrase | None:
 
 
 def player_goal(values: Values) -> Phrase | None:
-    """The goal from the scorer's side: their tally, the chance and the move."""
-    goals = _num(values, "player_goals")
+    """The goal from the scorer's side: their tally (in the match, or the league season when
+    earlier matches add to it), the chance and the move."""
+    goals, season = _num(values, "player_goals"), _num(values, "season_goals")
+    if goals == 3 and season is not None and _num(values, "season_hat_tricks_before") == 0:
+        return _p(
+            "the first hat-trick of the league season, completed on {minute:0}' from a {xg} xG "
+            "chance.",
+            "el primer hat-trick de la temporada en la liga, completado en el {minute:0}' con "
+            "una ocasión de {xg} xG.",
+            "ang unang hat-trick ng season sa liga, kumpleto sa {minute:0}' mula sa {xg} xG na "
+            "tsansa.",
+        )
+    if goals == 1 and season == 1:
+        return _p(
+            "a first league goal of the season, on {minute:0}' from a {xg} xG chance.",
+            "primer gol de liga de la temporada, en el {minute:0}' con una ocasión de {xg} xG.",
+            "unang goal sa liga ngayong season, sa {minute:0}' mula sa {xg} xG na tsansa.",
+        )
+    if goals == 1 and season is not None and season > 1:
+        return _p(
+            "scores on {minute:0}' from a {xg} xG chance: {season_goals} league goals this season.",
+            "marca en el {minute:0}' con una ocasión de {xg} xG: {season_goals} goles de liga esta "
+            "temporada.",
+            "umiskor sa {minute:0}' mula sa {xg} xG na tsansa: {season_goals} goal na sa liga "
+            "ngayong season.",
+        )
     if goals == 3:
         return _p(
             "hat-trick completed on {minute:0}' from a {xg} xG chance{move}.",
@@ -686,6 +747,79 @@ def second_half(values: Values) -> Phrase | None:
     )
 
 
+def _h2h(values: Values) -> Phrase | None:
+    """The last earlier meeting this season, from today's home club's side (a clause)."""
+    mine, theirs = _num(values, "h2h_home_goals"), _num(values, "h2h_away_goals")
+    if mine is None or theirs is None:
+        return None
+    score = "{h2h_home_goals}-{h2h_away_goals}"
+    if mine > theirs:
+        return _p(
+            "{home} won the last meeting this season " + score,
+            "{home} ganó el último duelo de esta temporada por " + score,
+            "nanalo ang {home} sa huling laban nila ngayong season, " + score,
+        )
+    if mine < theirs:
+        return _p(
+            "{home} lost the last meeting this season " + score,
+            "{home} perdió el último duelo de esta temporada por " + score,
+            "natalo ang {home} sa huling laban nila ngayong season, " + score,
+        )
+    return _p(
+        "the last meeting this season ended " + score,
+        "el último duelo de esta temporada acabó " + score,
+        score + " ang huling laban nila ngayong season",
+    )
+
+
+def ft_tail(values: Values) -> Phrase | None:
+    """Full time, after the verdict: the second half on xG and, when the clubs met earlier
+    this season, how that meeting ended (one sentence)."""
+    half, meeting = second_half(values), _h2h(values)
+    if half is None or meeting is None:
+        return half
+    return {k: half[k].rstrip(".") + "; " + meeting[k] + "." for k in half}
+
+
+def home_form_note(values: Values) -> Phrase | None:
+    """Full time, for the home club's supporters: its last league matches, today included."""
+    if _num(values, "home_form_played") is None:
+        return None
+    return _p(
+        " Last {home_form_played} league matches: won {home_form_wins}, drew {home_form_draws}, "
+        "lost {home_form_losses}.",
+        " Últimos {home_form_played} partidos de liga: ganó {home_form_wins}, empató "
+        "{home_form_draws}, perdió {home_form_losses}.",
+        " Huling {home_form_played} laban sa liga: {home_form_wins} panalo, {home_form_draws} "
+        "tabla, {home_form_losses} talo.",
+    )
+
+
+def form_note(values: Values) -> Phrase | None:
+    """Both clubs' last league matches, today included (a signal for the models)."""
+    parts = []
+    for side in ("home", "away"):
+        if _num(values, f"{side}_form_played") is not None:
+            parts.append(
+                f"{{{side}}} won {{{side}_form_wins}}, drew {{{side}_form_draws}} and lost "
+                f"{{{side}_form_losses}} of their last {{{side}_form_played}} league matches, "
+                "today included"
+            )
+    if not parts:
+        return None
+    text = "; ".join(parts) + "."
+    return _p(text, text, text)  # signals are English only
+
+
+def h2h_note(values: Values) -> Phrase | None:
+    """The earlier meeting this season, as a sentence (a signal for the models)."""
+    meeting = _h2h(values)
+    if meeting is None:
+        return None
+    text = meeting["en"][0].upper() + meeting["en"][1:] + "."
+    return _p(text, text, text)
+
+
 def possession_note(values: Values) -> Phrase | None:
     home = _num(values, "possession_home")
     if home is None:
@@ -750,6 +884,10 @@ SELECTORS: dict[str, Callable[[Values], Phrase | None]] = {
     "casual_verdict": casual_verdict,
     "casual_verdict_ft": casual_verdict_ft,
     "second_half": second_half,
+    "ft_tail": ft_tail,
+    "home_form_note": home_form_note,
+    "form_note": form_note,
+    "h2h_note": h2h_note,
     "possession_note": possession_note,
     "on_target_pair": on_target_pair,
     "speed_chance": speed_chance,
@@ -770,8 +908,12 @@ SIGNALS = (
     "verdict",
     "verdict_ft",
     "second_half",
+    "ft_tail",
 )
 """Phrase fields that, filled in English, tell a model the context of a moment."""
+
+SEASON_SIGNALS = ("form_note", "h2h_note")
+"""Season context a model gets whenever its metrics are there, used in a template or not."""
 
 
 def choose(field: str, values: Values, language: str) -> str:

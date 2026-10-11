@@ -8,11 +8,12 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from pitch_ledger.engine.season import SeasonView
 from pitch_ledger.mcp_server.tools import StatsTools
 
 
-def build_server(match_dir: Path | str) -> FastMCP:
-    tools = StatsTools(match_dir)
+def build_server(match_dir: Path | str, season: SeasonView | None = None) -> FastMCP:
+    tools = StatsTools(match_dir, season)
     server = FastMCP("pitch-ledger-stats", log_level="WARNING")
 
     @server.tool()
@@ -55,6 +56,21 @@ def build_server(match_dir: Path | str) -> FastMCP:
     return server
 
 
-def serve(match_dir: Path | str) -> None:
-    """Serve the tools for ``match_dir`` over stdio until the client disconnects."""
-    build_server(match_dir).run(transport="stdio")
+def serve(match_dir: Path | str, season_file: Path | str | None = None) -> None:
+    """Serve the tools for ``match_dir`` over stdio until the client disconnects.
+
+    Season facts use the earlier matches' records: those in ``season_file`` (JSON lines,
+    as the replay hands them over so both sides see the same season), else the configured
+    history store (``PITCH_LEDGER_HISTORY``; by default ``<data>/history``)."""
+    from pitch_ledger.history import FileHistory, HistoryStore, season_for
+    from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings, open_history
+    from pitch_ledger.matchlab.io import read_match
+
+    match_dir = Path(match_dir)
+    match = read_match(match_dir, with_tracking=False).match
+    store: HistoryStore
+    if season_file is not None:
+        store = FileHistory(Path(season_file).parent, Path(season_file).name)
+    else:
+        store = open_history(LedgerQueueSettings(), match_dir.parent)
+    build_server(match_dir, season_for(match, store)).run(transport="stdio")
