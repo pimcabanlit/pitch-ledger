@@ -546,6 +546,24 @@ Then run a match in Azure (portal → Container Apps jobs → `pitch-ledger-repl
 
 The default filter already blocks jailbreak attempts (`check-models --safety` passes on it). For an explicit policy: Foundry portal → **Guardrails + controls** → **Content filters** → **Create** → name `pitch-ledger-broadcast` → Input: keep Hate, Sexual, Violence and Self-harm at Medium, Prompt Shields for jailbreak attacks **Annotate and block**, for indirect attacks **Annotate and block** → Output: the same severities, Protected material for text **Annotate and block** → apply to the `gpt-4.1-mini` deployment → Create. Then re-run `check-models --safety`. (Stricter severities than Medium may block ordinary football language such as "strike" or "shot", which would show as *Content filter* ops alerts.)
 
+## Foundry evaluations (the scorecard in Foundry)
+
+`pitch-ledger foundry-eval` turns every aired insight in the ledger into one evaluation row and runs it in the Foundry project (portal: your project → **Evaluations**):
+
+- **Code checks** (`recompute`, `numbers`, `evidence`, `overlays`, `editorial`): computed in Python, recorded in Foundry as string-check graders (pass/fail). No model, no cost.
+- **Judges** (Foundry built-ins on the strong deployment): `groundedness` (is the headline and explanation supported by the code-computed metrics, names and signals it was given), `coherence`, `fluency`. About 1,600 tokens per row each: roughly 15 US cents for all 55 aired insights, 4 cents for one match. `--no-judges` skips them.
+- **Safety** (`--safety`): Foundry's violence, hate and unfairness, sexual and self-harm evaluators.
+- **Scorecard gates** from `data/scorecard.json` (run `evaluate` first) are attached as the run's metadata.
+
+The rows are also written to `data/foundry_eval_rows.jsonl`; `--dry-run` stops there. Each set of criteria is one evaluation (`pitch-ledger-insights`, `pitch-ledger-insights-code`, `…-safety`); every publish adds a run, so runs compare over time. Sign-in: Entra ID with Foundry User on the project (nothing new to grant). The reads from Cosmos are read-only.
+
+### Verified (2026-10-11)
+
+| Run | Rows | Result |
+| --- | --- | --- |
+| All six matches, code checks only (`--no-judges`) | 55 | recompute, numbers, evidence, overlays, editorial: 55/55 each |
+| M0002 (Foundry-written copy), code checks + judges | 14 | code checks 14/14; groundedness 5.0, coherence 4.0, fluency 3.5 (mean of 5; all 14 pass) |
+
 ## Lessons learned (first live run, 2026-10-09)
 
 Each problem below blocked the first live run. Read the error, find the matching row, apply the fix.

@@ -26,10 +26,13 @@ from typing import Any, Literal
 
 from pitch_ledger.agents import copy
 from pitch_ledger.agents.editorial import draft_issues, editorial_issues
+from pitch_ledger.agents.facts import build_facts
 from pitch_ledger.agents.replay import ReplayOptions, ReplayRun, replay_match
 from pitch_ledger.engine.detector import detect
 from pitch_ledger.engine.evaluation import check_detection
 from pitch_ledger.engine.recompute import recompute_trigger
+from pitch_ledger.engine.windows import match_minute
+from pitch_ledger.ledger import InMemoryLedger
 from pitch_ledger.matchlab.build import build_match
 from pitch_ledger.matchlab.generator import MatchSpec, SimulatedMatch, simulate_match
 from pitch_ledger.matchlab.io import write_match
@@ -120,26 +123,97 @@ def detection_section(matches: Sequence[_Match], sweep_seeds: int) -> dict[str, 
     }
 
 
+def insight_checks(
+    ledger: InMemoryLedger, sim: SimulatedMatch, tracking: Sequence[TrackingSample],
+    insight: Insight,
+) -> dict[str, list[str]]:  # fmt: skip
+    """Independent code checks on one aired insight, by name; an empty list passed.
+
+    - recompute: every metric recomputes from the raw rows to the stated value;
+    - numbers: every number in the headline and explanation is one of its metrics;
+    - evidence: cited events exist and belong to the trigger;
+    - overlays: every number in every overlay recomputes (in its language);
+    - editorial: the headline and explanation pass the house-style check."""
+    trigger = ledger.get_trigger(insight.trigger_id or "")
+    if trigger is None:
+        return {"recompute": ["no trigger"]}
+    fresh = recompute_trigger(trigger, sim.match, sim.events, list(tracking))
+    text = f"{insight.headline}\n{insight.explanation}"
+    event_ids = {e.event_id for e in sim.events}
+    in_moment = set(insight.evidence_event_ids) <= set(trigger.evidence_event_ids) & event_ids
+    return {
+        "recompute": [f"{k}={v} (recomputed {fresh.get(k)})"
+                      for k, v in insight.metrics.items() if fresh.get(k) != v],
+        "numbers": [f"text: {n}" for n in unsupported_numbers(text, insight.metrics.values())],
+        "evidence": [] if in_moment else ["evidence outside the trigger"],
+        "overlays": [f"overlay {o.overlay_id} ({o.language}): {n}"
+                     for o in ledger.overlays(insight.insight_id)
+                     for n in unsupported_numbers(o.text, fresh.values(), o.language)],
+        "editorial": draft_issues(insight.headline, insight.explanation),
+    }  # fmt: skip
+
+
 def _insight_problems(m: _Match, run: ReplayRun, insight: Insight) -> list[str]:
     """What an independent recompute finds wrong with an aired insight (empty: accurate)."""
-    trigger = run.ledger.get_trigger(insight.trigger_id or "")
-    if trigger is None:
-        return ["no trigger"]
-    fresh = recompute_trigger(trigger, m.sim.match, m.sim.events, m.tracking)
-    problems = [
-        f"{k}={v} (recomputed {fresh.get(k)})"
-        for k, v in insight.metrics.items()
-        if fresh.get(k) != v
-    ]
-    text = f"{insight.headline}\n{insight.explanation}"
-    problems += [f"text: {n}" for n in unsupported_numbers(text, insight.metrics.values())]
-    event_ids = {e.event_id for e in m.sim.events}
-    if not set(insight.evidence_event_ids) <= set(trigger.evidence_event_ids) & event_ids:
-        problems.append("evidence outside the trigger")
-    for o in run.ledger.overlays(insight.insight_id):
-        for n in unsupported_numbers(o.text, fresh.values(), o.language):
-            problems.append(f"overlay {o.overlay_id} ({o.language}): {n}")
-    return problems
+    checks = insight_checks(run.ledger, m.sim, m.tracking, insight)
+    return [p for name in ("recompute", "numbers", "evidence", "overlays")
+            for p in checks.get(name, [])]  # fmt: skip
+
+
+CHECKS = ("recompute", "numbers", "evidence", "overlays", "editorial")
+"""The code checks in an evaluation row; each is "pass" or "fail"."""
+
+
+def demo_match(match_id: str) -> tuple[SimulatedMatch, list[TrackingSample]]:
+    """A demo match rebuilt from its manifest seed (the same rows the ledger was made from)."""
+    entry = next((e for e in load_manifest() if e.match_id == match_id), None)
+    if entry is None:
+        raise KeyError(f"{match_id} is not a demo match (scenarios/matches.yaml)")
+    return build_match(_spec(entry))
+
+
+def evaluation_rows(
+    ledger: InMemoryLedger, sim: SimulatedMatch, tracking: Sequence[TrackingSample]
+) -> list[dict[str, str]]:
+    """One row per aired insight, for an evaluation service: the moment (query), what the
+    agents were given (context: the code-computed metrics, names and signals, and the cited
+    evidence), what aired (response), and each code check as "pass" or "fail"."""
+    teams = {t.team_id: t for t in sim.teams}
+    events = {e.event_id: e for e in sim.events}
+    rows = []
+    for insight in ledger.insights(sim.match.match_id):
+        if insight.approved_by is None or insight.audit_status is AuditStatus.BLOCKED:
+            continue
+        trigger = ledger.get_trigger(insight.trigger_id or "")
+        if trigger is None:
+            continue
+        facts = build_facts(trigger, list(teams.values()), sim.players,
+                            sim.match.home_team_id, sim.match.away_team_id, events)  # fmt: skip
+        names = {k: v for k, v in facts.names().items() if v}
+        minute = f"{round(match_minute(trigger.period, trigger.clock_ms)):.0f}'"
+        who = (names.get("player") if trigger.subject.player_id else None) or names.get(
+            "team", "the match"
+        )
+        checks = insight_checks(ledger, sim, tracking, insight)
+        context = [
+            "Metrics computed in code (exact): "
+            + ", ".join(f"{k}={v}" for k, v in insight.metrics.items()),
+            "Names: " + ", ".join(f"{k}={v}" for k, v in names.items()),
+            *(f"Context: {signal}" for signal in facts.signals),
+            "Evidence events: " + (", ".join(insight.evidence_event_ids) or "none"),
+        ]
+        rows.append({
+            "insight_id": insight.insight_id,
+            "match_id": insight.match_id,
+            "insight_type": insight.insight_type.value,
+            "query": f"Explain this {trigger.rule_id.replace('_', ' ')} moment at {minute} "
+                     f"({who}) for a studio audience, using only the given metrics.",
+            "context": "\n".join(context),
+            "response": f"{insight.headline}\n{insight.explanation}",
+            **{name: "fail" if checks.get(name) else "pass" for name in CHECKS},
+            "problems": "; ".join(p for found in checks.values() for p in found)[:500],
+        })  # fmt: skip
+    return rows
 
 
 def accuracy_section(matches: Sequence[_Match]) -> dict[str, Any]:

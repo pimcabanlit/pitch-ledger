@@ -22,7 +22,9 @@ from pitch_ledger.validation.realism import RealismCheck
 
 if TYPE_CHECKING:
     from pitch_ledger.infra_adapters.feeds import FeedSettings
+    from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
     from pitch_ledger.infra_adapters.stores import StoreSettings
+    from pitch_ledger.ledger import InMemoryLedger
 
 IMPORTANT = {"momentum_shift", "key_moment", "player_form", "recap"}
 """Insight types ``detect`` lists by default (``--all`` lists every trigger)."""
@@ -341,6 +343,89 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
     print(f"scorecard -> {out}")
     return 0 if card["passed"] else 1
+
+
+def cmd_foundry_eval(args: argparse.Namespace) -> int:
+    import json
+
+    from pitch_ledger.ledger import FileLedger, InMemoryLedger
+    from pitch_ledger.matchlab.scenarios import load_manifest
+    from pitch_ledger.scorecard import CHECKS, demo_match, evaluation_rows
+
+    matches = args.match or [e.match_id for e in load_manifest()]
+    ledger_kind = args.ledger or _ledger_settings().ledger
+    rows: list[dict[str, str]] = []
+    for match_id in matches:
+        ledger: InMemoryLedger
+        if ledger_kind == "cosmos":
+            ledger = _cosmos_reader(match_id)
+        else:
+            ledger = FileLedger(Path(args.data) / match_id / "ledger")
+        sim, tracking = demo_match(match_id)
+        found = evaluation_rows(ledger, sim, tracking)
+        print(f"{match_id}: {len(found)} aired insights ({ledger_kind} ledger)")
+        rows += found
+    failed = {name: sum(r[name] != "pass" for r in rows) for name in CHECKS}
+    print(f"code checks over {len(rows)} insights: "
+          + ", ".join(f"{k} {len(rows) - v}/{len(rows)}" for k, v in failed.items()))  # fmt: skip
+    out = Path(args.data) / "foundry_eval_rows.jsonl"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), "utf-8")
+    print(f"rows -> {out}")
+    if args.dry_run:
+        return 0 if not any(failed.values()) else 1
+
+    from pitch_ledger.agents.model_manager import ModelSettings
+    from pitch_ledger.infra_adapters.foundry_evals import (
+        JUDGES,
+        SAFETY,
+        open_client,
+        publish,
+        scorecard_metadata,
+    )
+
+    settings = ModelSettings()
+    deployment = settings.deployment("strong")
+    if not settings.foundry_project_endpoint or not deployment:
+        print("foundry-eval needs FOUNDRY_PROJECT_ENDPOINT and PITCH_LEDGER_MODEL_STRONG")
+        return 1
+    card_path = Path(args.scorecard)
+    card = json.loads(card_path.read_text()) if card_path.exists() else None
+    judges = not args.no_judges
+    calls = len(rows) * ((len(JUDGES) if judges else 0) + (len(SAFETY) if args.safety else 0))
+    gates = "" if card else " (no scorecard file: gates not attached)"
+    print(f"publishing to Foundry: {len(rows)} rows, about {calls} evaluator calls{gates}")
+    result = publish(
+        rows, open_client(settings.foundry_project_endpoint), deployment,
+        judges=judges, safety=args.safety, run_name=args.name,
+        metadata=scorecard_metadata(card, f"{ledger_kind} ledger: {', '.join(matches)}"),
+    )  # fmt: skip
+    print(f"run {result.run_id}: {result.status}" + (f" ({result.error})" if result.error else ""))
+    for name, c in result.criteria.items():
+        score = f", mean score {c['mean_score']}" if c.get("mean_score") is not None else ""
+        print(f"  {name}: {c['passed']} passed, {c['failed']} failed{score}")
+    if result.report_url:
+        print(f"report: {result.report_url}")
+    return 0 if result.status == "completed" and result.code_checks_passed() else 1
+
+
+def _ledger_settings() -> "LedgerQueueSettings":
+    from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
+
+    return LedgerQueueSettings()
+
+
+def _cosmos_reader(match_id: str) -> "InMemoryLedger":
+    """A match's ledger read from Cosmos DB (read only: never emptied, never written)."""
+    from pitch_ledger.infra_adapters.cosmos import CosmosLedger
+
+    s = _ledger_settings()
+    if not s.cosmos_endpoint:
+        raise SystemExit("cosmos ledger needs COSMOS_ENDPOINT")
+    ledger = CosmosLedger.connect(s.cosmos_endpoint, s.cosmos_database, s.cosmos_container,
+                                  s.key())  # fmt: skip
+    ledger.load(match_id)
+    return ledger
 
 
 def cmd_check_models(args: argparse.Namespace) -> int:
@@ -710,6 +795,24 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--provider", choices=["offline", "foundry"], help="model provider")
     ev.add_argument("--match", action="append", help="limit to these demo match IDs")
     ev.set_defaults(func=cmd_evaluate)
+
+    fe = sub.add_parser(
+        "foundry-eval",
+        help="evaluate every aired insight in Foundry: code checks, groundedness, coherence",
+    )
+    fe.add_argument("--match", action="append", help="demo match IDs (default: all six)")
+    fe.add_argument("--ledger", choices=["file", "cosmos"], help="ledger (default: settings)")
+    fe.add_argument("--data", default="data", help="file ledgers under DATA/<match>/ledger")
+    fe.add_argument(
+        "--scorecard",
+        default="data/scorecard.json",
+        help="attach this scorecard's gates (from `evaluate`)",
+    )
+    fe.add_argument("--name", default="insights", help="run name in Foundry")
+    fe.add_argument("--no-judges", action="store_true", help="code checks only (no model)")
+    fe.add_argument("--safety", action="store_true", help="add the safety evaluators")
+    fe.add_argument("--dry-run", action="store_true", help="build the rows only; no upload")
+    fe.set_defaults(func=cmd_foundry_eval)
 
     chk = sub.add_parser(
         "check-models", help="check model settings, Entra ID sign-in and each deployment"

@@ -9,11 +9,13 @@ import pytest
 from pitch_ledger.cli import main
 from pitch_ledger.matchlab.scenarios import load_manifest
 from pitch_ledger.scorecard import (
+    CHECKS,
     _Match,
     _run_match,
     accuracy_section,
     coverage_section,
     detection_section,
+    evaluation_rows,
     planted_section,
 )
 
@@ -59,3 +61,31 @@ def test_evaluate_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     printed = capsys.readouterr().out
     assert "[PASS] every planted error caught" in printed and "FAIL" not in printed
     assert main(["evaluate", "--match", "M9999", "--out", str(out)]) == 2
+
+
+def test_evaluation_rows_carry_the_moment_the_context_and_each_check(runs: list[_Match]) -> None:
+    m = runs[0]
+    rows = evaluation_rows(m.clean.ledger, m.sim, m.tracking)
+    assert len(rows) == accuracy_section(runs)["aired_insights"]
+    assert all(r[name] == "pass" for r in rows for name in CHECKS)
+    momentum = next(r for r in rows if r["insight_type"] == "momentum_shift")
+    assert "(Corrowmere Town)" in momentum["query"]  # a team moment names the team
+    assert momentum["context"].startswith("Metrics computed in code (exact): ")
+    assert "control_before=" in momentum["context"] and "Evidence events: M0002-E" in momentum[
+        "context"]  # fmt: skip
+    insight = m.clean.ledger.get_insight(momentum["insight_id"])
+    assert insight is not None and momentum["response"].startswith(insight.headline)
+
+
+def test_evaluation_rows_fail_a_tampered_insight(runs: list[_Match]) -> None:
+    m = runs[0]
+    ledger = m.clean.ledger
+    insight = next(i for i in ledger.insights() if i.insight_type.value == "momentum_shift")
+    tampered = insight.model_copy(update={"metrics": {**insight.metrics, "turnovers_after": 99}})
+    ledger.put_insight(tampered)
+    try:
+        row = next(r for r in evaluation_rows(ledger, m.sim, m.tracking)
+                   if r["insight_id"] == insight.insight_id)  # fmt: skip
+    finally:
+        ledger.put_insight(insight)
+    assert row["recompute"] == "fail" and "turnovers_after=99" in row["problems"]

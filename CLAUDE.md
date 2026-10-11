@@ -109,6 +109,7 @@ uv run pitch-ledger detect data/M0002    # triggers.jsonl + scenario check; exit
 uv run pitch-ledger mcp data/M0002       # read-only stats tools as an MCP server (stdio)
 uv run pitch-ledger replay data/M0002 --approve --inject-error   # agents -> data/M0002/ledger (--provider foundry, --only, --budget, --local-stats)
 uv run pitch-ledger evaluate              # scorecard -> data/scorecard.json; exit 1 if a gate fails (--match M0002, --sweep N)
+uv run pitch-ledger foundry-eval --ledger cosmos   # every aired insight -> Foundry evaluations: code checks + groundedness, coherence, fluency (--match, --no-judges, --safety, --dry-run)
 uv run pitch-ledger check-models          # model settings, Entra ID sign-in, one tiny call per deployment; exit 1 on a FAIL
 uv run pitch-ledger check-models --safety # also a prompt-injection probe the content filter must block
 uv run pitch-ledger check-tracing         # tracing settings, Entra ID sign-in, one test span to Application Insights

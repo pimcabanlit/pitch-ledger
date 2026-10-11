@@ -1281,6 +1281,7 @@ source = { editable = "." }
 dependencies = [
     { name = "agent-framework-core" },
     { name = "agent-framework-foundry" },
+    { name = "azure-ai-projects" },
     { name = "azure-cosmos" },
     { name = "azure-eventhub" },
     { name = "azure-identity" },
@@ -1313,6 +1314,7 @@ dev = [
 requires-dist = [
     { name = "agent-framework-core", specifier = ">=1.21,<2" },
     { name = "agent-framework-foundry", specifier = ">=1.14,<2" },
+    { name = "azure-ai-projects", specifier = ">=2.7" },
     { name = "azure-cosmos", specifier = ">=4.17.1" },
     { name = "azure-eventhub", specifier = ">=5.15.1" },
     { name = "azure-identity", specifier = ">=1.25" },

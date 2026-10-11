@@ -59,7 +59,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 4. Ledger repository interface: in-memory for tests, local JSONL files for replays (Cosmos DB adapter in Phase 4).
 5. Trigger queue interface with retry and dead letter: in-memory adapter (Service Bus adapter in Phase 4).
 6. **Planted error test:** inject a wrong number into an Explainer draft and assert the Auditor blocks or corrects it. This is the demo's key moment.
-7. Evaluation script: detection rate, false alerts, factual accuracy across all scenario matches; results pushed to Foundry evaluations once the live models are configured.
+7. Evaluation script: detection rate, false alerts, factual accuracy across all scenario matches; results pushed to Foundry evaluations once the live models are configured. Built 2026-10-11: `pitch-ledger foundry-eval` publishes every aired insight in the ledger to Foundry evaluations (code checks + groundedness, coherence, fluency; scorecard gates as metadata). First runs: 55/55 aired insights pass every code check; M0002's Foundry-written copy scores groundedness 5.0, coherence 4.0, fluency 3.5 (all pass).
 
 **Done when:** replaying a scenario match locally produces audited insights and overlays in three languages and five audience modes, with the evaluation scorecard.
 
