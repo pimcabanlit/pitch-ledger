@@ -202,6 +202,8 @@ class OverlayTemplate(StrEnum):
     MOMENTUM_BAR = "momentum_bar"
     LOWER_THIRD = "lower_third"
     RECAP_CARD = "recap_card"
+    MILESTONE_BADGE = "milestone_badge"
+    PASS_BADGE = "pass_badge"
 
 
 class AudienceMode(StrEnum):

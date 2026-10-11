@@ -18,15 +18,15 @@ Every point of the hackathon brief (section 4.1, *Hackathon Challenge*) mapped t
 | --- | --- | --- | --- |
 | (i) Pipeline: ingest, interpret, explain, render | 4 | 0 | 0 |
 | (i)(e) Personalization | 4 | 3 | 1 |
-| (ii) Real-time match intelligence | 3 | 4 | 1 |
-| (iii) Narrative generation | 3 | 1 | 0 |
+| (ii) Real-time match intelligence | 6 | 1 | 1 |
+| (iii) Narrative generation | 4 | 0 | 0 |
 | (iv) Explainability | 2 | 2 | 0 |
 | (v) Data innovation | 1 | 0 | 0 |
 | (vi) Multi-language storytelling | 1 | 0 | 0 |
 | Fit: live, studio, broadcast, streaming, any market | 4 | 0 | 0 |
-| **Total** | **22** | **10** | **2** |
+| **Total** | **26** | **6** | **2** |
 
-The gaps cluster in two places: **viewer choice** (favourite player, follow-a-player, choosing the single metric) and **things computed but not yet on screen** (milestones, pass quality, distance, pass ball speed, chaos, tempo). Most are closed without any new model calls; see [Gaps to close in Phase 5](#gaps-to-close-in-phase-5).
+The gaps cluster in two places: **viewer choice** (favourite player, follow-a-player, choosing the single metric) and **things computed but not yet on screen** (chaos, tempo). Milestones, pass quality, distance and ball speed went on screen as badges on 2026-10-11. Most are closed without any new model calls; see [Gaps to close in Phase 5](#gaps-to-close-in-phase-5).
 
 ## (i) One pipeline with five stages
 
@@ -57,10 +57,10 @@ The gaps cluster in two places: **viewer choice** (favourite player, follow-a-pl
 | Aggregate events into meaningful football **states and statistics** | **Implemented** | Rolling team state per minute (control, possession, pass accuracy, turnovers, PPDA, tempo), live in the event store as the match plays | ADX dashboard; Match Centre control chart |
 | **Player identification**: real-time player name tagging | **Partial** | Players are named in captions, overlays and the match feed as moments happen; the pitch shows shirt numbers and rings the captioned player. Missing: names on the pitch itself | Match Centre (gap 5) |
 | Speed indicators triggered at predefined thresholds | **Implemented** | A badge when a player first reaches 34 km/h, and for shots over 100 km/h. Auto-approved, no model calls, capped at one per team per half plus new match records | Fan view and Match Centre speed badges |
-| Distance indicators triggered at predefined thresholds | **Partial** | Detected when a player passes 5 km and 10 km, stored in the ledger but not aired | `distance_milestone` triggers (gap 3) |
-| **Pass quality**: distance, accuracy, difficulty rating | **Partial** | Computed: pass length, completion against expected accuracy for the pass's difficulty, and a 0–100 difficulty rating. Accuracy against expected appears in momentum insights; the Match Centre has a pass network. A *pass quality* trigger fires for completed passes of difficulty 65+ that move the ball 15+ m forward, but it is stored, not aired | `src/pitch_ledger/engine/metrics.py`; `pass_quality` triggers (gap 3) |
+| Distance indicators triggered at predefined thresholds | **Implemented** | A milestone badge when a player becomes the first of their team past 10 km (from tracking); 5 km milestones are kept in the ledger. Auto-approved, no model calls | Match Centre captions (*milestone badge*); `distance_milestone` triggers |
+| **Pass quality**: distance, accuracy, difficulty rating | **Implemented** | A pass badge for the hardest completed pass so far in the match (difficulty 65+ and 15+ m forward to qualify): difficulty rating (0–100), length, forward distance and ball speed. Pass accuracy against expected for difficulty appears in momentum insights, and a pass-milestone badge gives the first player of each team to 50 completed passes, with their accuracy. The Match Centre also has a pass network | Match Centre captions (*pass badge*, *milestone badge*); `src/pitch_ledger/engine/metrics.py` |
 | **Speed metrics**: shot speed | **Implemented** | Shot speed in badges and in goal context ("with a 100.6 km/h shot") | Speed badges; goal insights |
-| **Speed metrics**: ball speed | **Partial** | Pass ball speed is computed from distance and travel time, but not shown | `pass_ball_speed_kmh` (gap 3) |
+| **Speed metrics**: ball speed | **Implemented** | Pass ball speed (from distance and travel time) on the pass badge's analyst line; shot speed as above | Pass badge, analyst mode |
 | **Auto-eventing**: a model over an incoming video feed generates pass and speed metrics | **Not implemented** | There is no video in a synthetic-data challenge. The Match Lab generates events and tracking already labelled, the stage auto-eventing would produce. The feed adapter is where a computer-vision provider's events would plug in (same row schema) | README, production path (Phase 6) |
 
 ## (iii) Narrative generation
@@ -69,7 +69,7 @@ The gaps cluster in two places: **viewer choice** (favourite player, follow-a-pl
 | --- | --- | --- | --- |
 | Key narratives | **Implemented** | Momentum shifts (build-up collapse, pressing change), goals with what they do to the match, penalties with their stakes, sending-offs and their impact 10 minutes later | Fan view; Producer console |
 | Player-performance context | **Implemented** | Player form (shots and xG in a 15-minute spell, share of the team's shots); the scorer's tally in goal copy | *player_form* insights; goal insights |
-| Notable milestones | **Partial** | Brace and hat-trick lead the goal copy ("completes a hat-trick"). Pass milestones (50th, 75th, 100th completed pass) and distance milestones are detected and stored but not aired | Goal insights (gap 3) |
+| Notable milestones | **Implemented** | Brace and hat-trick lead the goal copy ("completes a hat-trick"); milestone badges for the first player of each team to 50 completed passes and past 10 km. Later milestones (75th, 100th pass; 5 km) are kept in the ledger | Goal insights; milestone badges |
 | Match recaps | **Implemented** | Half-time and full-time recaps by the Narrator: whether the chances support the scoreline, and how the match moved | *recap* insights |
 
 ## (iv) Explainability
@@ -130,7 +130,7 @@ In priority order: what each closes, and whether it needs model calls.
 | --- | --- | --- | --- |
 | 1 | **Favourite player and follow-a-player view**: pick a player (from either squad); their insights first, their stats as of the replay clock, their dot highlighted all match, *player focus* copy for them where it applies | Favourite player(s); player-focused mode throughout the match | None (stats from the engine) |
 | 2 | **Choose the single metric**: the viewer picks the metric (shot speed, xG, possession, pass accuracy, control…); the fan view shows that metric's live value and the insights that carry it | A single performance metric the viewer cares about | None |
-| 3 | **Air the stored moments as badges**: milestones (passes, distance, brace and hat-trick), pass quality with distance, difficulty and ball speed. Template copy and code audit, auto-approved, capped like speed badges | Milestones; distance indicators; pass quality on screen; ball speed | None |
+| 3 | **Done 2026-10-11.** Milestones and pass quality air as badges on firsts and new bests (template copy, code audit, auto-approved); brace and hat-trick fold into the goal | Milestones; distance indicators; pass quality; ball speed | None |
 | 4 | **Show chaos and rhythm**: chaos and tempo on the Match Centre chart and tooltips, and as context signals in momentum copy ("the match got more open") | Control vs chaos; game rhythm patterns | None for the chart; the signals only change what the Explainer is given |
 | 5 | **Names on the pitch**: show the player name on hover, or a names toggle | Player name tagging | None |
 | 6 | **Remember preferences**: favourite clubs (more than one), player, mode, metric and language, kept in the browser | Favourite club(s), fuller | None |

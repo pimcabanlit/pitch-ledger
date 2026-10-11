@@ -172,6 +172,25 @@ def test_speed_alert_auto_path_uses_no_model(cases: list[Case]) -> None:
     assert svc.models.usage.calls == 0
 
 
+@pytest.mark.parametrize(
+    ("match_id", "rule", "kind", "template"),
+    [("M0003", "pass_quality", "pass_quality", "pass_badge"),
+     ("M0002", "distance_milestone", "milestone", "milestone_badge"),
+     ("M0002", "pass_milestone", "milestone", "milestone_badge")],
+)  # fmt: skip
+def test_badges_take_the_auto_path(
+    cases: list[Case], match_id: str, rule: str, kind: str, template: str
+) -> None:
+    case = _case(cases, match_id, rule)
+    svc = _services(case)
+    insight = asyncio.run(template_insight(case.trigger, case.facts, svc))
+    approved = decide(insight, case.trigger, svc, None)
+    assert approved.approved_by == f"auto-approval rule: {kind}"
+    overlays = asyncio.run(localize(approved, case.trigger, case.facts, svc, use_models=False))
+    assert len(overlays) == 15 and {o.template for o in overlays} == {template}
+    assert {o.priority for o in overlays} == {4} and svc.models.usage.calls == 0
+
+
 @pytest.mark.parametrize("rule", ["goal", "sending_off", "half_time_recap", "full_time_recap"])
 def test_other_full_flow_rules_pass_audit(cases: list[Case], rule: str) -> None:
     case = next(c for c in cases if c.trigger.rule_id == rule)

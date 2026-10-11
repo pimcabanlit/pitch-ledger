@@ -13,19 +13,23 @@ percentages, speeds and distances, two for xG).
 | penalty_awarded | key_moment | a foul gives a penalty |
 | sending_off_impact | key_moment | 10 minutes after a sending-off |
 | player_form | player_form | 5+ non-penalty shots worth 0.8+ xG by one player in 15 minutes |
-| pass_milestone | milestone | a player completes his 50th, 75th or 100th pass |
-| brace / hat_trick | milestone | a player's second or third goal |
-| distance_milestone | milestone | a player passes 5 or 10 km (tracking) |
+| pass_milestone | milestone | a player completes his 50th, 75th or 100th pass; airs (auto-approved)
+  for the first player of each team to 50 |
+| brace / hat_trick | milestone | a player's second or third goal; folded into the goal |
+| distance_milestone | milestone | a player passes 5 or 10 km (tracking); airs (auto-approved) for
+  the first player of each team past 10 km |
 | shot_speed | speed_alert | a shot above 100 km/h (auto-approved); superseded on a goal, within
   10 minutes of the player's last, faster alert, or by the speed-badge cap (stored, not aired) |
 | top_speed | speed_alert | a player's first sample at 34+ km/h (tracking, auto-approved);
   superseded by the speed-badge cap |
-| pass_quality | pass_quality | completed pass of difficulty 65+, 15+ m forward (at its receipt) |
+| pass_quality | pass_quality | completed pass of difficulty 65+, 15+ m forward (at its receipt);
+  airs (auto-approved) when it is the hardest so far in the match |
 | half_time_recap / full_time_recap | recap | at each period end |
 
 Speed-badge cap: one speed badge airs per team per half, plus any later one that is the
 fastest of its kind (shot or top speed) so far in the match, the first of each kind
-included. The rest are stored.
+included. Milestone and pass-quality badges air on firsts and records only (see the rows
+above). The rest are stored; every trigger is kept.
 """
 
 import math
@@ -58,6 +62,9 @@ from pitch_ledger.schema.enums import EventType, InsightType, Outcome, ShotType
 from pitch_ledger.validation.lineup import SENDING_OFF
 
 MIN = 60_000
+MILESTONE_BADGES = frozenset({"brace", "hat_trick", "pass_quality", "pass_milestone",
+                              "distance_milestone"})  # fmt: skip
+"""Rules aired as badges on firsts and records only (``Detector._milestone_badge``)."""
 
 
 @dataclass(frozen=True)
@@ -73,6 +80,8 @@ class DetectorConfig:
     shot_speed_alert_kmh: float = 100.0
     shot_speed_cooldown_ms: int = 10 * MIN
     speed_badges_per_team_half: int = 1  # plus any later match record of its kind
+    pass_milestone_badge: int = 50  # the first player per team to this many completed passes
+    distance_badge_km: float = 10.0  # the first player per team past this distance
     top_speed_alert_kmh: float = 34.0
     pass_quality_min_difficulty: float = 65.0
     pass_quality_min_forward_m: float = 15.0
@@ -159,8 +168,12 @@ class Detector:
         last: dict[str, tuple[int, int, float]] = {}
         aired: dict[tuple[str, int], int] = defaultdict(int)  # (team, period) -> badges
         best: dict[str, float] = {}  # rule -> fastest alert so far in the match
+        firsts: set[tuple[str, str]] = set()  # (rule, team) whose team-first badge aired
         out = []
         for d in drafts:
+            if d.rule_id in MILESTONE_BADGES:
+                out.append(self._milestone_badge(d, best, firsts))
+                continue
             if d.insight_type is not InsightType.SPEED_ALERT:
                 out.append(d)
                 continue
@@ -192,6 +205,38 @@ class Detector:
                 d = replace(d, context={**d.context, "superseded_by": reason})
             out.append(d)
         return out
+
+    def _milestone_badge(
+        self, d: _Draft, best: dict[str, float], firsts: set[tuple[str, str]]
+    ) -> _Draft:
+        """Firsts and records only: a brace or hat-trick is folded into its goal; a pass
+        quality badge airs when it is the hardest so far in the match (the first counts);
+        pass and distance milestones air for the first player of each team to reach the
+        badge threshold. The rest are stored (``cap``)."""
+        cfg = self.config
+        reason: str | None = "cap"
+        badge = None
+        if d.rule_id in ("brace", "hat_trick"):
+            reason = "goal"  # the goal insight leads with the player's tally
+        elif d.rule_id == "pass_quality":
+            difficulty = float(d.metrics["difficulty"])
+            if difficulty > best.get("pass_quality", 0.0):
+                reason, badge = None, "hardest_so_far"
+            best["pass_quality"] = max(best.get("pass_quality", 0.0), difficulty)
+        else:
+            key = (d.rule_id, d.subject.team_id or "")
+            reached = (
+                d.metrics.get("completed_passes") == cfg.pass_milestone_badge
+                if d.rule_id == "pass_milestone"
+                else float(d.metrics.get("distance_km", 0.0)) >= cfg.distance_badge_km
+            )
+            if reached and key not in firsts:
+                firsts.add(key)
+                reason, badge = None, "team_first"
+        context = {**d.context, **({"badge": badge} if badge else {})}
+        if reason is not None:
+            context["superseded_by"] = reason
+        return replace(d, context=context)
 
     # Momentum ---------------------------------------------------------------
     def _momentum(self, engine: MatchEngine, tracking: Sequence[TrackingSample]) -> list[_Draft]:
@@ -379,6 +424,7 @@ class Detector:
                             InsightSubject(team_id=e.team_id, player_id=e.player_id),
                             rm.pass_milestone(passes[e.player_id]),
                             tuple(x.event_id for x in passes[e.player_id]),
+                            auto_approve=True,
                         )
                     )
             if e.event_type is EventType.SHOT and e.outcome is Outcome.GOAL:
@@ -454,6 +500,7 @@ class Detector:
                     InsightSubject(team_id=e.team_id, player_id=e.player_id),
                     metrics,
                     evidence,
+                    auto_approve=True,
                 )
             )
         return out
@@ -510,6 +557,7 @@ class Detector:
                             {"distance_km": round(dist[s.player_id] / 1000, 1)},
                             (),
                             {"source": "tracking"},
+                            auto_approve=True,
                         )
                     )
             if s.speed_kmh >= cfg.top_speed_alert_kmh and s.player_id not in fast:

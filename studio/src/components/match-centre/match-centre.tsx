@@ -150,9 +150,13 @@ function Centre({
   const now = index >= 0 ? timeline.events[index] : null;
   const ended = t >= axis.total - 0.5;
 
-  // The caption on screen: the latest insight the clock has passed, for its display time.
+  // The caption on screen: of the insights the clock has passed that are still showing, the most
+  // important (lowest priority number), the latest among equals, so a badge never cuts a goal short.
   const window = Math.max(MIN_CAPTION_S, speed * 10);
-  const caption = [...insights].reverse().find((i) => i.t <= t + 0.5 && t - i.t <= window)?.overlay ?? null;
+  const showing = insights.filter((i) => i.t <= t + 0.5 && t - i.t <= window);
+  const top = (a: (typeof showing)[number], b: (typeof showing)[number]) =>
+    b.overlay.priority < a.overlay.priority || (b.overlay.priority === a.overlay.priority && b.t >= a.t) ? b : a;
+  const caption = showing.length ? showing.reduce(top).overlay : null;
 
   const dots: Dot[] = [];
   positions.forEach((pos, pid) => {
@@ -190,7 +194,7 @@ function Centre({
     return items.sort((a, b) => b.order - a.order); // newest first; the second half follows half-time
   }, [tick, insightsOnly, insights, timeline, times, keep, nameOf, colorOf, teams]);
 
-  const moments = insights.filter((i) => i.overlay.template !== "speed_badge");
+  const moments = insights.filter((i) => !i.overlay.template.endsWith("_badge")); // badges: captions only
   const sides: Side[] = [match.home, match.away].map((team) => ({
     team_id: team.team_id,
     short_name: team.short_name,

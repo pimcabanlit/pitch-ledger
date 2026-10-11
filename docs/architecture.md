@@ -57,7 +57,7 @@ Across every service: Microsoft Entra ID (managed identities, producer sign-in),
 4. **Detect.** The Moment detector sees, for example, the away side's build-up evidence (passes, pressure and possession) cross its threshold, computes the moment's metrics with context (before and after windows, the score, the opponent's shots in the spell), folds a repeat alert into the moment it repeats, then puts a trigger with evidence event IDs on the Service Bus queue.
 5. **Explain.** The orchestrator picks up the trigger. The Explainer pulls numbers through the Stats MCP server and drafts an insight (headline, explanation, metrics, evidence).
 6. **Audit.** The Auditor recomputes every number through the same tools. A mismatch goes back to the Explainer, at most twice; then approve or block. The decision is written to the ledger; a block raises an ops alert.
-7. **Approve.** The producer approves in the Studio app (low-risk types such as speed alerts can auto-approve).
+7. **Approve.** The producer approves in the Studio app (low-risk badges auto-approve: speed alerts, milestones and pass quality, on firsts and new bests only).
 8. **Personalize and translate.** Personalizer writes the analyst, casual, club, player and single-metric versions in one call; then, per mode concurrently, the Translator renders the other languages in one call. Every copy passes the number check and the editorial check, or is asked for again alone once, then falls back to template copy.
 9. **Deliver.** The Overlay builder sets template, timing and priority; overlays are saved to the ledger and pushed through Web PubSub.
 10. **Recap.** At half-time and full-time the orchestrator hands off to the Narrator; recaps go through the same audit.
@@ -175,7 +175,7 @@ FastAPI (`pitch_ledger.api`, `pitch-ledger api`); OpenAPI docs at `/api/v1/docs`
 | Personalizer | Analyst, casual, club, player and single-metric versions: same facts, different depth and angle | Small, fast | One call for all modes |
 | Translator | Each version into the other languages, numbers unchanged | Small, fast | Concurrent per mode, one call for both languages |
 
-A full-flow insight costs 8 model calls when every check passes (Explainer, review, Personalizer, five Translator calls), down from 17; speed alerts use none.
+A full-flow insight costs 8 model calls when every check passes (Explainer, review, Personalizer, five Translator calls), down from 17; badges (speed alerts, milestones, pass quality) use none.
 
 Failure handling: a model error retries once, then falls back to a plain template overlay built from code-computed numbers; a blocked insight never airs and is logged; Service Bus dead-letters a trigger that keeps failing. Each of these raises an ops alert.
 

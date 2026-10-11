@@ -96,6 +96,52 @@ def _recap(label_en: str, short_en: str, label_es: str, short_es: str, label_fil
     )
 
 
+def _pass_quality(speed: bool) -> RuleCopy:
+    """The hardest pass so far in the match; ball speed in the analyst line when the pass
+    has a travel time."""
+    speed_at = {"en": ", at {ball_speed_kmh} km/h", "es": ", a {ball_speed_kmh} km/h",
+                "fil": ", {ball_speed_kmh} km/h"}  # fmt: skip
+    at = speed_at if speed else {"en": "", "es": "", "fil": ""}
+    return RuleCopy(
+        headline="{player} plays the match's hardest pass so far",
+        explanation=(
+            "{player} completes a pass with a difficulty rating of {difficulty}, covering "
+            "{length_m} m and moving the ball {forward_m} m forward."
+        ),
+        modes=_modes(
+            analyst=_l(
+                "{player} ({team}) pass difficulty {difficulty}, {length_m} m, "
+                "{forward_m} m forward" + at["en"] + ".",
+                "{player} ({team}): pase de dificultad {difficulty}, {length_m} m, "
+                "{forward_m} m hacia adelante" + at["es"] + ".",
+                "{player} ({team}): pasa na may difficulty {difficulty}, {length_m} m, "
+                "{forward_m} m pasulong" + at["fil"] + ".",
+            ),
+            casual=_l(
+                "Precise pass from {player}, the hardest of the match so far.",
+                "Pase preciso de {player}, el más difícil del partido hasta ahora.",
+                "Tumpak na pasa ni {player}, pinakamahirap sa laro sa ngayon.",
+            ),
+            club_focus=_l(
+                "{team}'s {player} threads a {length_m} m pass forward.",
+                "{player}, de {team}, filtra un pase de {length_m} m hacia adelante.",
+                "Isang {length_m} m na pasa pasulong mula kay {player} ng {team}.",
+            ),
+            player_focus=_l(
+                "{player}'s pass: difficulty {difficulty}, the highest so far.",
+                "Pase de {player}: dificultad {difficulty}, la más alta hasta ahora.",
+                "Pasa ni {player}: difficulty {difficulty}, pinakamataas sa ngayon.",
+            ),
+            single_metric=_l(
+                "Pass difficulty: {difficulty}",
+                "Dificultad del pase: {difficulty}",
+                "Hirap ng pasa: {difficulty}",
+            ),
+        ),
+        requires=("ball_speed_kmh",) if speed else (),
+    )
+
+
 CATALOGUE: dict[str, RuleCopy] = {
     "momentum_shift/build_up": RuleCopy(
         headline="{team} lose control: {control_before} to {control_after} since {onset_minute:0}'",
@@ -467,13 +513,97 @@ CATALOGUE: dict[str, RuleCopy] = {
             ),
         ),
     ),
+    "pass_milestone": RuleCopy(
+        headline="{player} completes {completed_passes} passes",
+        explanation=(
+            "{player} is the first {team} player to {completed_passes} completed passes, "
+            "from {attempted_passes} attempted ({pass_accuracy}%)."
+        ),
+        modes=_modes(
+            analyst=_l(
+                "{player} ({team}): {completed_passes} completed passes from "
+                "{attempted_passes}, {pass_accuracy}% accuracy.",
+                "{player} ({team}): {completed_passes} pases completados de "
+                "{attempted_passes}, {pass_accuracy}% de acierto.",
+                "{player} ({team}): {completed_passes} kumpletong pasa mula sa "
+                "{attempted_passes}, {pass_accuracy}% accuracy.",
+            ),
+            casual=_l(
+                "{player} keeps {team} moving: {completed_passes} completed passes.",
+                "{player} mueve a {team}: {completed_passes} pases completados.",
+                "Pinapaandar ni {player} ang {team}: {completed_passes} kumpletong pasa.",
+            ),
+            club_focus=_l(
+                "{team}'s first player to {completed_passes} completed passes: {player}.",
+                "Primer jugador de {team} en llegar a {completed_passes} pases completados: "
+                "{player}.",
+                "Unang manlalaro ng {team} na umabot sa {completed_passes} kumpletong pasa: "
+                "si {player}.",
+            ),
+            player_focus=_l(
+                "{player} reaches {completed_passes} completed passes at {pass_accuracy}% "
+                "accuracy.",
+                "{player} llega a {completed_passes} pases completados con un "
+                "{pass_accuracy}% de acierto.",
+                "Umabot si {player} sa {completed_passes} kumpletong pasa, {pass_accuracy}% "
+                "accuracy.",
+            ),
+            single_metric=_l(
+                "Completed passes: {completed_passes}",
+                "Pases completados: {completed_passes}",
+                "Kumpletong pasa: {completed_passes}",
+            ),
+        ),
+    ),
+    "distance_milestone": RuleCopy(
+        headline="{player} covers {distance_km} km",
+        explanation=(
+            "{player} has covered {distance_km} km, the first {team} player past that mark "
+            "in the tracking data."
+        ),
+        modes=_modes(
+            analyst=_l(
+                "{player} ({team}): {distance_km} km covered, the first {team} player past "
+                "that mark.",
+                "{player} ({team}): {distance_km} km recorridos, el primero de {team} en "
+                "superar esa marca.",
+                "{player} ({team}): {distance_km} km na natakbo, unang taga-{team} na "
+                "lumampas dito.",
+            ),
+            casual=_l(
+                "{player} is everywhere: {distance_km} km run so far.",
+                "{player} no para: {distance_km} km recorridos.",
+                "Hindi tumitigil si {player}: {distance_km} km na.",
+            ),
+            club_focus=_l(
+                "{player} leads {team}'s running: first past {distance_km} km.",
+                "{player} lidera el esfuerzo de {team}: primero en superar los {distance_km} km.",
+                "Nangunguna si {player} sa takbuhan ng {team}: una sa {distance_km} km.",
+            ),
+            player_focus=_l(
+                "{player} has covered {distance_km} km so far.",
+                "{player} lleva {distance_km} km recorridos.",
+                "{distance_km} km na ang natakbo ni {player}.",
+            ),
+            single_metric=_l(
+                "Distance covered: {distance_km} km",
+                "Distancia recorrida: {distance_km} km",
+                "Layong natakbo: {distance_km} km",
+            ),
+        ),
+    ),
+    "pass_quality": _pass_quality(speed=True),
+    "pass_quality/no_speed": _pass_quality(speed=False),
 }
 
 NAME_FIELDS = frozenset({"team", "opp", "player", "home", "away", "side"})
 """Placeholders filled from the roster (``side``: the subject team is home or away), not
 from metrics."""
 
-FALLBACK: dict[str, str] = {"momentum_shift/pressing": "momentum_shift/build_up"}
+FALLBACK: dict[str, str] = {
+    "momentum_shift/pressing": "momentum_shift/build_up",
+    "pass_quality": "pass_quality/no_speed",
+}
 """When a variant's numbers are missing (e.g. PPDA undefined), use this variant instead."""
 
 _FIELD = re.compile(r"\{(\w+)\}")

@@ -36,8 +36,8 @@ FULL_FLOW = frozenset(
     {InsightType.MOMENTUM_SHIFT, InsightType.KEY_MOMENT, InsightType.PLAYER_FORM, InsightType.RECAP}
 )
 """Insight types that go through Explainer, Auditor, producer and personalization."""
-AUTO_APPROVE = frozenset({InsightType.SPEED_ALERT})
-"""Low-risk types: template copy, code audit, auto-approved, no model calls."""
+AUTO_APPROVE = frozenset({InsightType.SPEED_ALERT, InsightType.MILESTONE, InsightType.PASS_QUALITY})
+"""Low-risk types (badges): template copy, code audit, auto-approved, no model calls."""
 LANGUAGES = ("en", "es", "fil")
 
 

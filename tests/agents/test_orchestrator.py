@@ -67,8 +67,11 @@ def test_replay_m0002_end_to_end_over_mcp(m0002_dir: Path, tmp_path: Path) -> No
     expected_auto = sum(
         t.insight_type in AUTO_APPROVE and not t.context.get("superseded_by") for t in run.triggers
     )
-    # folded speed alerts: 2 on goals, 1 cooldown, 1 speed-badge cap
-    assert sum(bool(t.context.get("superseded_by")) for t in run.triggers) == 4
+    # folded speed alerts: 2 on goals, 1 cooldown, 1 speed-badge cap; badges that are not a
+    # first or a new best (and every brace or hat-trick) are folded too, and only badges fold
+    folded = [t for t in run.triggers if t.context.get("superseded_by")]
+    assert sum(t.insight_type.value == "speed_alert" for t in folded) == 4
+    assert {t.insight_type for t in folded} <= AUTO_APPROVE
     assert s["counts"]["routes"]["full"] == expected_full >= 8
     assert s["counts"]["routes"]["auto"] == expected_auto
     assert s["counts"]["status"] == {"aired": expected_full + expected_auto}
@@ -117,10 +120,18 @@ def test_routing_and_only(m0002: list[Case]) -> None:
 
 def test_minor_trigger_is_stored_not_explained(m0002: list[Case]) -> None:
     orch = _orchestrator(m0002)
-    trigger = Trigger(trigger_id="M0002-T0099", match_id="M0002", period=1, clock_ms=60_000,
-                      insight_type="milestone", rule_id="pass_milestone",
-                      subject=InsightSubject(player_id="T01-P04"),
-                      metrics={"completed_passes": 25}, evidence_event_ids=[])  # fmt: skip
+    trigger = Trigger(
+        trigger_id="M0002-T0099",
+        match_id="M0002",
+        period=1,
+        clock_ms=60_000,
+        insight_type="milestone",
+        rule_id="pass_milestone",
+        subject=InsightSubject(player_id="T01-P04"),
+        metrics={"completed_passes": 75},
+        evidence_event_ids=[],
+        context={"superseded_by": "cap"},
+    )  # fmt: skip  (not a team first)
     outcome = asyncio.run(orch.process(trigger))
     assert (outcome.route, outcome.status, outcome.insight_id) == ("stored", "stored", None)
     assert orch.svc.ledger.get_trigger("M0002-T0099") == trigger

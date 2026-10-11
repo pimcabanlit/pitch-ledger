@@ -16,6 +16,9 @@ TEMPLATE_BY_RULE: dict[str, OverlayTemplate] = {
     "full_time_recap": OverlayTemplate.RECAP_CARD,
     "shot_speed": OverlayTemplate.SPEED_BADGE,
     "top_speed": OverlayTemplate.SPEED_BADGE,
+    "pass_milestone": OverlayTemplate.MILESTONE_BADGE,
+    "distance_milestone": OverlayTemplate.MILESTONE_BADGE,
+    "pass_quality": OverlayTemplate.PASS_BADGE,
 }
 DISPLAY_MS: dict[OverlayTemplate, int] = {
     OverlayTemplate.MOMENTUM_BAR: 10_000,
@@ -24,6 +27,8 @@ DISPLAY_MS: dict[OverlayTemplate, int] = {
     OverlayTemplate.PLAYER_TAG: 6_000,
     OverlayTemplate.SPEED_BADGE: 4_000,
     OverlayTemplate.RECAP_CARD: 15_000,
+    OverlayTemplate.MILESTONE_BADGE: 4_000,
+    OverlayTemplate.PASS_BADGE: 4_000,
 }
 PRIORITY: dict[str, int] = {
     "key_moment": 1,
@@ -31,6 +36,8 @@ PRIORITY: dict[str, int] = {
     "recap": 2,
     "player_form": 3,
     "speed_alert": 4,
+    "milestone": 4,
+    "pass_quality": 4,
 }
 
 

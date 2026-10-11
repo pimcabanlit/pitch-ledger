@@ -272,8 +272,9 @@ def test_key_moments_are_never_folded(
     demo_m0002: tuple[SimulatedMatch, list[TrackingSample], list[Trigger]],
 ) -> None:
     _, _, triggers = demo_m0002
+    badges = {InsightType.SPEED_ALERT, InsightType.MILESTONE, InsightType.PASS_QUALITY}
     assert all("superseded_by" not in t.context for t in triggers
-               if t.insight_type is not InsightType.SPEED_ALERT)  # fmt: skip
+               if t.insight_type not in badges)  # fmt: skip
 
 
 def _speed(t: Trigger) -> float:
@@ -301,3 +302,40 @@ def test_speed_badges_are_capped_per_team_half_unless_a_record(baseline: Simulat
             assert aired.get(key, 0) >= 1 and not record
         best[t.rule_id] = max(best.get(t.rule_id, 0.0), _speed(t))
     assert any(t.context.get("superseded_by") == "cap" for t in triggers)
+
+
+def test_badges_air_on_firsts_and_new_bests_only(
+    demo_m0002: tuple[SimulatedMatch, list[TrackingSample], list[Trigger]],
+) -> None:
+    """Brace and hat-trick fold into their goal; pass and distance milestones air for the
+    first player of each team to reach the badge threshold; nothing else of theirs airs."""
+    sim, tracking, triggers = demo_m0002
+    config = DetectorConfig()
+    aired = [t for t in triggers if not t.context.get("superseded_by")]
+    tally = [t for t in triggers if t.rule_id in ("brace", "hat_trick")]
+    assert tally and all(t.context["superseded_by"] == "goal" for t in tally)
+    for rule, at in (("pass_milestone", "completed_passes"), ("distance_milestone", "distance_km")):
+        badges = [t for t in aired if t.rule_id == rule]
+        teams = [t.subject.team_id for t in badges]
+        assert len(teams) == len(set(teams))  # at most one per team
+        threshold = config.pass_milestone_badge if rule == "pass_milestone" else 10.0
+        assert all(float(t.metrics[at]) >= threshold and t.context["badge"] == "team_first"
+                   for t in badges)  # fmt: skip
+        first = {}
+        for t in triggers:  # each badge is its team's first trigger past the threshold
+            if t.rule_id == rule and float(t.metrics[at]) >= threshold:
+                first.setdefault(t.subject.team_id, t.trigger_id)
+        assert sorted(t.trigger_id for t in badges) == sorted(first.values())
+    assert len(triggers) == len(detect(sim.match, sim.events, tracking))
+
+
+def test_pass_quality_airs_only_when_hardest_so_far(baseline: SimulatedMatch) -> None:
+    config = DetectorConfig(pass_quality_min_difficulty=40.0, pass_quality_cooldown_ms=0)
+    passes = [t for t in detect(baseline.match, baseline.events, config=config)
+              if t.rule_id == "pass_quality"]  # fmt: skip
+    best = 0.0
+    for t in passes:
+        hardest = float(t.metrics["difficulty"]) > best
+        assert ("superseded_by" not in t.context) is hardest
+        best = max(best, float(t.metrics["difficulty"]))
+    assert any(t.context.get("superseded_by") == "cap" for t in passes)
