@@ -117,6 +117,8 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - no venue.
 
    The insight caption (lower third) moves up so the two never overlap. On phones the bar stays readable: short club names (NBR, CRW), with the caption below the pitch as today. The separate scoreboard card is removed.
+
+   Open: **Sticky "Your view" panel.** The Match Centre's *Your view* panel (mode, language, show, follow a player, your metric, favourite clubs) stays pinned under the site header while the page scrolls, so the viewer can change a setting while looking at the feed or the charts. On phones the five pickers would fill the screen, so there it collapses to a one-line summary bar (e.g. "Club focus · English · Control") that opens the pickers on a tap.
 3. **Quality: requirement-by-requirement map.** A `docs/requirements-map.md` mapping every point of the challenge (section 4.1: the five pipeline stages (a)–(e) including the personalization examples, real-time intelligence (player identification, pass quality, speed metrics, auto-eventing), narrative generation, explainability, data innovation, multi-language) to what Pitch Ledger does. Each row gets a status:
    - **Implemented**, with where it lives and how to see it;
    - **Partial**, with what is missing;
