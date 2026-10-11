@@ -6,7 +6,13 @@ import re
 import pytest
 
 from pitch_ledger.agents import copy
-from pitch_ledger.agents.editorial import draft_issues, editorial_issues, mode_issues, sentences
+from pitch_ledger.agents.editorial import (
+    draft_issues,
+    editorial_issues,
+    figures,
+    mode_issues,
+    sentences,
+)
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 from tests.agents.conftest import Case
 
@@ -164,3 +170,19 @@ def test_signals_give_models_the_context_in_words(cases: list[Case]) -> None:
     for c in cases:
         for s in c.facts.signals:
             assert unsupported_numbers(s, c.trigger.metrics.values()) == [], s
+
+
+@pytest.mark.parametrize(
+    ("text", "count"),
+    [
+        ("Corrowmere control 49 → 6", 1),
+        ("Control de Corrowmere: de 49 a 6", 1),  # Spanish writes the arrow as a word
+        ("Posesión del 64% al 27%", 1),
+        ("Bumaba ang control mula 49 hanggang 6", 1),  # Filipino
+        ("Kontrol 49 pababa sa 6", 1),
+        ("Haugland marca en el 5' y pone el 1-0", 2),  # a minute and a score: two figures
+        ("Haugland marca y pone el 3 a 1", 1),
+    ],
+)
+def test_a_before_after_pair_counts_once_in_every_language(text: str, count: int) -> None:
+    assert figures(text) == count

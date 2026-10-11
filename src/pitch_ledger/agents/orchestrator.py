@@ -23,6 +23,7 @@ the five audience modes then translate concurrently. Each run yields one
 order (retries, then dead letter), as the live service will from Service Bus.
 """
 
+import json
 import logging
 import time
 from collections import Counter
@@ -60,6 +61,7 @@ from pitch_ledger.agents.flow import (
     template_insight,
 )
 from pitch_ledger.agents.queue import InMemoryTriggerQueue, TriggerQueue
+from pitch_ledger.engine.windows import match_minute
 from pitch_ledger.schema import Event, Insight, Match, Player, Team, Trigger
 from pitch_ledger.schema.enums import AuditStatus
 
@@ -363,6 +365,27 @@ def _outcome_attributes(outcome: Outcome) -> dict[str, str | int]:
             "pitch_ledger.overlays": outcome.overlays}  # fmt: skip
 
 
+def _messages(role: str, text: str) -> str:
+    """The GenAI message attribute format the agents' spans use, so trace viewers (the
+    Foundry Tracing list) show the moment as input and the result as output."""
+    return json.dumps([{"role": role, "parts": [{"type": "text", "content": text}]}])
+
+
+def _job_input(message: TriggerJob | ProducerDecision) -> str:
+    if isinstance(message, ProducerDecision):
+        return f"{'approve' if message.approve else 'block'} {message.insight_id}"
+    t = message.trigger
+    minute = f"{round(match_minute(t.period, t.clock_ms)):.0f}'"
+    who = t.subject.player_id or t.subject.team_id
+    metrics = ", ".join(f"{k} {v}" for k, v in t.metrics.items())
+    return " · ".join(x for x in (f"{t.rule_id} at {minute}", t.match_id, who, metrics) if x)
+
+
+def _job_output(outcome: Outcome, insight: Insight | None) -> str:
+    text = f"{outcome.status}: {insight.headline}" if insight else outcome.status
+    return f"{text} ({outcome.overlays} overlays)" if outcome.overlays else text
+
+
 class Orchestrator:
     def __init__(
         self,
@@ -427,12 +450,18 @@ class Orchestrator:
     async def run(self, message: TriggerJob | ProducerDecision) -> Outcome:
         with _tracer.start_as_current_span(_span_name(message)) as span:
             span.set_attributes(_job_attributes(message))
+            span.set_attribute("gen_ai.input.messages", _messages("user", _job_input(message)))
             result = await self.workflow.run(message)
             outcomes = [o for o in result.get_outputs() if isinstance(o, Outcome)]
             if len(outcomes) != 1:
                 raise RuntimeError(f"expected one outcome, got {len(outcomes)}")
-            span.set_attributes(_outcome_attributes(outcomes[0]))
-            return outcomes[0]
+            outcome = outcomes[0]
+            span.set_attributes(_outcome_attributes(outcome))
+            insight = self.svc.ledger.get_insight(outcome.insight_id or "")
+            span.set_attribute(
+                "gen_ai.output.messages", _messages("assistant", _job_output(outcome, insight))
+            )
+            return outcome
 
     async def process(self, trigger: Trigger) -> Outcome:
         return await self.run(TriggerJob(trigger))

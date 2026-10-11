@@ -58,7 +58,12 @@ and no first person (club copy speaks to supporters, not as one)."""
 MODE_MAX_FIGURES = {"casual": 1, "single_metric": 1}
 """On-screen figures per mode (a score, or a before → after pair, counts as one)."""
 
-_PAIR = re.compile(r"\d+(?:[.,]\d+)?\s*%?\s*(?:-|→|to)\s*\d+(?:[.,]\d+)?")
+_PAIR = re.compile(
+    r"\d+(?:[.,]\d+)?\s*%?"
+    r"(?:\s*(?:-|\u2013|→)\s*"
+    r"|\s+(?:(?:pababa|pataas|paakyat)\s+)?(?:to|a|al|sa|hanggang)\s+)"  # en, es, fil words
+    r"\d+(?:[.,]\d+)?"
+)
 _FIGURE = re.compile(r"\d+(?:[.,]\d+)?")
 
 

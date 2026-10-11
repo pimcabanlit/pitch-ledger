@@ -216,3 +216,12 @@ def test_each_trigger_and_decision_is_one_traced_span(
     assert decision["pitch_ledger.decision"] == "approve"
     assert decision["pitch_ledger.status"] == "aired"
     assert "producer_kim" not in str(decision)  # the person stays in the ledger, not traces
+
+    # Trace viewers show the moment as the input and the result as the output.
+    [inp] = json.loads(str(attrs["gen_ai.input.messages"]))
+    assert inp["role"] == "user" and inp["parts"][0]["content"].startswith("goal at ")
+    [out] = json.loads(str(attrs["gen_ai.output.messages"]))
+    insight = orch.svc.ledger.get_insight(outcome.insight_id)
+    assert insight is not None and out["parts"][0]["content"] == f"pending: {insight.headline}"
+    [aired] = json.loads(str(decision["gen_ai.output.messages"]))
+    assert aired["parts"][0]["content"].endswith("(15 overlays)")
