@@ -23,6 +23,7 @@ Target prize category: **Best Enterprise Solution** (plus Grand Prize). Strong m
 - `docs/architecture.md` — final architecture, components, agents, enterprise controls, cost plan.
 - `docs/build-plan.md` — phases, order of work, definition of done.
 - `docs/azure-setup.md` — Azure provisioning log (Foundry, service principal, roles), settings, verification and lessons learned.
+- `docs/requirements-map.md` — every point of the challenge brief mapped to what is built (implemented, partial, not implemented, beyond the brief) and the gaps to close. Update a row when its status changes.
 
 ## Non-negotiables
 

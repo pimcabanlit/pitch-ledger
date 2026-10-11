@@ -95,7 +95,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - **Not implemented**, with why (e.g. auto-eventing from video, since the data is synthetic);
    - **Nice to have** or **Beyond the brief** (enterprise controls, Auditor, evaluations).
 
-   Gaps worth closing are fed back into this phase before Phase 6.
+   Gaps worth closing are fed back into this phase before Phase 6. Done 2026-10-11: [requirements-map.md](requirements-map.md): 22 implemented, 10 partial, 2 not implemented, with seven gaps to close in priority order (favourite player and follow-a-player, choosing the single metric, airing milestones and pass quality, chaos and tempo on screen, names on the pitch, saved preferences, more languages).
 4. **Historical data.** Keep each match's results so future games can use them: per-match summaries, team and player match stats, insights and their audit outcomes, scorecard and evaluation results. Store them durably, append-only, keyed by match, season and club. That means extending the ADX event store and the Cosmos ledger rather than a new service.
 
    The engine and agents can then use history in context (e.g. "first hat-trick this season", form over the last five matches). Every historical figure stays computed in code and cited, never recalled by a model. The current "no data on seasons or records" rule in the prompts changes only once that data exists. Lakehouse history stays a stretch goal.
