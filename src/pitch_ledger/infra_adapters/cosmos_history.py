@@ -1,9 +1,11 @@
-"""Azure Cosmos DB store for match records (container ``history``, partition key ``/season``).
+"""Azure Cosmos DB store for match records, in the ledger's container.
 
-A separate container from the ledger, in the same database and its shared free throughput,
-so a replay that empties a match's ledger partition never touches the season's records. One
-document per match: the record's fields plus ``id`` (the match ID). Reading a season is a
-single-partition query. Sign-in as for the ledger (Microsoft Entra ID).
+The ledger container is partitioned by ``/match_id``. A season's records share one
+partition of their own, ``history:<season>`` (one document per match: ``id``
+``record-<match>``, ``kind`` ``match_record``, the record under ``record``). Match IDs look
+like M0002, so no match's ledger, and no replay emptying a match's partition, ever touches
+them. No container is added, so the account's free throughput limit is unchanged. Reading a
+season is a single-partition query. Sign-in as for the ledger (Microsoft Entra ID).
 """
 
 from typing import Any
@@ -11,7 +13,11 @@ from typing import Any
 from pitch_ledger.infra_adapters.cosmos import Container
 from pitch_ledger.schema.history import MatchRecord
 
-DOC_FIELDS = {"id", "_rid", "_self", "_etag", "_attachments", "_ts"}
+KIND = "match_record"
+
+
+def partition(season: str) -> str:
+    return f"history:{season}"
 
 
 class CosmosHistory:
@@ -41,18 +47,19 @@ class CosmosHistory:
         return cls(proxy, close)
 
     def put(self, record: MatchRecord) -> None:
-        self._container.upsert_item({**record.model_dump(mode="json"), "id": record.match_id})
+        self._container.upsert_item({
+            "id": f"record-{record.match_id}", "kind": KIND,
+            "match_id": partition(record.season), "competition": record.competition,
+            "season": record.season, "record": record.model_dump(mode="json"),
+        })  # fmt: skip
 
     def season(self, competition: str, season: str) -> list[MatchRecord]:
         found = self._container.query_items(
-            "SELECT * FROM c WHERE c.competition = @c",
-            parameters=[{"name": "@c", "value": competition}],
-            partition_key=season,
+            "SELECT * FROM c WHERE c.kind = @k AND c.competition = @c",
+            parameters=[{"name": "@k", "value": KIND}, {"name": "@c", "value": competition}],
+            partition_key=partition(season),
         )
-        records = [
-            MatchRecord.model_validate({k: v for k, v in doc.items() if k not in DOC_FIELDS})
-            for doc in found
-        ]
+        records = [MatchRecord.model_validate(doc["record"]) for doc in found]
         return sorted(records, key=lambda r: (r.kickoff_utc, r.match_id))
 
     def close(self) -> None:

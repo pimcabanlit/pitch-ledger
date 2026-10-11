@@ -243,7 +243,7 @@ Fire at a score of 10; onset is when the score last left zero. At most one alert
 - every goal, with the event that scored it;
 - the players with three or more goals.
 
-Records are keyed by competition and season and ordered by kick-off. The demo matches are one matchday a week from 2026-08-22 (`scenarios/matches.yaml`). A kick-off changes only the events' `feed_ts_utc`, never the football. Records are kept in `<data>/history/records.jsonl` locally, or in the Cosmos DB container `history` (partition key `/season`, one document per match). They are also kept as rows in the event-store tables below. A replay keeps its match's record, and so does the live service at full time; `history build` writes them for every finished match folder.
+Records are keyed by competition and season and ordered by kick-off. The demo matches are one matchday a week from 2026-08-22 (`scenarios/matches.yaml`). A kick-off changes only the events' `feed_ts_utc`, never the football. Records are kept in `<data>/history/records.jsonl` locally, or in the Cosmos DB ledger container, in a partition per season (`history:2026-27`, one document per match). No match's ledger partition, which a replay empties, can reach it. They are also kept as rows in the event-store tables below. A replay keeps its match's record, and so does the live service at full time; `history build` writes them for every finished match folder.
 
 **Season facts** (`src/pitch_ledger/engine/season.py`). A match sees only records of the same competition and season that kicked off before it, so its season facts never change once it is played. Facts appear only when a club has played earlier in the season.
 
