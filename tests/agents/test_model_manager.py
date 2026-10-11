@@ -12,6 +12,7 @@ from pitch_ledger.agents.model_manager import (
     ModelSettings,
     ModelUnavailable,
     check_models,
+    run_costs,
 )
 from pitch_ledger.agents.offline import OfflineChatClient
 from pitch_ledger.validation.insight_rules import unsupported_numbers
@@ -187,3 +188,28 @@ def test_safety_probe_passes_only_when_the_filter_blocks_it(
     probe = next(c for c in checks if c.name == "content filter on strong-model")
     assert probe.ok is ok
     assert client.requests[1]["task"] == "safety_probe"
+
+
+def test_cost_is_priced_per_tier_and_zero_offline(cases: list[Case]) -> None:
+    draft = InsightDraft(headline="h", explanation="e", metric_keys=[], evidence_event_ids=[])
+    settings = ModelSettings(model_provider="foundry", foundry_project_endpoint="https://x",
+                             model_strong="strong", model_small="small",
+                             price_strong_input=1.0, price_strong_output=2.0,
+                             price_small_input=0.5, price_small_output=1.0)  # fmt: skip
+    manager = ModelManager(settings, clients={
+        "strong": ScriptedChatClient([draft.model_dump_json()]),
+        "small": ScriptedChatClient([draft.model_dump_json()]),
+    })  # fmt: skip
+    request = _request(_momentum(cases))
+    asyncio.run(manager.complete("explainer", prompts.EXPLAINER, request, InsightDraft))
+    asyncio.run(manager.complete("translator", prompts.EXPLAINER, request, InsightDraft))
+    usage = manager.usage.as_dict()  # each scripted reply: 100 tokens in, 20 out
+    assert usage["tokens_by_tier"] == {"strong": [100, 20], "small": [100, 20]}
+    # strong (100 x 1.0 + 20 x 2.0) + small (100 x 0.5 + 20 x 1.0), per million tokens
+    assert usage["cost_usd"] == pytest.approx(0.00021)
+    assert run_costs(usage, aired=3)["cost_per_aired_insight"] == pytest.approx(0.00007)
+    assert run_costs(usage, aired=0)["cost_per_aired_insight"] is None
+    offline = ModelManager(ModelSettings(model_provider="offline"))
+    asyncio.run(offline.complete("explainer", prompts.EXPLAINER, request, InsightDraft))
+    assert offline.usage.as_dict()["cost_usd"] == 0.0 and offline.version == "offline-templates"
+    assert manager.version == "foundry:strong|small"

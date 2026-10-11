@@ -6,6 +6,8 @@
 - Model names live here only: a stronger deployment for the Explainer, Auditor and
   Narrator, a small fast one for the Personalizer and Translator.
 - Cost controls: an output-token cap per role and a call budget per run (paid providers).
+- Cost: tokens are counted per tier and priced from the settings (US$ per million tokens,
+  next to the deployment names), so every run reports what it cost.
 - Reliability: one retry on an error or an unparseable reply, then ``ModelUnavailable``
   so the caller falls back to template copy built from code-computed numbers.
 - Content safety: the Foundry content filter screens every prompt and reply. A blocked
@@ -69,11 +71,24 @@ class ModelSettings(BaseSettings):
         ),
     )
     model_call_budget: int = 120  # calls per run, paid providers only
+    # US$ per million tokens per tier. Defaults: the gpt-4.1-mini list price (check the
+    # Azure pricing page for the region and deployment type; override by environment).
+    price_strong_input: float = 0.40
+    price_strong_output: float = 1.60
+    price_small_input: float = 0.40
+    price_small_output: float = 1.60
     model_timeout_s: float = 60.0
     model_temperature: float = 0.2
 
     def deployment(self, tier: Tier) -> str | None:
         return self.model_strong if tier == "strong" else self.model_small
+
+    def prices(self) -> dict[Tier, tuple[float, float]]:
+        """US$ per million (input, output) tokens per tier; zero for the offline provider."""
+        if self.model_provider == "offline":
+            return {"strong": (0.0, 0.0), "small": (0.0, 0.0)}
+        return {"strong": (self.price_strong_input, self.price_strong_output),
+                "small": (self.price_small_input, self.price_small_output)}  # fmt: skip
 
 
 class ModelUnavailable(RuntimeError):
@@ -92,6 +107,23 @@ class Usage:
     output_tokens: int = 0
     filtered: int = 0  # prompts or replies the content filter blocked
     by_role: Counter[str] = field(default_factory=Counter)
+    tokens_by_tier: dict[str, list[int]] = field(default_factory=dict)  # tier: [in, out]
+    prices: dict[Tier, tuple[float, float]] = field(default_factory=dict)  # US$ per million
+
+    def add_tokens(self, tier: Tier, input_tokens: int, output_tokens: int) -> None:
+        self.input_tokens += input_tokens
+        self.output_tokens += output_tokens
+        counts = self.tokens_by_tier.setdefault(tier, [0, 0])
+        counts[0] += input_tokens
+        counts[1] += output_tokens
+
+    def cost_usd(self) -> float:
+        """What the calls cost at the configured prices (0 for the offline provider)."""
+        total = 0.0
+        for tier, (tokens_in, tokens_out) in self.tokens_by_tier.items():
+            price_in, price_out = self.prices.get(tier, (0.0, 0.0))  # type: ignore[call-overload]
+            total += (tokens_in * price_in + tokens_out * price_out) / 1_000_000
+        return round(total, 6)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -101,7 +133,17 @@ class Usage:
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "by_role": dict(self.by_role),
+            "tokens_by_tier": {k: list(v) for k, v in self.tokens_by_tier.items()},
+            "cost_usd": self.cost_usd(),
         }
+
+
+def run_costs(usage: dict[str, Any], aired: int) -> dict[str, float | None]:
+    """A run's model cost and cost per aired insight (US$, at the configured prices), from
+    ``Usage.as_dict()``."""
+    cost = float(usage.get("cost_usd", 0.0))
+    return {"cost_usd": round(cost, 6),
+            "cost_per_aired_insight": round(cost / aired, 6) if aired else None}  # fmt: skip
 
 
 def parse_json[T: BaseModel](text: str, model: type[T]) -> T:
@@ -122,7 +164,7 @@ class ModelManager:
     ) -> None:
         """``clients`` overrides the client per role or tier (tests use scripted clients)."""
         self.settings = settings or ModelSettings()
-        self.usage = Usage()
+        self.usage = Usage(prices=self.settings.prices())
         self._overrides = dict(clients or {})
         self._clients: dict[str, SupportsChatGetResponse[Any]] = {}
         self._credential: Any = None
@@ -142,6 +184,14 @@ class ModelManager:
     @property
     def provider(self) -> str:
         return self.settings.model_provider
+
+    @property
+    def version(self) -> str:
+        """What wrote the copy: the offline templates, or the two Foundry deployments."""
+        s = self.settings
+        if s.model_provider == "offline":
+            return "offline-templates"
+        return f"foundry:{s.model_strong}|{s.model_small}"
 
     @property
     def paid(self) -> bool:
@@ -206,8 +256,8 @@ class ModelManager:
                     agent.run(request.model_dump_json()), self.settings.model_timeout_s
                 )
                 details = response.usage_details or {}
-                self.usage.input_tokens += int(details.get("input_token_count") or 0)
-                self.usage.output_tokens += int(details.get("output_token_count") or 0)
+                self.usage.add_tokens(TIER[role], int(details.get("input_token_count") or 0),
+                                      int(details.get("output_token_count") or 0))  # fmt: skip
                 if response.finish_reason == "content_filter":
                     raise ChatClientContentFilterException("reply filtered")
                 return parse_json(response.text, reply)
@@ -348,7 +398,8 @@ async def check_models(
             Check(
                 "usage",
                 True,
-                f"{usage.calls} calls, tokens in {usage.input_tokens}, out {usage.output_tokens}",
+                f"{usage.calls} calls, tokens in {usage.input_tokens}, out {usage.output_tokens}, "
+                f"about US${usage.cost_usd():.5f} at the configured prices",
             )
         )
     finally:

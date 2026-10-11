@@ -155,6 +155,15 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - a monthly cost view by resource;
    - documented guardrails for the judging period (what may run, and what it costs).
 
+   Done 2026-10-11 in code and docs:
+   - each run's model cost and cost per aired insight, priced from tokens in one config place (`ModelSettings`);
+   - printed by `replay` and `live`, kept in `run.json`, the scorecard and the ADX table `RunUsage` (replay and live jobs, producer decisions, evaluations);
+   - ADX dashboard tiles for cost per match, per insight and per day;
+   - owner steps for the budget and a saved monthly cost view by resource;
+   - judging guardrails (docs/azure-setup.md, *Cost monitoring*).
+
+   Open (owner): create the budget and the saved view, then tick the follow-up.
+
 **Done when:** the homepage and UI changes are live, the requirements map is complete with every gap either closed or labelled, match results are stored as history and readable by the engine, and cost per match plus a confirmed budget alert are documented.
 
 ### Phase 6 — Polish, video, submission (Oct 24–27)

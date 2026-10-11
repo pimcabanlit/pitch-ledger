@@ -18,7 +18,7 @@ from typing import Any, Literal
 
 from pitch_ledger.agents.auditor import Auditor
 from pitch_ledger.agents.flow import FULL_FLOW, Services
-from pitch_ledger.agents.model_manager import ModelManager, ModelSettings
+from pitch_ledger.agents.model_manager import ModelManager, ModelSettings, run_costs
 from pitch_ledger.agents.orchestrator import (
     MatchContext,
     Orchestrator,
@@ -151,6 +151,7 @@ async def replay_match(
         "ops_alerts": len(ledger.alerts(match_id)),
         **report.as_dict(),
     }
+    summary |= run_costs(summary["usage"], summary["counts"]["status"].get("aired", 0))
     if history is not None:
         with contextlib.suppress(MatchNotFinished):  # a partial match has no result to keep
             history.put(build_record(files.match, events, tracking))
@@ -174,11 +175,13 @@ async def decide_insight(
     provider: Literal["offline", "foundry"] | None = None,
     stats: Literal["mcp", "local"] = "local",
     notifier: Notifier | None = None,
+    usage_out: dict[str, Any] | None = None,
 ) -> Outcome:
     """A producer's decision on a pending insight (the Studio console): approve runs the
     Personalizer and Translator and stores the overlays; block records the block. An insight
     that is already decided is left as it is. Template fallbacks raise an ops alert (signalled
-    through ``notifier``). The ledger is flushed if it is a file ledger."""
+    through ``notifier``). The ledger is flushed if it is a file ledger. ``usage_out`` receives
+    the model usage (``usage``, ``provider``, ``model_version``) for cost tracking."""
     files = read_match(match_dir, with_tracking=False)
     events = [Event.model_validate(e) for e in files.events]
     context = MatchContext(files.match, files.teams, files.players, {e.event_id: e for e in events})
@@ -193,6 +196,9 @@ async def decide_insight(
             gateway = LocalStats(StatsTools(match_dir))
         svc = Services(files.match.match_id, models, Auditor(models, gateway), ledger)
         outcome = await Orchestrator(svc, context).decide(insight_id, producer, approve, reason)
+        if usage_out is not None:
+            usage_out.update(usage=models.usage.as_dict(), provider=models.provider,
+                             model_version=models.version)  # fmt: skip
     review_insight(OpsDesk(ledger, notifier=notifier), insight_id)
     if isinstance(ledger, FileLedger):
         ledger.flush()

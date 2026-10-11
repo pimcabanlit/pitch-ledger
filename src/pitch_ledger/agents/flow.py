@@ -53,10 +53,7 @@ class Services:
 
     @property
     def model_version(self) -> str:
-        s = self.models.settings
-        if s.model_provider == "offline":
-            return "offline-templates"
-        return f"foundry:{s.model_strong}|{s.model_small}"
+        return self.models.version
 
     def audit(
         self,

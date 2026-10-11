@@ -382,6 +382,7 @@ def outcomes_section(matches: Sequence[_Match]) -> dict[str, Any]:
 def usage_section(matches: Sequence[_Match]) -> dict[str, Any]:
     total: Counter[str] = Counter()
     by_role: Counter[str] = Counter()
+    cost = 0.0
     for m in matches:
         for run in (m.clean, m.planted):
             usage = run.summary["usage"]
@@ -389,12 +390,14 @@ def usage_section(matches: Sequence[_Match]) -> dict[str, Any]:
                 {k: usage[k] for k in ("calls", "failures", "input_tokens", "output_tokens")}
             )
             by_role.update(usage["by_role"])
+            cost += float(usage.get("cost_usd", 0.0))
     first = matches[0].clean.summary if matches else {}
     return {
         "provider": first.get("provider"),
         "model_version": first.get("model_version"),
         **dict(total),
         "by_role": dict(by_role),
+        "cost_usd": round(cost, 6),  # both runs per match, at the configured prices
     }
 
 
