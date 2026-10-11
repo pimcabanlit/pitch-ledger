@@ -3,6 +3,7 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  --header-h: 3.1rem; /* the sticky site header (app/layout.tsx); sticky panels sit below it */
 }
 
 @theme inline {

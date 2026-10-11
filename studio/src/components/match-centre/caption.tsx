@@ -23,7 +23,7 @@ export function Caption({
       className={
         inline
           ? "sm:hidden"
-          : "pointer-events-none absolute inset-x-6 bottom-4 z-10 hidden sm:block"
+          : "pointer-events-none absolute inset-x-6 bottom-14 z-10 hidden sm:block"
       }
     >
       <div

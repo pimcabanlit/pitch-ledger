@@ -1,6 +1,6 @@
 "use client";
 
-import { Pause, Play, Radio, RotateCcw, Star } from "lucide-react";
+import { ChevronDown, Pause, Play, Radio, RotateCcw, Star } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -11,6 +11,7 @@ import { MetricChart, type InsightPoint, type Side } from "@/components/match-ce
 import { PassNetwork } from "@/components/match-centre/pass-network";
 import { Pitch, type Dot } from "@/components/match-centre/pitch";
 import { PlayerCard } from "@/components/match-centre/player-card";
+import { ScoreBug } from "@/components/match-centre/score-bug";
 import {
   axisFromMinute,
   buildAxis,
@@ -139,6 +140,7 @@ function Centre({
   const [prefs, setPrefs] = usePreferences();
   const { mode, language, metric } = prefs;
   const [club, setClub] = useState("all");
+  const [viewOpen, setViewOpen] = useState(false); // phones: the Your view pickers, collapsed
   const [insightsOnly, setInsightsOnly] = useState(false);
   const stop = useCallback(() => setPlaying(false), []);
   const [t, setT] = useReplayClock(axis.total, speed, playing, stop);
@@ -272,8 +274,17 @@ function Centre({
   const theirMoments = followed
     ? insights.filter((i) => i.t <= tick && i.overlay.data.player_id === followed.player_id).reverse()
     : [];
+  const viewSummary = [
+    MODE_LABELS[mode],
+    LANGUAGES.find((l) => l.code === language)?.label ?? language,
+    club === "all" ? null : teams[club]?.short_name,
+    METRICS[metric].label,
+    followed ? `Following ${followed.display_name}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const metricSelect = (id: string) => (
-    <Select id={id} value={metric} onChange={(e) => setPrefs({ metric: e.target.value as MetricKey })}>
+    <Select id={id} value={metric} onChange={(e) => (setPrefs({ metric: e.target.value as MetricKey }), setViewOpen(false))}>
       {METRIC_KEYS.map((k) => (
         <option key={k} value={k}>
           {METRICS[k].label}
@@ -288,28 +299,28 @@ function Centre({
 
   return (
     <div className="space-y-4">
-      <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
-        <div className="flex items-center gap-3 text-base font-semibold sm:text-lg">
-          <span className="h-3 w-3 rounded-full" style={{ background: match.home.primary_color }} />
-          <span>{match.home.name}</span>
-          <span className="shrink-0 rounded-md bg-slate-900 px-3 py-1 font-mono whitespace-nowrap text-white">
-            {now?.score_home ?? 0} – {now?.score_away ?? 0}
-          </span>
-          <span>{match.away.name}</span>
-          <span className="h-3 w-3 rounded-full" style={{ background: match.away.primary_color }} />
-        </div>
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-2xl font-semibold">{minuteLabel(minuteAt(axis, t))}</span>
-          <span className="text-xs text-slate-500">
-            {ended ? "Full-time" : period === 1 ? "1st half" : "2nd half"}
-          </span>
-        </div>
-        <span className="ml-auto text-sm text-slate-500">{match.venue}</span>
-      </Card>
+      <h1 className="sr-only">
+        {match.home.name} v {match.away.name}
+      </h1>
 
-      <Card className="p-4" aria-labelledby="your-view">
+      <Card
+        className="sticky top-[var(--header-h)] z-30 p-3 shadow-md md:p-4"
+        aria-labelledby="your-view"
+      >
+        <button
+          type="button"
+          onClick={() => setViewOpen(!viewOpen)}
+          aria-expanded={viewOpen}
+          aria-controls="your-view-pickers"
+          className="flex w-full items-center gap-2 text-left text-sm md:hidden"
+        >
+          <span className="shrink-0 font-semibold">Your view</span>
+          <span className="min-w-0 flex-1 truncate text-slate-600">{viewSummary}</span>
+          <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", viewOpen && "rotate-180")} aria-hidden />
+        </button>
+        <div id="your-view-pickers" className={cn(viewOpen ? "mt-3 block" : "hidden", "md:mt-0 md:block")}>
         <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h2 id="your-view" className="text-sm font-semibold">
+          <h2 id="your-view" className="hidden text-sm font-semibold md:block">
             Your view
           </h2>
           <span className="text-xs text-slate-500">Remembered on this device</span>
@@ -336,7 +347,7 @@ function Centre({
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Field label="Mode" tip={<InfoTip term="modes" align="start" />}>
-            <Select value={mode} onChange={(e) => setPrefs({ mode: e.target.value as Mode })}>
+            <Select value={mode} onChange={(e) => (setPrefs({ mode: e.target.value as Mode }), setViewOpen(false))}>
               {MODES.map((m) => (
                 <option key={m} value={m}>
                   {MODE_LABELS[m]}
@@ -345,7 +356,7 @@ function Centre({
             </Select>
           </Field>
           <Field label="Language">
-            <Select value={language} onChange={(e) => setPrefs({ language: e.target.value })}>
+            <Select value={language} onChange={(e) => (setPrefs({ language: e.target.value }), setViewOpen(false))}>
               {LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
                   {l.label}
@@ -354,7 +365,7 @@ function Centre({
             </Select>
           </Field>
           <Field label="Show">
-            <Select value={club} onChange={(e) => setClub(e.target.value)}>
+            <Select value={club} onChange={(e) => (setClub(e.target.value), setViewOpen(false))}>
               <option value="all">Both clubs</option>
               {[match.home, match.away].map((team) => (
                 <option key={team.team_id} value={team.team_id}>
@@ -367,7 +378,7 @@ function Centre({
           <Field label="Follow a player" tip={<InfoTip term="follow" />}>
             <Select
               value={followed?.player_id ?? ""}
-              onChange={(e) => setPrefs({ player: e.target.value || null })}
+              onChange={(e) => (setPrefs({ player: e.target.value || null }), setViewOpen(false))}
             >
               <option value="">Nobody</option>
               {[match.home, match.away].map((team) => (
@@ -388,12 +399,21 @@ function Centre({
             {metricSelect("metric-view")}
           </Field>
         </div>
+        </div>
       </Card>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-3">
           <Pitch dots={dots} ball={ball} label={`${match.home.name} v ${match.away.name}, replay`}>
             {caption && <Caption overlay={caption} subject={subject(caption)} color={colorOf(caption.data.team_id as string | null)} />}
+            <ScoreBug
+              home={match.home}
+              away={match.away}
+              scoreHome={now?.score_home ?? 0}
+              scoreAway={now?.score_away ?? 0}
+              minute={minuteLabel(minuteAt(axis, t))}
+              half={ended ? "Full-time" : period === 1 ? "1st half" : "2nd half"}
+            />
           </Pitch>
           {caption && (
             <Caption inline overlay={caption} subject={subject(caption)} color={colorOf(caption.data.team_id as string | null)} />
