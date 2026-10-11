@@ -344,7 +344,7 @@ Numbers in a message (seconds, latencies, counts, minutes) come from code, like 
 | subject | object | {team_id: T02} |
 | metrics | object | {control_before: 49, control_after: 6, pass_accuracy_after: 47.4} — code-computed, rounded as displayed |
 | evidence_event_ids | list | the events the metrics are computed from (empty for tracking-only triggers) |
-| context | object | windows used, onset minute, detector, opponent; `superseded_by` (`goal` or `cooldown`) when the detector folded a repeat alert into another moment (stored, not aired) |
+| context | object | windows used, onset minute, detector, opponent; `superseded_by` (`goal`, `cooldown` or `cap`) when the detector folded a repeat speed alert (stored, not aired) |
 | auto_approve | boolean | true for speed alerts |
 
 **Context metrics** (each recomputed from the events up to the moment, like every metric, so the Auditor verifies them):
@@ -358,7 +358,7 @@ Numbers in a message (seconds, latencies, counts, minutes) come from code, like 
 | half_time_recap, full_time_recap | `on_target_home/away`; full time also `xg_second_half_home/away` |
 | shot_speed | `xg` |
 
-A shot-speed alert on a goal is superseded by the goal (which reports the speed); another by the same player within 10 minutes and no faster is superseded by the cooldown. Copy turns these into context words chosen in code (`agents/phrases.py`: an equaliser or a lead, a hat-trick, whether the opponent turned a spell into shots, what a penalty would change); a trigger without them still renders with less context.
+A shot-speed alert on a goal is superseded by the goal (which reports the speed); another by the same player within 10 minutes and no faster is superseded by the cooldown. Then the speed-badge cap: one speed alert (shot or top speed) airs per team per half, plus any later one faster than every earlier alert of its kind in the match (so the first of each kind airs); the rest are superseded by `cap`. Only earlier alerts count, so live and replay agree. Copy turns these into context words chosen in code (`agents/phrases.py`: an equaliser or a lead, a hat-trick, whether the opponent turned a spell into shots, what a penalty would change); a trigger without them still renders with less context.
 
 ## Event store tables (Azure Data Explorer, or local JSONL)
 

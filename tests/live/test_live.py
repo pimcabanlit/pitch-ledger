@@ -109,14 +109,14 @@ def test_live_run_ends_like_a_replay(match_dir: Path, tmp_path: Path) -> None:
                           notifier=push)  # fmt: skip
     report = asyncio.run(service.run())
     groups = [g for g, _ in push.sent]
-    # 3 shot-speed alerts are folded (2 into goals, 1 cooldown): stored, not aired
-    assert groups.count("producers.M0002") == 15 and groups.count("fans.M0002") == 15
+    # 4 speed alerts are folded (2 into goals, 1 cooldown, 1 cap): stored, not aired
+    assert groups.count("producers.M0002") == 14 and groups.count("fans.M0002") == 14
     assert ledger.alerts() == []  # a clean feed and run raise no ops alerts
     store.close()
 
     summary = report.as_dict()
     assert summary["matches"]["M0002"]["triggers"] == len(_batch(match_dir)) == 54
-    assert summary["status"] == {"aired": 15, "pending": 0, "blocked": 0, "stored": 39}
+    assert summary["status"] == {"aired": 14, "pending": 0, "blocked": 0, "stored": 40}
     momentum = [i for i in ledger.insights("M0002") if i.insight_type.value == "momentum_shift"]
     assert [i.audit_status.value for i in momentum] == ["corrected"]  # planted error caught
     assert not summary["failures"]
@@ -124,7 +124,7 @@ def test_live_run_ends_like_a_replay(match_dir: Path, tmp_path: Path) -> None:
     assert {p.name for p in landed.iterdir()} == {"match.json", "events.jsonl", "tracking.jsonl",
                                                   "triggers.jsonl"}  # fmt: skip
     counts = {p.stem: len(p.read_text().splitlines()) for p in (tmp_path / "store").iterdir()}
-    assert counts["Triggers"] == 54 and counts["InsightStatus"] == 15
+    assert counts["Triggers"] == 54 and counts["InsightStatus"] == 14
     assert counts["TeamState"] == 190 and counts["Events"] == 2418
 
 

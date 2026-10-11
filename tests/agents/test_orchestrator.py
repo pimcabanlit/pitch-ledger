@@ -63,7 +63,8 @@ def test_replay_m0002_end_to_end_over_mcp(m0002_dir: Path, tmp_path: Path) -> No
     expected_auto = sum(
         t.insight_type in AUTO_APPROVE and not t.context.get("superseded_by") for t in run.triggers
     )
-    assert sum(bool(t.context.get("superseded_by")) for t in run.triggers) == 3  # 2 on goals
+    # folded speed alerts: 2 on goals, 1 cooldown, 1 speed-badge cap
+    assert sum(bool(t.context.get("superseded_by")) for t in run.triggers) == 4
     assert s["counts"]["routes"]["full"] == expected_full >= 8
     assert s["counts"]["routes"]["auto"] == expected_auto
     assert s["counts"]["status"] == {"aired": expected_full + expected_auto}

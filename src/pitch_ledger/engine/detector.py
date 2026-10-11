@@ -16,11 +16,16 @@ percentages, speeds and distances, two for xG).
 | pass_milestone | milestone | a player completes his 50th, 75th or 100th pass |
 | brace / hat_trick | milestone | a player's second or third goal |
 | distance_milestone | milestone | a player passes 5 or 10 km (tracking) |
-| shot_speed | speed_alert | a shot above 100 km/h (auto-approved); superseded on a goal or
-  within 10 minutes of the player's last, faster alert (stored, not aired) |
-| top_speed | speed_alert | a player's first sample at 34+ km/h (tracking, auto-approved) |
+| shot_speed | speed_alert | a shot above 100 km/h (auto-approved); superseded on a goal, within
+  10 minutes of the player's last, faster alert, or by the speed-badge cap (stored, not aired) |
+| top_speed | speed_alert | a player's first sample at 34+ km/h (tracking, auto-approved);
+  superseded by the speed-badge cap |
 | pass_quality | pass_quality | completed pass of difficulty 65+, 15+ m forward (at its receipt) |
 | half_time_recap / full_time_recap | recap | at each period end |
+
+Speed-badge cap: one speed badge airs per team per half, plus any later one that is the
+fastest of its kind (shot or top speed) so far in the match, the first of each kind
+included. The rest are stored.
 """
 
 import math
@@ -67,6 +72,7 @@ class DetectorConfig:
     distance_milestones_km: tuple[float, ...] = (5.0, 10.0)
     shot_speed_alert_kmh: float = 100.0
     shot_speed_cooldown_ms: int = 10 * MIN
+    speed_badges_per_team_half: int = 1  # plus any later match record of its kind
     top_speed_alert_kmh: float = 34.0
     pass_quality_min_difficulty: float = 65.0
     pass_quality_min_forward_m: float = 15.0
@@ -144,17 +150,25 @@ class Detector:
 
         A shot-speed alert on a goal is folded into the goal (which reports the speed);
         another alert for the same player within the cooldown, and no faster, is dropped.
-        Every trigger is kept, so counts, IDs and the stored record do not change.
+        Then the cap: one speed badge per team per half airs, plus any later one faster
+        than every earlier alert of its kind in the match, so the first of each kind airs
+        (causal: only earlier alerts count). Every trigger is kept, so counts, IDs and the
+        stored record do not change.
         """
         goal_shots = {d.evidence[0] for d in drafts if d.rule_id == "goal"}
         last: dict[str, tuple[int, int, float]] = {}
+        aired: dict[tuple[str, int], int] = defaultdict(int)  # (team, period) -> badges
+        best: dict[str, float] = {}  # rule -> fastest alert so far in the match
         out = []
         for d in drafts:
+            if d.insight_type is not InsightType.SPEED_ALERT:
+                out.append(d)
+                continue
+            speed = float(d.metrics.get("shot_speed_kmh", d.metrics.get("top_speed_kmh", 0.0)))
+            reason = None
             if d.rule_id == "shot_speed":
                 player = d.subject.player_id or ""
-                speed = float(d.metrics["shot_speed_kmh"])
                 prev = last.get(player)
-                reason = None
                 if d.evidence[0] in goal_shots:
                     reason = "goal"
                 elif (
@@ -166,8 +180,16 @@ class Detector:
                     reason = "cooldown"
                 else:
                     last[player] = (d.period, d.clock_ms, speed)
-                if reason is not None:
-                    d = replace(d, context={**d.context, "superseded_by": reason})
+            if reason is None:
+                key = (d.subject.team_id or "", d.period)
+                record = speed > best.get(d.rule_id, 0.0)  # the first of its kind is one too
+                if aired[key] < self.config.speed_badges_per_team_half or record:
+                    aired[key] += 1
+                else:
+                    reason = "cap"
+            best[d.rule_id] = max(best.get(d.rule_id, speed), speed)
+            if reason is not None:
+                d = replace(d, context={**d.context, "superseded_by": reason})
             out.append(d)
         return out
 

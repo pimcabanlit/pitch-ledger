@@ -9,7 +9,7 @@ from pitch_ledger.matchlab.generator import MatchSpec, SimulatedMatch, simulate_
 from pitch_ledger.matchlab.styles import Modifiers
 from pitch_ledger.matchlab.tracking import generate_tracking
 from pitch_ledger.schema import ShotDetails, TrackingSample, Trigger
-from pitch_ledger.schema.enums import Outcome, ShotType
+from pitch_ledger.schema.enums import InsightType, Outcome, ShotType
 
 M = 60_000
 
@@ -263,8 +263,8 @@ def test_slower_repeat_speed_alerts_are_folded(baseline: SimulatedMatch) -> None
             assert prev is not None and prev.period == t.period
             assert t.clock_ms - prev.clock_ms < config.shot_speed_cooldown_ms
             assert t.metrics["shot_speed_kmh"] <= prev.metrics["shot_speed_kmh"]
-        elif reason is None:
-            aired[player] = t
+        elif reason in (None, "cap"):  # the cooldown compares with the player's last alert
+            aired[player] = t  # not folded by a goal or the cooldown (capped ones count)
     assert any(t.context.get("superseded_by") == "cooldown" for t in speeds)
 
 
@@ -272,4 +272,32 @@ def test_key_moments_are_never_folded(
     demo_m0002: tuple[SimulatedMatch, list[TrackingSample], list[Trigger]],
 ) -> None:
     _, _, triggers = demo_m0002
-    assert all("superseded_by" not in t.context for t in triggers if t.rule_id != "shot_speed")
+    assert all("superseded_by" not in t.context for t in triggers
+               if t.insight_type is not InsightType.SPEED_ALERT)  # fmt: skip
+
+
+def _speed(t: Trigger) -> float:
+    return float(t.metrics.get("shot_speed_kmh", t.metrics.get("top_speed_kmh", 0.0)))
+
+
+def test_speed_badges_are_capped_per_team_half_unless_a_record(baseline: SimulatedMatch) -> None:
+    """One badge per team per half airs; a later one only if it is the fastest of its kind
+    so far (the first of each kind included). Nothing is dropped from the trigger list."""
+    config = DetectorConfig(shot_speed_alert_kmh=60.0)  # many alerts
+    uncapped = DetectorConfig(shot_speed_alert_kmh=60.0, speed_badges_per_team_half=99)
+    triggers = detect(baseline.match, baseline.events, config=config)
+    assert len(triggers) == len(detect(baseline.match, baseline.events, config=uncapped))
+    best: dict[str, float] = {}
+    aired: dict[tuple[str | None, int], int] = {}
+    for t in triggers:
+        if t.insight_type is not InsightType.SPEED_ALERT:
+            continue
+        reason, record = t.context.get("superseded_by"), _speed(t) > best.get(t.rule_id, 0.0)
+        key = (t.subject.team_id, t.period)
+        if reason is None:
+            assert aired.get(key, 0) < 1 or record
+            aired[key] = aired.get(key, 0) + 1
+        elif reason == "cap":
+            assert aired.get(key, 0) >= 1 and not record
+        best[t.rule_id] = max(best.get(t.rule_id, 0.0), _speed(t))
+    assert any(t.context.get("superseded_by") == "cap" for t in triggers)

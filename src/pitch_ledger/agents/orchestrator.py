@@ -355,7 +355,7 @@ class Orchestrator:
         if not selected or not copy.supported(copy.copy_key(trigger)):
             return "stored"
         if trigger.context.get("superseded_by"):
-            return "stored"  # the detector folded it into another moment (or a cooldown)
+            return "stored"  # folded into another moment, a cooldown or the speed-badge cap
         if trigger.insight_type in FULL_FLOW:
             return "full"
         if trigger.insight_type in AUTO_APPROVE:
