@@ -48,7 +48,7 @@ export default function Home() {
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-emerald-50">
         <div className="grid items-center gap-2 px-6 pt-10 pb-4 sm:px-10 md:grid-cols-2 md:gap-8 md:py-12">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">Pitch Studio</h1>
+            <h1 className="text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">Pitch Ledger Studio</h1>
             <p className="mt-4 text-lg font-medium text-balance text-slate-700 sm:text-xl">
               Where match intelligence meets fan experience.
             </p>
