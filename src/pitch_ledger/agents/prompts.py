@@ -26,8 +26,9 @@ _STYLE = (
     "Write match "
     "minutes whole, like 77' (round: 30.5 is 31'), never 77.4 minutes or ordinals. The "
     "control score is an index from 0 to 100, not a percentage. No judgement words "
-    "(dominant, dominance, surge, central role, key moment, big time) and no first person "
-    "(we, our, us)."
+    "(dominant, dominance, dominating, surge, central role, key moment, big time), no first "
+    "person (we, our, us) and no gendered pronouns for players (he, his, she, her): use the "
+    "name, 'the scorer' or 'they'."
 )
 
 EXPLAINER = (
@@ -65,8 +66,11 @@ AUDITOR = (
     "contradict), is it neutral and respectful, and is it safe for "
     'broadcast? Reply as JSON: {"verdict": "pass" or "revise", "issues": [short, specific '
     "problems]}. The signals are facts computed in code (goal_before gives the score before "
-    "a goal; season facts come from this season's earlier matches): trust them. List only "
-    "problems, never what is correct. Pass unless there is a real problem."
+    "a goal, score_after the score just after it; season facts come from this season's "
+    "earlier matches): trust them. In a goal's metrics, score_home and score_away are the "
+    "score just after that goal, never the final score. A missing detail is not a problem; "
+    "only a claim that is wrong or unsupported is. List only problems, never what is "
+    "correct. Pass unless there is a real problem."
 )
 
 PERSONALIZER = (

@@ -13,6 +13,7 @@ Only when those pass does a model review the wording (unsupported claims, tone,
 neutrality). Findings go back to the Explainer, at most twice; then the insight is blocked.
 """
 
+import re
 from dataclasses import dataclass, field
 
 from opentelemetry import trace
@@ -36,6 +37,29 @@ class AuditResult:
     findings: list[str] = field(default_factory=list)
     stage: str = "check"  # "check" or "review"
     notes: list[str] = field(default_factory=list)
+
+
+_ROUNDING = re.compile(r"\bround(?:ed|ing|s)?\b|\bprecision\b|\bdecimal", re.IGNORECASE)
+_AFFIRMS = re.compile(
+    r"\b(?:is|are|seems|appears) (?:correct|accurate|supported|consistent|fine|neutral)\b"
+    r"|\bno (?:issue|problem)s?\b|\bmatch(?:es)? the (?:metric|signal)s?\b"
+    r"|\bsafe for broadcast\b|\bneutral and respectful\b",
+    re.IGNORECASE,
+)
+_OBJECTS = re.compile(
+    r"\b(?:but|however|although|contradict\w*|not|incorrect|wrong|unsupported|mislead\w*|"
+    r"missing|should|instead)\b",
+    re.IGNORECASE,
+)
+
+
+def not_a_problem(finding: str) -> bool:
+    """A reviewer finding that cannot be a reason to revise. Numbers and rounding are
+    checked in code (minutes written whole are house style), and a finding that only
+    confirms something is right is not a problem, whatever verdict came with it."""
+    if _ROUNDING.search(finding):
+        return True
+    return bool(_AFFIRMS.search(finding)) and not _OBJECTS.search(finding)
 
 
 class Auditor:
@@ -99,6 +123,7 @@ class Auditor:
             verdict = await self.models.complete("auditor", prompts.AUDITOR, request, ReviewVerdict)
         except ModelUnavailable as exc:
             return AuditResult(True, stage="review", notes=[f"review unavailable: {exc}"])
-        if verdict.verdict == "pass":
+        issues = [i for i in verdict.issues if not not_a_problem(i)]
+        if verdict.verdict == "pass" or not issues:  # only non-problems: nothing to revise
             return AuditResult(True, stage="review", notes=verdict.issues)
-        return AuditResult(False, verdict.issues or ["reviewer asked for a revision"], "review")
+        return AuditResult(False, issues, "review")

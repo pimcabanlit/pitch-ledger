@@ -23,7 +23,7 @@ CLICHES = (
     "game changer", "electrifying", "sends a message", "make no mistake", "remains to be seen",
     "only time will tell", "unbelievable", "incredible", "stunning", "superb", "brilliant",
     "world-class", "world class", "on fire", "dominant display", "edge of their seats",
-    "what a", "rocket", "dominan", "surge", "big time", "momentum loss", "key moment",
+    "what a", "rocket", "dominan", "dominat", "surge", "big time", "momentum loss", "key moment",
     "central role",
 )  # fmt: skip
 """Commentary filler: says nothing the numbers do not, or oversells them (English)."""
@@ -55,6 +55,10 @@ FORM_RULES = {
         (r"\b\d+(?:st|nd|rd|th)\b", "no ordinals; write minutes like 77'"),
         (r"\bcontrol\b[^.;]{0,40}?\d+(?:[.,]\d+)?\s*%", "the control score is an index, not a %"),
         (r"\b(?:we|our|us)\b", "no first person; the broadcaster stays neutral"),
+        (
+            r"\b(?:he|him|his|she|her|hers|himself|herself)\b",
+            "no gendered pronouns for players; use the name, 'the scorer' or 'they'",
+        ),
     ),
 }
 """House style the number check cannot see: how minutes and the control score are written,

@@ -741,10 +741,14 @@ def signals(key: str, values: Mapping[str, object]) -> list[str]:
     if "{state}" in used:  # what the goal changed, so no model has to guess it
         try:
             before = fill("{goal_before}", values, "en")
+            after = fill("{home} {score_home}-{score_away} {away}", values, "en")
         except (KeyError, ValueError):
-            before = ""
+            before = after = ""
         if before:
             out.append(f"goal_before: {before}")
+        if after:
+            out.append(f"score_after: {after} just after this goal (that is what score_home "
+                       "and score_away are; not the final score)")  # fmt: skip
     for name in phrases.SEASON_SIGNALS:  # season facts from earlier matches, when given
         try:
             text = fill("{" + name + "}", values, "en")
