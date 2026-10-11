@@ -6,6 +6,7 @@ curved seams, lit from the upper left. Pure Python, no dependencies:
 """
 
 import math
+import os
 from itertools import product
 
 PHI = (1 + 5**0.5) / 2
@@ -27,7 +28,7 @@ def cyclic(p):
 def signed(p):
     out = set()
     for signs in product((1, -1), repeat=3):
-        out.add(tuple(s * c if c else 0.0 for s, c in zip(signs, p)))
+        out.add(tuple(s * c if c else 0.0 for s, c in zip(signs, p, strict=True)))
     return out
 
 
@@ -46,7 +47,7 @@ assert len(VERTS) == 60 and len(PENTS) == 12 and len(HEXES) == 20
 
 
 def dot(a, b):
-    return sum(x * y for x, y in zip(a, b))
+    return sum(x * y for x, y in zip(a, b, strict=True))
 
 
 def cross(a, b):
@@ -68,8 +69,7 @@ def rotate(v, ax, ay, az):
     return (x, y, z)
 
 
-import os
-
+# Rotation (x, y, z, radians); HERO_ANGLES="x,y,z" tries another view of the ball.
 ANGLES = tuple(float(a) for a in os.environ.get("HERO_ANGLES", "0.7,-0.5,0.5").split(","))
 
 
@@ -88,19 +88,19 @@ def rim(a, b):
 def outline(corners):
     """The panel's curved outline, clipped to the visible half of the ball."""
     dense = []
-    for a, b in zip(corners, corners[1:] + corners[:1]):
+    for a, b in zip(corners, corners[1:] + corners[:1], strict=True):
         for i in range(STEPS):
             t = i / STEPS
-            dense.append(norm(tuple(p + (q - p) * t for p, q in zip(a, b))))
+            dense.append(norm(tuple(p + (q - p) * t for p, q in zip(a, b, strict=True))))
     start = max(range(len(dense)), key=lambda i: dense[i][2])  # begin on a visible point
     dense = dense[start:] + dense[:start]
     pts, exit_at = [], None
-    for a, b in zip(dense, dense[1:] + dense[:1]):
+    for a, b in zip(dense, dense[1:] + dense[:1], strict=True):
         if a[2] >= 0:
             pts.append(a)
         if (a[2] >= 0) != (b[2] >= 0):
             t = a[2] / (a[2] - b[2])
-            cut = tuple(p + (q - p) * t for p, q in zip(a, b))
+            cut = tuple(p + (q - p) * t for p, q in zip(a, b, strict=True))
             h = math.hypot(cut[0], cut[1])
             cut = (cut[0] / h, cut[1] / h, 0.0)
             if a[2] >= 0:
@@ -115,12 +115,15 @@ def outline(corners):
 def mix(c1, c2, t):
     a = [int(c1[i : i + 2], 16) for i in (1, 3, 5)]
     b = [int(c2[i : i + 2], 16) for i in (1, 3, 5)]
-    return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(a, b))
+    return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(a, b, strict=True))
 
 
 light = norm(LIGHT)
 faces = []
-for centres, k, dark, bright in ((PENTS, 5, "#0b5e4a", "#4fb393"), (HEXES, 6, "#d5dde6", "#ffffff")):
+for centres, k, dark, bright in (
+    (PENTS, 5, "#0b5e4a", "#4fb393"),
+    (HEXES, 6, "#d5dde6", "#ffffff"),
+):
     for c in centres:
         rc = rotate(c, *ANGLES)
         if rc[2] < -0.45:
@@ -164,20 +167,27 @@ export function HeroArt({{ className }}: {{ className?: string }}) {{
         <path d="M{CX} 10V48" />
         <circle cx="{CX}" cy="10" r="5" />
       </g>
-      <g fill="none" stroke="#0f172a" strokeOpacity="0.45" strokeWidth="1.3" transform="rotate(-16 {CX} {CY})">
+      <g fill="none" stroke="#0f172a" strokeOpacity="0.45" strokeWidth="1.3"
+        transform="rotate(-16 {CX} {CY})">
         <path d="M{CX - 232} {CY}A232 72 0 0 1 {CX + 232} {CY}" />
       </g>
-      <ellipse cx="{CX}" cy="{CY + R + 22}" rx="{R * 0.95:.0f}" ry="22" fill="url(#hero-art-glow)" />
-      <g clipPath="url(#hero-art-ball)" stroke="#1e293b" strokeOpacity="0.7" strokeWidth="1.3" strokeLinejoin="round">
+      <ellipse cx="{CX}" cy="{CY + R + 22}" rx="{R * 0.95:.0f}" ry="22"
+        fill="url(#hero-art-glow)" />
+      <g clipPath="url(#hero-art-ball)" stroke="#1e293b" strokeOpacity="0.7" strokeWidth="1.3"
+        strokeLinejoin="round">
         <circle cx="{CX}" cy="{CY}" r="{R}" fill="#e2e8f0" stroke="none" />
 {paths}
         <circle cx="{CX}" cy="{CY}" r="{R}" fill="url(#hero-art-light)" stroke="none" />
       </g>
-      <circle cx="{CX}" cy="{CY}" r="{R}" fill="none" stroke="#1e293b" strokeOpacity="0.55" strokeWidth="1.3" />
-      <g fill="none" stroke="#0f172a" strokeOpacity="0.45" strokeWidth="1.3" transform="rotate(-16 {CX} {CY})">
+      <circle cx="{CX}" cy="{CY}" r="{R}" fill="none" stroke="#1e293b" strokeOpacity="0.55"
+        strokeWidth="1.3" />
+      <g fill="none" stroke="#0f172a" strokeOpacity="0.45" strokeWidth="1.3"
+        transform="rotate(-16 {CX} {CY})">
         <path d="M{CX + 232} {CY}A232 72 0 0 1 {CX - 232} {CY}" />
-        <circle cx="{CX - 205}" cy="{CY + 34}" r="4" fill="#0f172a" fillOpacity="0.8" stroke="none" />
-        <circle cx="{CX + 120}" cy="{CY + 62}" r="4" fill="#0f172a" fillOpacity="0.8" stroke="none" />
+        <circle cx="{CX - 205}" cy="{CY + 34}" r="4" fill="#0f172a" fillOpacity="0.8"
+          stroke="none" />
+        <circle cx="{CX + 120}" cy="{CY + 62}" r="4" fill="#0f172a" fillOpacity="0.8"
+          stroke="none" />
         <circle cx="{CX - 60}" cy="{CY + 70}" r="5" fill="#ffffff" />
       </g>
       <g stroke="#059669" strokeOpacity="0.55" strokeWidth="1.5" strokeLinecap="round">
