@@ -28,11 +28,14 @@ export function HeroArt({ className }: { className?: string }) {
         <path d="M330.0 10V48" />
         <circle cx="330.0" cy="10" r="5" />
       </g>
-      <g fill="none" stroke="#0f172a" strokeOpacity="0.45" strokeWidth="1.3" transform="rotate(-16 330.0 205.0)">
+      <g fill="none" stroke="#0f172a" strokeOpacity="0.45" strokeWidth="1.3"
+        transform="rotate(-16 330.0 205.0)">
         <path d="M98.0 205.0A232 72 0 0 1 562.0 205.0" />
       </g>
-      <ellipse cx="330.0" cy="375.0" rx="141" ry="22" fill="url(#hero-art-glow)" />
-      <g clipPath="url(#hero-art-ball)" stroke="#1e293b" strokeOpacity="0.7" strokeWidth="1.3" strokeLinejoin="round">
+      <ellipse cx="330.0" cy="375.0" rx="141" ry="22"
+        fill="url(#hero-art-glow)" />
+      <g clipPath="url(#hero-art-ball)" stroke="#1e293b" strokeOpacity="0.7" strokeWidth="1.3"
+        strokeLinejoin="round">
         <circle cx="330.0" cy="205.0" r="148.0" fill="#e2e8f0" stroke="none" />
         <path d="M285.3 64.3L290.7 62.4L296.2 60.9L297.2 60.7L289.5 62.6L282.0 65.0L274.5 67.8L267.2 71.0L273.0 68.5L279.1 66.2Z" fill="#eaeef2" />
         <path d="M474.5 232.2L473.4 238.7L472.0 245.3L470.3 251.7L468.1 258.1L465.6 264.3L468.5 257.3L470.9 250.2L473.0 243.0L474.8 235.7L476.2 228.3L477.1 220.9L477.8 213.4L477.6 215.8L476.9 221.4L475.9 226.9Z" fill="#d5dde6" />
@@ -60,11 +63,15 @@ export function HeroArt({ className }: { className?: string }) {
         <path d="M310.4 232.9L316.1 237.8L321.8 242.6L327.5 247.2L334.6 245.2L341.8 243.2L349.0 241.0L356.3 238.7L363.4 236.3L370.5 233.8L377.3 231.3L384.0 228.8L386.0 221.7L387.8 214.4L389.6 207.1L391.2 199.7L392.6 192.3L393.9 185.0L394.9 177.8L395.8 170.8L390.8 165.5L385.5 160.2L380.1 154.9L374.4 149.8L368.7 144.8L362.9 140.0L357.0 135.5L351.2 131.1L344.3 132.8L337.2 134.6L330.0 136.7L322.8 139.0L315.6 141.4L308.5 144.0L301.5 146.7L294.7 149.5L292.9 156.3L291.1 163.4L289.5 170.6L287.9 178.0L286.5 185.4L285.1 192.8L283.9 200.2L282.8 207.5L288.1 212.6L293.4 217.6L299.0 222.7L304.6 227.8Z" fill="#fafbfc" />
         <circle cx="330.0" cy="205.0" r="148.0" fill="url(#hero-art-light)" stroke="none" />
       </g>
-      <circle cx="330.0" cy="205.0" r="148.0" fill="none" stroke="#1e293b" strokeOpacity="0.55" strokeWidth="1.3" />
-      <g fill="none" stroke="#0f172a" strokeOpacity="0.45" strokeWidth="1.3" transform="rotate(-16 330.0 205.0)">
+      <circle cx="330.0" cy="205.0" r="148.0" fill="none" stroke="#1e293b" strokeOpacity="0.55"
+        strokeWidth="1.3" />
+      <g fill="none" stroke="#0f172a" strokeOpacity="0.45" strokeWidth="1.3"
+        transform="rotate(-16 330.0 205.0)">
         <path d="M562.0 205.0A232 72 0 0 1 98.0 205.0" />
-        <circle cx="125.0" cy="239.0" r="4" fill="#0f172a" fillOpacity="0.8" stroke="none" />
-        <circle cx="450.0" cy="267.0" r="4" fill="#0f172a" fillOpacity="0.8" stroke="none" />
+        <circle cx="125.0" cy="239.0" r="4" fill="#0f172a" fillOpacity="0.8"
+          stroke="none" />
+        <circle cx="450.0" cy="267.0" r="4" fill="#0f172a" fillOpacity="0.8"
+          stroke="none" />
         <circle cx="270.0" cy="275.0" r="5" fill="#ffffff" />
       </g>
       <g stroke="#059669" strokeOpacity="0.55" strokeWidth="1.5" strokeLinecap="round">
