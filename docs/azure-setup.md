@@ -9,7 +9,7 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 | Item | Value | Notes |
 | --- | --- | --- |
 | Directory (tenant) | Personal Default Directory | Never the former employer's tenant (CLAUDE.md non-negotiable 5) |
-| Subscription | Personal subscription | Free credit, then pay-as-you-go in early November (build plan, Phase 5) |
+| Subscription | Personal subscription | Free credit, then pay-as-you-go in early November (build plan, Phase 6) |
 | Foundry resource | `inside-the-game` (kind: Foundry / AI Services), East US | Holds the model deployments |
 | Foundry project | `inside-the-game` | Endpoint: `https://inside-the-game.services.ai.azure.com/api/projects/inside-the-game` |
 | Model deployment | `gpt-4.1-mini` | Used for **both** tiers for now: `PITCH_LEDGER_MODEL_STRONG` and `PITCH_LEDGER_MODEL_SMALL` |

@@ -78,7 +78,42 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 
 **Done when:** the public link replays a match end to end in Azure.
 
-### Phase 5 — Polish, video, submission (Oct 24–27)
+### Phase 5 — Product readiness (Oct 12–23)
+
+1. **Homepage.** A landing page at the Studio root that says what Pitch Ledger is in one line, shows the pipeline (ingest → interpret → explain → render → personalize), and routes each visitor: fan view, producer console (sign-in), Match Centre, and "how it works" (ledger, Auditor, evidence). It shows live status (latest matches, what is airing) and links to the judges' instructions. No trademarks; fictional clubs only.
+2. **UI and UX improvements.** Make the Studio intuitive for a first-time visitor:
+   - consistent navigation across pages;
+   - clear empty, loading and error states;
+   - plain-language labels and tooltips for football and pipeline terms (xG, PPDA, control, audit statuses);
+   - the selectors the challenge names: favourite club, favourite player, player-focus mode, a single performance metric, language;
+   - mobile layout and accessibility (contrast, keyboard, screen reader).
+
+   Check it with a short walkthrough: a new user finds a match, sees an insight and its evidence, and switches mode and language without help.
+3. **Quality: requirement-by-requirement map.** A `docs/requirements-map.md` mapping every point of the challenge (section 4.1: the five pipeline stages (a)–(e) including the personalization examples, real-time intelligence (player identification, pass quality, speed metrics, auto-eventing), narrative generation, explainability, data innovation, multi-language) to what Pitch Ledger does. Each row gets a status:
+   - **Implemented**, with where it lives and how to see it;
+   - **Partial**, with what is missing;
+   - **Not implemented**, with why (e.g. auto-eventing from video, since the data is synthetic);
+   - **Nice to have** or **Beyond the brief** (enterprise controls, Auditor, evaluations).
+
+   Gaps worth closing are fed back into this phase before Phase 6.
+4. **Historical data.** Keep each match's results so future games can use them: per-match summaries, team and player match stats, insights and their audit outcomes, scorecard and evaluation results. Store them durably, append-only, keyed by match, season and club. That means extending the ADX event store and the Cosmos ledger rather than a new service.
+
+   The engine and agents can then use history in context (e.g. "first hat-trick this season", form over the last five matches). Every historical figure stays computed in code and cited, never recalled by a model. The current "no data on seasons or records" rule in the prompts changes only once that data exists. Lakehouse history stays a stretch goal.
+5. **Cost monitoring.** Partly in place today:
+   - per-service cost notes and observed model costs (docs/azure-setup.md);
+   - per-run model call and token counts;
+   - token caps and call budgets;
+   - log caps.
+
+   Still to add:
+   - a Cost Management budget with alerts on the subscription, confirmed (still an open checklist item);
+   - cost per match and per insight from token usage (in the run summary, scorecard and ADX), shown in the producer console or ADX dashboard;
+   - a monthly cost view by resource;
+   - documented guardrails for the judging period (what may run, and what it costs).
+
+**Done when:** the homepage and UI changes are live, the requirements map is complete with every gap either closed or labelled, match results are stored as history and readable by the engine, and cost per match plus a confirmed budget alert are documented.
+
+### Phase 6 — Polish, video, submission (Oct 24–27)
 
 1. README: problem, architecture diagram, how to run locally, how to test the live demo, enterprise controls, production path, cost, evaluation scorecard, screenshots.
 2. Record the demo video (under 2 minutes, no trademarks, no copyrighted music).
