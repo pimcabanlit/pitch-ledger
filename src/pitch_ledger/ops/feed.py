@@ -1,7 +1,9 @@
 """Feed rules for the live service (docs/architecture.md, Ops alerts).
 
 - **Feed gap:** no message for ``gap_s`` (10 s) while a period is being played; one alert
-  per gap (half time is not a gap).
+  per gap (half time is not a gap). Checked two ways: the feed is silent now (``check_gap``),
+  and, when a message arrives, by its arrival time against the one before (``arrived``). The
+  second catches a gap that a busy service (rows still queued) never saw as silence.
 - **Feed lag:** a wall-clock minute whose p95 send-to-receive latency is above
   ``lag_p95_ms`` (5 s), from the same per-minute rows as the ``FeedHealth`` table.
 - **Validation:** rejected rows (dropped before the engine) are summarized at every tick;
@@ -33,6 +35,7 @@ class FeedWatch:
     lag_p95_ms: float = 5000.0
     flag_every_s: float = 60.0
     _last_seen: dict[str, float] = field(default_factory=dict)
+    _last_arrival: dict[str, float] = field(default_factory=dict)  # wall clock (received_at)
     _in_gap: set[str] = field(default_factory=set)
     _rejects: dict[str, list[ValidationResult]] = field(default_factory=lambda: defaultdict(list))
     _flags: dict[str, list[ValidationResult]] = field(default_factory=lambda: defaultdict(list))
@@ -49,10 +52,29 @@ class FeedWatch:
         last = self._last_seen.get(match_id)
         if last is None or not in_play or match_id in self._in_gap or now - last < self.gap_s:
             return None
+        return self._gap(match_id, now - last, where, last_ref)
+
+    def arrived(
+        self, match_id: str, received_at: float, in_play: bool, where: str, last_ref: str | None
+    ) -> OpsAlert | None:
+        """A message arrived at ``received_at``: a gap alert if the one before it arrived
+        ``gap_s`` or more earlier during play (unless that gap was already alerted). Call
+        with the match state before the message is applied, then ``seen``."""
+        before = self._last_arrival.get(match_id)
+        self._last_arrival[match_id] = received_at
+        if before is None or not in_play or match_id in self._in_gap:
+            return None
+        if received_at - before < self.gap_s:
+            return None
+        return self._gap(match_id, received_at - before, where, last_ref)
+
+    def _gap(
+        self, match_id: str, silent_s: float, where: str, last_ref: str | None
+    ) -> OpsAlert | None:  # None: the desk deduplicated it
         self._in_gap.add(match_id)
         return self.desk.raise_alert(
             match_id, "feed_gap", "warning",
-            f"No feed message for {round(now - last, 1):g} s during play (last at {where}). "
+            f"No feed message for {round(silent_s, 1):g} s during play (last at {where}). "
             "Insights wait for the feed; check the feed source and the Event Hubs namespace.",
             [last_ref] if last_ref else [],
         )  # fmt: skip

@@ -81,6 +81,15 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 ### Phase 5 — Product readiness (Oct 12–23)
 
 1. **Homepage.** A landing page at the Studio root that says what Pitch Ledger is in one line, shows the pipeline (ingest → interpret → explain → render → personalize), and routes each visitor: fan view, producer console (sign-in), Match Centre, and "how it works" (ledger, Auditor, evidence). It shows live status (latest matches, what is airing) and links to the judges' instructions. No trademarks; fictional clubs only.
+
+   Done 2026-10-11. The homepage has:
+   - a hero with entry points to the demo match (M0002) and the producer console;
+   - the five pipeline steps;
+   - "how trust works" (code-computed numbers, evidence, Auditor, producer);
+   - every match with its score and aired-insight count;
+   - the fan and producer views.
+
+   The match list moved to `/matches`. The judges' instructions link comes with Phase 6.
 2. **UI and UX improvements.** Make the Studio intuitive for a first-time visitor:
    - consistent navigation across pages;
    - clear empty, loading and error states;
@@ -89,6 +98,18 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - mobile layout and accessibility (contrast, keyboard, screen reader).
 
    Check it with a short walkthrough: a new user finds a match, sees an insight and its evidence, and switches mode and language without help.
+
+   Done 2026-10-11:
+   - one navigation bar with the current page marked, a skip link and a footer;
+   - skeletons and error-with-retry states;
+   - glossary tips for control, chaos, tempo, PPDA, possession, pass accuracy, xG, speed, modes and statuses;
+   - a Match Centre *Your view* panel (mode, language, club filter, favourite clubs, follow a player, your metric), remembered in the browser;
+   - a followed-player card with totals as of the replay clock;
+   - a metric chart (control, possession, pass accuracy, tempo, PPDA, chaos, xG, speed);
+   - the captioned player's name on the pitch;
+   - an `aria-live` caption for screen readers.
+
+   Checked at 1280 px and 390 px. This closed requirements-map gaps 1, 2, 5 and 6 and the chart half of gap 4.
 3. **Quality: requirement-by-requirement map.** A `docs/requirements-map.md` mapping every point of the challenge (section 4.1: the five pipeline stages (a)–(e) including the personalization examples, real-time intelligence (player identification, pass quality, speed metrics, auto-eventing), narrative generation, explainability, data innovation, multi-language) to what Pitch Ledger does. Each row gets a status:
    - **Implemented**, with where it lives and how to see it;
    - **Partial**, with what is missing;

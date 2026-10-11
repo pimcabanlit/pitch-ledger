@@ -1,7 +1,8 @@
 """FastAPI app: ``/api/v1``.
 
 Public (fan view): health, matches, a match, the aired overlays of a match, the Match Centre
-replay data (timeline, tracking frames), and the story and broadcast package of an aired
+replay data (timeline, tracking frames, analytics, pass network, a player's running
+totals), and the story and broadcast package of an aired
 insight (no producer identity).
 Producer (Entra ID producer role, see ``auth``): every insight with its status, one insight
 with its audit trail and evidence, the approve/block decision (rate-limited: an approval
@@ -25,6 +26,7 @@ from pitch_ledger.api.match_centre import (
     MatchCentre,
     MatchData,
     PassNetwork,
+    PlayerTimeline,
     Timeline,
     TrackingWindow,
 )
@@ -63,6 +65,8 @@ InsightIdPath = Annotated[str, Path(pattern=r"^M\d{4}-I\d{4}$")]
 AlertIdPath = Annotated[str, Path(pattern=r"^M\d{4}-X\d{4}$")]
 Mode = Annotated[str | None, Query(pattern=r"^[a-z_]{3,20}$")]
 Language = Annotated[str | None, Query(pattern=r"^[a-z]{2,3}(-[A-Z]{2})?$")]
+PlayerIdPath = Annotated[str, Path(pattern=r"^T\d{2}-P\d{2}$")]
+AIRED_COUNT_TTL_S = 60.0
 
 
 class RateLimiter:
@@ -116,12 +120,28 @@ def create_app(
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"no match {match_id}")
         return files
 
-    def summary(files: MatchFiles) -> MatchSummary:
+    def summary(files: MatchFiles, aired: int | None = None) -> MatchSummary:
         teams = {t.team_id: t for t in files.teams}
         m = files.match
+        last = files.events[-1] if files.events else None
         return MatchSummary(match_id=m.match_id, kickoff_utc=m.kickoff_utc, venue=m.venue,
                             home=team_view(teams[m.home_team_id]),
-                            away=team_view(teams[m.away_team_id]))  # fmt: skip
+                            away=team_view(teams[m.away_team_id]),
+                            score_home=last["score_home"] if last else None,
+                            score_away=last["score_away"] if last else None,
+                            aired_insights=aired)  # fmt: skip
+
+    aired_counts: dict[str, tuple[float, int]] = {}
+
+    def aired_count(match_id: str) -> int:
+        """Aired insights of a match, cached a minute (one ledger read per match)."""
+        now = time.monotonic()
+        cached = aired_counts.get(match_id)
+        if cached is None or now - cached[0] > AIRED_COUNT_TTL_S:
+            insights = repo.ledger(match_id).insights(match_id)
+            cached = (now, sum(insight_status(i) == "aired" for i in insights))
+            aired_counts[match_id] = cached
+        return cached[1]
 
     def insight_of(insight_id: str) -> tuple[InMemoryLedger, InsightView]:
         match_id = insight_id.split("-I")[0]
@@ -139,7 +159,8 @@ def create_app(
 
     @app.get("/api/v1/matches", response_model=list[MatchSummary])
     def matches() -> list[MatchSummary]:
-        return [summary(f) for mid in repo.match_ids() if (f := repo.files(mid, False))]
+        """Every match with its final score (or the score so far) and aired insight count."""
+        return [summary(f, aired_count(mid)) for mid in repo.match_ids() if (f := repo.files(mid))]
 
     @app.get("/api/v1/matches/{match_id}", response_model=MatchDetail)
     def match(match_id: MatchIdPath) -> MatchDetail:
@@ -151,8 +172,6 @@ def create_app(
         return MatchDetail(
             **summary(files).model_dump(),
             players=players,
-            score_home=last["score_home"] if last else None,
-            score_away=last["score_away"] if last else None,
             last_minute=round(match_minute(last), 1) if last else None,
         )
 
@@ -208,6 +227,17 @@ def create_app(
         if team not in (data.files.match.home_team_id, data.files.match.away_team_id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"{team} is not in {match_id}")
         return data.pass_network(team, period, end_ms, window_s)
+
+    @app.get("/api/v1/matches/{match_id}/players/{player_id}/timeline",
+             response_model=PlayerTimeline)  # fmt: skip
+    def player_timeline(match_id: MatchIdPath, player_id: PlayerIdPath) -> PlayerTimeline:
+        """A player's running totals at every match minute (the browser shows them up to its
+        clock): passing, shooting and, from tracking, distance, top speed and sprints."""
+        data = centre_data(match_id)
+        found = data.player_timeline(player_id)
+        if found is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"{player_id} is not in {match_id}")
+        return found
 
     def aired(insight_id: str) -> tuple[InMemoryLedger, InsightView]:
         """An insight the public may see: aired only (pending and blocked stay internal)."""

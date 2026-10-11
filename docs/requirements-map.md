@@ -17,16 +17,16 @@ Every point of the hackathon brief (section 4.1, *Hackathon Challenge*) mapped t
 | Area | Implemented | Partial | Not implemented |
 | --- | --- | --- | --- |
 | (i) Pipeline: ingest, interpret, explain, render | 4 | 0 | 0 |
-| (i)(e) Personalization | 4 | 3 | 1 |
-| (ii) Real-time match intelligence | 6 | 1 | 1 |
+| (i)(e) Personalization | 8 | 0 | 0 |
+| (ii) Real-time match intelligence | 7 | 0 | 1 |
 | (iii) Narrative generation | 4 | 0 | 0 |
 | (iv) Explainability | 2 | 2 | 0 |
 | (v) Data innovation | 1 | 0 | 0 |
 | (vi) Multi-language storytelling | 1 | 0 | 0 |
 | Fit: live, studio, broadcast, streaming, any market | 4 | 0 | 0 |
-| **Total** | **26** | **6** | **2** |
+| **Total** | **31** | **2** | **1** |
 
-The gaps cluster in two places: **viewer choice** (favourite player, follow-a-player, choosing the single metric) and **things computed but not yet on screen** (chaos, tempo). Milestones, pass quality, distance and ball speed went on screen as badges on 2026-10-11. Most are closed without any new model calls; see [Gaps to close in Phase 5](#gaps-to-close-in-phase-5).
+What is left: chaos and tempo are on screen and explained, but not yet narrated in insight copy. Auto-eventing from video is out of scope with synthetic data. On 2026-10-11, milestones, pass quality, distance and ball speed went on screen as badges. Viewer choice (favourite clubs and player, follow-a-player, chosen metric, remembered preferences), names on the pitch, and chaos and tempo charts followed the same day, with no model calls; see [Gaps to close in Phase 5](#gaps-to-close-in-phase-5).
 
 ## (i) One pipeline with five stages
 
@@ -43,11 +43,11 @@ The gaps cluster in two places: **viewer choice** (favourite player, follow-a-pl
 | --- | --- | --- | --- |
 | Analyst and casual fan as **two genuinely different experiences** | **Implemented** | Five audience modes per insight, each with its own depth rules, enforced by an editorial check. *Analyst*: precise, two or three numbers with the key comparison. *Casual*: plain words and at most one figure. Every aired insight has all five modes in all three languages (15 overlays) | Studio fan view → *Mode*; scorecard gate *every aired insight in 5 modes x 3 languages* |
 | Customized modes | **Implemented** | Analyst, casual, club focus, player focus, single metric | Fan view *Mode* selector |
-| Favourite club(s) | **Partial** | A club filter (both clubs, or one) and *club focus* copy written for that club's supporters. Missing: picking more than one club, and remembering the choice | Fan view *Club* selector |
-| Favourite player(s) | **Not implemented** | No player picker. *Player focus* copy follows the player in each insight, not one the viewer chose | (gap 1) |
-| Player-focused mode that follows a player **throughout the match** | **Partial** | *Player focus* copy names each moment's player, and the Match Centre highlights the player in the current caption. Missing: choosing a player and following their stats and position through the match | Match Centre (gap 1) |
+| Favourite club(s) | **Implemented** | Star any number of clubs. Their matches are listed first and marked, and the Match Centre marks them in its club filter (both clubs, or one). *Club focus* copy is written for a club's supporters. Remembered in the browser | Match Centre → *Your view* (stars, *Show*); match list |
+| Favourite player(s) | **Implemented** | Pick a player from either squad in *Your view*. Player IDs are stable across matches, so the favourite carries over to the club's other matches. Remembered in the browser | Match Centre → *Your view* → *Follow a player* |
+| Player-focused mode that follows a player **throughout the match** | **Implemented** | The followed player has a ring on their dot all match. A card shows their match totals as of the replay clock (passes and accuracy, shots, goals, xG, distance, top speed), whether they are on the pitch, and their aired moments (a click jumps there). Their insights are marked in the feed. Totals come from `GET /api/v1/matches/{id}/players/{player_id}/timeline`, computed from events and tracking with the engine's definitions. *Player focus* copy still names each moment's own player | Match Centre → player card |
 | Language preference | **Implemented** | English, Spanish, Filipino for every aired insight; numbers kept exactly (Spanish decimal commas) and checked | Fan view *Language* selector |
-| A single performance metric the viewer cares about | **Partial** | A *single metric* mode shows one labelled number per insight, but code picks the metric; the viewer cannot choose it (for example "only shot speed" or "only xG") | Fan view *Mode* → Single metric (gap 2) |
+| A single performance metric the viewer cares about | **Implemented** | The viewer picks *Your metric*: control, possession, pass accuracy, tempo, PPDA, chaos, xG or speed. The chart draws it up to the replay clock with its current value per team, and every insight that carries that metric shows the figure as a chip in the feed. The *single metric* mode's copy still shows the one figure code chose for each moment | Match Centre → *Your view* → *Your metric*; chart |
 | Timed, machine-readable output for synchronized overlays on a live feed (the rendering partner's production path) | **Implemented** | See (d): overlay objects with clock, display time, priority and structured data; the broadcast package endpoint | API (see d) |
 
 ## (ii) Real-time match intelligence
@@ -55,7 +55,7 @@ The gaps cluster in two places: **viewer choice** (favourite player, follow-a-pl
 | Requirement | Status | What Pitch Ledger does | Where to see it |
 | --- | --- | --- | --- |
 | Aggregate events into meaningful football **states and statistics** | **Implemented** | Rolling team state per minute (control, possession, pass accuracy, turnovers, PPDA, tempo), live in the event store as the match plays | ADX dashboard; Match Centre control chart |
-| **Player identification**: real-time player name tagging | **Partial** | Players are named in captions, overlays and the match feed as moments happen; the pitch shows shirt numbers and rings the captioned player. Missing: names on the pitch itself | Match Centre (gap 5) |
+| **Player identification**: real-time player name tagging | **Implemented** | Players are named in captions, overlays and the match feed as moments happen. While a caption is about a player, their name appears beside their dot on the pitch. Otherwise the pitch shows shirt numbers only, so it stays readable | Match Centre pitch |
 | Speed indicators triggered at predefined thresholds | **Implemented** | A badge when a player first reaches 34 km/h, and for shots over 100 km/h. Auto-approved, no model calls, capped at one per team per half plus new match records | Fan view and Match Centre speed badges |
 | Distance indicators triggered at predefined thresholds | **Implemented** | A milestone badge when a player becomes the first of their team past 10 km (from tracking); 5 km milestones are kept in the ledger. Auto-approved, no model calls | Match Centre captions (*milestone badge*); `distance_milestone` triggers |
 | **Pass quality**: distance, accuracy, difficulty rating | **Implemented** | A pass badge for the hardest completed pass so far in the match (difficulty 65+ and 15+ m forward to qualify): difficulty rating (0–100), length, forward distance and ball speed. Pass accuracy against expected for difficulty appears in momentum insights, and a pass-milestone badge gives the first player of each team to 50 completed passes, with their accuracy. The Match Centre also has a pass network | Match Centre captions (*pass badge*, *milestone badge*); `src/pitch_ledger/engine/metrics.py` |
@@ -77,9 +77,9 @@ The gaps cluster in two places: **viewer choice** (favourite player, follow-a-pl
 | Requirement | Status | What Pitch Ledger does | Where to see it |
 | --- | --- | --- | --- |
 | Explain why moments matter | **Implemented** | Every insight has a "why it matters" explanation grounded in code-computed metrics, with cited evidence events and a full audit trail. Foundry's groundedness judge scores the model-written copy 5.0 out of 5 | Insight Story page; Foundry → Evaluations |
-| Control vs chaos | **Partial** | A control score per team drives momentum insights and the Match Centre control chart. A match chaos score (0–100: possession changes per minute, share of play under pressure, duels per minute) is computed but not shown or narrated | Match Centre control chart (gap 4) |
+| Control vs chaos | **Partial** | A control score per team drives momentum insights. The Match Centre charts control per team and the match chaos score (0–100: possession changes per minute, share of play under pressure, duels per minute) minute by minute, with glossary tips explaining both. Missing: chaos as a signal in insight copy | Match Centre chart (*Control*, *Chaos*); `GET /api/v1/matches/{id}/analytics` |
 | Tactical pressure changes | **Implemented** | The pressing variant of the momentum shift explains a change in pressure with PPDA and turnovers forced; the *high press switch* scenario (M0003) shows it | M0003 insights |
-| Game rhythm patterns | **Partial** | Tempo (passes per minute of possession) is computed per team and minute and shown in the ADX dashboard, but not narrated or shown in the Studio | ADX tile *Latest window per team* (gap 4) |
+| Game rhythm patterns | **Partial** | Tempo (passes per minute of possession) is computed per team and minute. It is shown in the ADX dashboard and on the Match Centre chart, with PPDA for pressing intensity. Missing: tempo in insight copy | Match Centre chart (*Tempo*, *PPDA*); ADX tile *Latest window per team* |
 
 ## (v) Data innovation
 
@@ -128,11 +128,11 @@ In priority order: what each closes, and whether it needs model calls.
 
 | # | Gap | Closes | Model calls |
 | --- | --- | --- | --- |
-| 1 | **Favourite player and follow-a-player view**: pick a player (from either squad); their insights first, their stats as of the replay clock, their dot highlighted all match, *player focus* copy for them where it applies | Favourite player(s); player-focused mode throughout the match | None (stats from the engine) |
-| 2 | **Choose the single metric**: the viewer picks the metric (shot speed, xG, possession, pass accuracy, control…); the fan view shows that metric's live value and the insights that carry it | A single performance metric the viewer cares about | None |
+| 1 | **Done 2026-10-11.** **Favourite player and follow-a-player view**: pick a player (from either squad); their insights first, their stats as of the replay clock, their dot highlighted all match, *player focus* copy for them where it applies | Favourite player(s); player-focused mode throughout the match | None (stats from the engine) |
+| 2 | **Done 2026-10-11.** **Choose the single metric**: the viewer picks the metric (shot speed, xG, possession, pass accuracy, control…); the fan view shows that metric's live value and the insights that carry it | A single performance metric the viewer cares about | None |
 | 3 | **Done 2026-10-11.** Milestones and pass quality air as badges on firsts and new bests (template copy, code audit, auto-approved); brace and hat-trick fold into the goal | Milestones; distance indicators; pass quality; ball speed | None |
-| 4 | **Show chaos and rhythm**: chaos and tempo on the Match Centre chart and tooltips, and as context signals in momentum copy ("the match got more open") | Control vs chaos; game rhythm patterns | None for the chart; the signals only change what the Explainer is given |
-| 5 | **Names on the pitch**: show the player name on hover, or a names toggle | Player name tagging | None |
-| 6 | **Remember preferences**: favourite clubs (more than one), player, mode, metric and language, kept in the browser | Favourite club(s), fuller | None |
+| 4 | **Chart done 2026-10-11** (chaos, tempo and PPDA on the Match Centre chart, with glossary tips). **Open:** chaos and tempo as context signals in momentum copy ("the match got more open") | Control vs chaos; game rhythm patterns | None for the chart; the signals only change what the Explainer is given |
+| 5 | **Done 2026-10-11.** **Names on the pitch**: the name shows beside the dot while a caption is about that player (owner's choice: a pitch full of names is hard to read) | Player name tagging | None |
+| 6 | **Done 2026-10-11.** **Remember preferences**: favourite clubs (more than one), player, mode, metric and language, kept in the browser | Favourite club(s), fuller | None |
 | 7 | **More languages** (for example French, Portuguese, Arabic) | Fans in any market, fuller | Translator calls per extra language |
 | — | Auto-eventing from video | Out of scope with synthetic data; described as the production path | — |

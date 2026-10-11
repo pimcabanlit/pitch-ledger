@@ -160,6 +160,9 @@ class LiveService:
     def _take(self, delivered: Delivered) -> None:
         m = delivered.message
         live = self.matches.setdefault(m.match_id, LiveMatch(m.match_id))
+        period, clock_ms = live.position()  # before this message: where the feed went quiet
+        self.watch.arrived(m.match_id, delivered.received_at, live.in_play,
+                           minute_label(period, clock_ms), live.last_event_id)  # fmt: skip
         results = live.add(m.kind, m.row)
         self.watch.seen(m.match_id, self.clock())
         if rejected(results):  # a dropped row's warnings would only repeat the reject

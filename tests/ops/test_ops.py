@@ -111,6 +111,21 @@ def test_feed_watch_gap_once_per_gap_and_only_during_play() -> None:
     assert watch.check_gap("M0003", 999.0, True, "1'", None) is None  # never seen
 
 
+def test_feed_gap_by_arrival_time_when_the_service_was_busy() -> None:
+    ledger = InMemoryLedger()
+    watch = FeedWatch(_desk(ledger), gap_s=10.0)
+    assert watch.arrived("M0002", 1000.0, True, "34'", "M0002-E000500") is None  # first
+    assert watch.arrived("M0002", 1004.0, True, "34'", "M0002-E000500") is None
+    gap = watch.arrived("M0002", 1016.5, True, "34'", "M0002-E000501")
+    assert gap is not None and "12.5 s" in gap.message and gap.refs == ["M0002-E000501"]
+    watch.seen("M0002", 50.0)
+    assert watch.arrived("M0002", 1040.0, False, "45'", None) is None  # half time
+    assert watch.arrived("M0002", 1041.0, True, "46'", None) is None
+    watch.check_gap("M0002", 70.0, True, "46'", None)  # silence seen first: one alert, not two
+    assert watch.arrived("M0002", 1060.0, True, "46'", None) is None
+    assert [a.kind for a in ledger.alerts("M0002")] == ["feed_gap", "feed_gap"]
+
+
 def test_feed_watch_lag_and_validation_summaries() -> None:
     desk = _desk()
     watch = FeedWatch(desk, lag_p95_ms=5000, flag_every_s=60)

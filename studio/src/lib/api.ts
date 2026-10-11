@@ -22,6 +22,9 @@ export interface MatchSummary {
   venue: string;
   home: Team;
   away: Team;
+  score_home: number | null; // after the last event: the final score, or the score so far
+  score_away: number | null;
+  aired_insights: number | null; // match list only
 }
 
 export interface Player {
@@ -34,8 +37,6 @@ export interface Player {
 
 export interface MatchDetail extends MatchSummary {
   players: Player[];
-  score_home: number | null;
-  score_away: number | null;
   last_minute: number | null;
 }
 
@@ -205,6 +206,14 @@ export interface TeamMinute {
   control: number | null; // 0-100 per team
   possession_pct: number | null;
   ppda: number | null;
+  pass_accuracy: number | null; // % of passes completed
+  tempo: number | null; // passes per minute on the ball
+}
+
+export interface ChaosMinute {
+  period: number;
+  minute: number;
+  chaos: number; // 0-100, the whole match (not per team)
 }
 
 export interface ShotPoint {
@@ -223,7 +232,30 @@ export interface ShotPoint {
 
 export interface Analytics {
   team_state: TeamMinute[];
+  chaos: ChaosMinute[];
   shots: ShotPoint[];
+}
+
+/** A player's whole-match totals up to clock_ms of period (included). */
+export interface PlayerMinute {
+  period: number;
+  clock_ms: number;
+  minute: number;
+  passes: number;
+  passes_completed: number;
+  pass_accuracy: number | null;
+  shots: number;
+  xg: number;
+  goals: number;
+  distance_km: number | null; // null until the player has been tracked (an unused substitute)
+  top_speed_kmh: number | null;
+  sprints: number | null;
+}
+
+export interface PlayerTimeline {
+  player_id: string;
+  team_id: string;
+  minutes: PlayerMinute[];
 }
 
 export interface PassNetwork {
@@ -313,6 +345,8 @@ export const api = {
   story: (insightId: string) => request<InsightStory>(`/insights/${insightId}/story`),
   timeline: (matchId: string) => request<Timeline>(`/matches/${matchId}/timeline`),
   analytics: (matchId: string) => request<Analytics>(`/matches/${matchId}/analytics`),
+  playerTimeline: (matchId: string, playerId: string) =>
+    request<PlayerTimeline>(`/matches/${matchId}/players/${playerId}/timeline`),
   passNetwork: (matchId: string, team: string, period: number, endMs: number) =>
     request<PassNetwork>(`/matches/${matchId}/pass-network?team=${team}&period=${period}&end_ms=${endMs}`),
   tracking: (matchId: string, period: number, fromS: number, toS: number) =>

@@ -1,15 +1,16 @@
 "use client";
 
-import { Pause, Play, Radio, RotateCcw } from "lucide-react";
+import { Pause, Play, Radio, RotateCcw, Star } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ballAt, ballPath } from "@/components/match-centre/ball";
 import { Caption } from "@/components/match-centre/caption";
-import { ControlChart, type Side } from "@/components/match-centre/control-chart";
 import { Feed, type FeedItem } from "@/components/match-centre/feed";
+import { MetricChart, type InsightPoint, type Side } from "@/components/match-centre/metric-chart";
 import { PassNetwork } from "@/components/match-centre/pass-network";
 import { Pitch, type Dot } from "@/components/match-centre/pitch";
+import { PlayerCard } from "@/components/match-centre/player-card";
 import {
   axisFromMinute,
   buildAxis,
@@ -21,7 +22,9 @@ import {
   useTracking,
 } from "@/components/match-centre/replay";
 import { ShotMap } from "@/components/match-centre/shot-map";
+import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Select } from "@/components/ui/select";
 import {
   api,
@@ -33,8 +36,10 @@ import {
   type Overlay,
   type Timeline,
 } from "@/lib/api";
+import { METRIC_KEYS, METRICS, metricLabel, metricUnit, type MetricKey } from "@/lib/metrics";
+import { usePreferences } from "@/lib/preferences";
 import { useRealtime } from "@/lib/realtime";
-import { minuteLabel } from "@/lib/utils";
+import { cn, minuteLabel } from "@/lib/utils";
 
 const MODE_LABELS: Record<Mode, string> = {
   casual: "Casual fan",
@@ -52,23 +57,64 @@ export function MatchCentre({ params }: { params: Promise<{ id: string }> }) {
   const [match, setMatch] = useState<MatchDetail | null>(null);
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     api.match(id).then(setMatch, (e: Error) => setError(e.message));
     api.timeline(id).then(setTimeline, (e: Error) => setError(e.message));
-    api.analytics(id).then(setAnalytics, () => setAnalytics(null)); // charts are optional
-  }, [id]);
+  }, [id, attempt]);
+  useEffect(() => {
+    api.analytics(id).then(setAnalytics, (e: Error) => setAnalyticsError(e.message)); // charts are optional
+  }, [id, attempt]);
 
-  if (error) return <p className="text-sm text-rose-700">{error}</p>;
-  if (!match || !timeline) return <p className="text-sm text-slate-500">Loading the match…</p>;
+  if (error) {
+    return (
+      <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-rose-700">
+        Could not load the match: {error}
+        <Button variant="outline" size="sm" onClick={() => (setError(null), setAttempt((n) => n + 1))}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+  if (!match || !timeline) return <MatchSkeleton />;
   return (
     <Centre
       match={match}
       timeline={timeline}
       analytics={analytics}
+      analyticsError={analyticsError}
+      onRetryAnalytics={() => (setAnalyticsError(null), setAttempt((n) => n + 1))}
       startMinute={Number(search.get("t") ?? "") || null}
     />
+  );
+}
+
+export function MatchSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4" aria-busy="true">
+      <span className="sr-only">Loading the match…</span>
+      <div className="h-16 rounded-lg bg-slate-200/70" />
+      <div className="h-24 rounded-lg bg-slate-200/70" />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="aspect-[111/74] rounded-lg bg-slate-200/70" />
+        <div className="h-64 rounded-lg bg-slate-200/70" />
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children, tip }: { label: string; children: React.ReactNode; tip?: React.ReactNode }) {
+  return (
+    <label className="flex min-w-0 flex-col gap-1 text-xs text-slate-600">
+      <span className="flex items-center gap-1">
+        {label}
+        {tip}
+      </span>
+      {children}
+    </label>
   );
 }
 
@@ -76,18 +122,22 @@ function Centre({
   match,
   timeline,
   analytics,
+  analyticsError,
+  onRetryAnalytics,
   startMinute,
 }: {
   match: MatchDetail;
   timeline: Timeline;
   analytics: Analytics | null;
+  analyticsError: string | null;
+  onRetryAnalytics: () => void;
   startMinute: number | null;
 }) {
   const axis = useMemo(() => buildAxis(timeline), [timeline]);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(10);
-  const [mode, setMode] = useState<Mode>("casual");
-  const [language, setLanguage] = useState("en");
+  const [prefs, setPrefs] = usePreferences();
+  const { mode, language, metric } = prefs;
   const [club, setClub] = useState("all");
   const [insightsOnly, setInsightsOnly] = useState(false);
   const stop = useCallback(() => setPlaying(false), []);
@@ -102,13 +152,14 @@ function Centre({
 
   // Aired overlays in the viewer's mode and language (a slow reply for a left selection is ignored).
   const selection = `${mode}/${language}`;
-  const [result, setResult] = useState<{ key: string; rows: Overlay[] } | null>(null);
+  const [result, setResult] = useState<{ key: string; rows: Overlay[]; error?: string } | null>(null);
   const latest = useRef("");
   const loadOverlays = useCallback(() => {
     latest.current = selection;
-    api.overlays(match.match_id, mode, language).then((rows) => {
-      if (latest.current === selection) setResult({ key: selection, rows });
-    });
+    api.overlays(match.match_id, mode, language).then(
+      (rows) => latest.current === selection && setResult({ key: selection, rows }),
+      (e: Error) => latest.current === selection && setResult({ key: selection, rows: [], error: e.message }),
+    );
   }, [match.match_id, mode, language, selection]);
   useEffect(loadOverlays, [loadOverlays]);
   const pushed = useRealtime(match.match_id, false, (signal) => {
@@ -125,6 +176,10 @@ function Centre({
     (team: string | null | undefined) => (team ? (teams[team]?.primary_color ?? "#64748b") : "#64748b"),
     [teams],
   );
+  const followed = prefs.player && players.has(prefs.player) ? players.get(prefs.player)! : null;
+  const favourite = (team: string) => prefs.clubs.includes(team);
+  const toggleFavourite = (team: string) =>
+    setPrefs({ clubs: favourite(team) ? prefs.clubs.filter((c) => c !== team) : [...prefs.clubs, team] });
   const keep = useCallback((team: string | null | undefined) => club === "all" || !team || team === club, [club]);
 
   const times = useMemo(() => timeline.events.map((e) => toAxis(axis, e.period, e.clock_ms)), [timeline, axis]);
@@ -161,8 +216,10 @@ function Centre({
   const dots: Dot[] = [];
   positions.forEach((pos, pid) => {
     const p = players.get(pid);
+    const captioned = caption?.data.player_id === pid;
     dots.push({ id: pid, ...pos, color: colorOf(p?.team_id), label: String(p?.shirt_number ?? ""),
-                highlight: caption?.data.player_id === pid });  // prettier-ignore
+                highlight: captioned, followed: followed?.player_id === pid,
+                name: captioned ? p?.display_name : undefined });  // prettier-ignore
   });
 
   const tick = Math.floor(t); // the feed changes at most once per match second
@@ -182,9 +239,13 @@ function Centre({
         else if (e.type === "period_end") items.push({ ...base, kind: "period", title: e.period === 1 ? "Half-time" : "Full-time" });
       });
     }
+    const carries = METRICS[metric].carries;
     for (const { overlay, t: at } of insights) {
       if (at > tick) continue;
+      const figures = Object.entries((overlay.data.metrics ?? {}) as Record<string, number>).filter(([k]) => carries(k));
       items.push({
+        chips: figures.map(([k, v]) => `${metricLabel(k)} ${v}${metricUnit(k)}`),
+        mine: !!followed && overlay.data.player_id === followed.player_id,
         id: overlay.overlay_id, t: at, order: overlay.period * 1e8 + overlay.trigger_clock_ms * 10 + 5,
         minute: (overlay.period === 2 ? 45 : 0) + overlay.trigger_clock_ms / 60000,
         kind: "insight", title: overlay.template.replaceAll("_", " "), text: overlay.text,
@@ -192,7 +253,7 @@ function Centre({
       });  // prettier-ignore
     }
     return items.sort((a, b) => b.order - a.order); // newest first; the second half follows half-time
-  }, [tick, insightsOnly, insights, timeline, times, keep, nameOf, colorOf, teams]);
+  }, [tick, insightsOnly, insights, timeline, times, keep, nameOf, colorOf, teams, metric, followed]);
 
   const moments = insights.filter((i) => !i.overlay.template.endsWith("_badge")); // badges: captions only
   const sides: Side[] = [match.home, match.away].map((team) => ({
@@ -203,6 +264,23 @@ function Centre({
   const markers = insights
     .filter((i) => i.overlay.template === "momentum_bar")
     .map((i) => ({ t: i.t, color: colorOf(i.overlay.data.team_id as string | null), label: i.overlay.text }));
+  const insightPoints: InsightPoint[] = insights.flatMap(({ overlay, t: at }) =>
+    Object.entries((overlay.data.metrics ?? {}) as Record<string, number>)
+      .filter(([k]) => METRICS.speed.carries(k))
+      .map(([k, v]) => ({ t: at, team_id: (overlay.data.team_id as string | null) ?? null, v, label: k })),
+  );
+  const theirMoments = followed
+    ? insights.filter((i) => i.t <= tick && i.overlay.data.player_id === followed.player_id).reverse()
+    : [];
+  const metricSelect = (id: string) => (
+    <Select id={id} value={metric} onChange={(e) => setPrefs({ metric: e.target.value as MetricKey })}>
+      {METRIC_KEYS.map((k) => (
+        <option key={k} value={k}>
+          {METRICS[k].label}
+        </option>
+      ))}
+    </Select>
+  );
   const numberOf = (pid: string) => String(players.get(pid)?.shirt_number ?? "");
   const jump = (to: number) => setT(Math.max(0, Math.min(axis.total, to)));
   const subject = (o: Overlay) =>
@@ -229,6 +307,89 @@ function Centre({
         <span className="ml-auto text-sm text-slate-500">{match.venue}</span>
       </Card>
 
+      <Card className="p-4" aria-labelledby="your-view">
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h2 id="your-view" className="text-sm font-semibold">
+            Your view
+          </h2>
+          <span className="text-xs text-slate-500">Remembered on this device</span>
+          <div className="flex flex-wrap gap-1.5 sm:ml-auto" role="group" aria-label="Favourite clubs">
+            {[match.home, match.away].map((team) => (
+              <button
+                key={team.team_id}
+                type="button"
+                onClick={() => toggleFavourite(team.team_id)}
+                aria-pressed={favourite(team.team_id)}
+                className={cn(
+                  "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
+                  favourite(team.team_id)
+                    ? "border-amber-300 bg-amber-50 text-amber-900"
+                    : "border-slate-300 text-slate-600 hover:bg-slate-50",
+                )}
+              >
+                <Star className={cn("h-3.5 w-3.5", favourite(team.team_id) && "fill-amber-400 text-amber-500")} aria-hidden />
+                {team.short_name}
+                <span className="sr-only"> favourite club</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <Field label="Mode" tip={<InfoTip term="modes" align="start" />}>
+            <Select value={mode} onChange={(e) => setPrefs({ mode: e.target.value as Mode })}>
+              {MODES.map((m) => (
+                <option key={m} value={m}>
+                  {MODE_LABELS[m]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Language">
+            <Select value={language} onChange={(e) => setPrefs({ language: e.target.value })}>
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Show">
+            <Select value={club} onChange={(e) => setClub(e.target.value)}>
+              <option value="all">Both clubs</option>
+              {[match.home, match.away].map((team) => (
+                <option key={team.team_id} value={team.team_id}>
+                  {favourite(team.team_id) ? "★ " : ""}
+                  {team.name} only
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Follow a player" tip={<InfoTip term="follow" />}>
+            <Select
+              value={followed?.player_id ?? ""}
+              onChange={(e) => setPrefs({ player: e.target.value || null })}
+            >
+              <option value="">Nobody</option>
+              {[match.home, match.away].map((team) => (
+                <optgroup key={team.team_id} label={team.name}>
+                  {match.players
+                    .filter((pl) => pl.team_id === team.team_id)
+                    .sort((a, b) => a.shirt_number - b.shirt_number)
+                    .map((pl) => (
+                      <option key={pl.player_id} value={pl.player_id}>
+                        {pl.shirt_number} {pl.display_name}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Your metric" tip={<InfoTip term={METRICS[metric].term} align="end" />}>
+            {metricSelect("metric-view")}
+          </Field>
+        </div>
+      </Card>
+
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-3">
           <Pitch dots={dots} ball={ball} label={`${match.home.name} v ${match.away.name}, replay`}>
@@ -237,6 +398,9 @@ function Centre({
           {caption && (
             <Caption inline overlay={caption} subject={subject(caption)} color={colorOf(caption.data.team_id as string | null)} />
           )}
+          <p className="sr-only" aria-live="polite">
+            {caption ? `${subject(caption)}: ${caption.text}` : ""}
+          </p>
 
           <Card className="space-y-3 p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -310,44 +474,71 @@ function Centre({
           </Card>
         </div>
 
-        <Card aria-label="Match feed">
-          <CardHeader className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              <Select value={mode} onChange={(e) => setMode(e.target.value as Mode)} aria-label="Mode">
-                {MODES.map((m) => (
-                  <option key={m} value={m}>
-                    {MODE_LABELS[m]}
-                  </option>
-                ))}
-              </Select>
-              <Select value={language} onChange={(e) => setLanguage(e.target.value)} aria-label="Language">
-                {LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.label}
-                  </option>
-                ))}
-              </Select>
-              <Select value={club} onChange={(e) => setClub(e.target.value)} aria-label="Club">
-                <option value="all">Both clubs</option>
-                <option value={match.home.team_id}>{match.home.name}</option>
-                <option value={match.away.team_id}>{match.away.name}</option>
-              </Select>
+        <div className="space-y-4">
+          {followed && (
+            <PlayerCard
+              matchId={match.match_id}
+              player={followed}
+              team={teams[followed.team_id]}
+              period={period}
+              clockMs={clockMs}
+              onPitch={positions.has(followed.player_id)}
+              moments={theirMoments}
+              onJump={jump}
+              onUnfollow={() => setPrefs({ player: null })}
+            />
+          )}
+          <Card aria-label="Match feed">
+            <CardHeader className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 className="text-sm font-semibold">Match feed</h2>
+              <InfoTip term="statuses" />
+              <label className="ml-auto flex items-center gap-2 text-xs text-slate-600">
+                <input type="checkbox" checked={insightsOnly} onChange={(e) => setInsightsOnly(e.target.checked)} />
+                Insights only
+              </label>
+              {result?.key === selection && result.error && (
+                <div role="alert" className="flex w-full flex-wrap items-center gap-2 text-xs text-rose-700">
+                  Could not load insights: {result.error}
+                  <Button variant="outline" size="sm" onClick={loadOverlays}>
+                    Try again
+                  </Button>
+                </div>
+              )}
+            </CardHeader>
+            <div className="max-h-[36rem] overflow-auto">
+              <Feed items={feed} onJump={jump} />
             </div>
-            <label className="flex items-center gap-2 text-xs text-slate-600">
-              <input type="checkbox" checked={insightsOnly} onChange={(e) => setInsightsOnly(e.target.checked)} />
-              Insights only
-            </label>
-          </CardHeader>
-          <div className="max-h-[36rem] overflow-auto">
-            <Feed items={feed} onJump={jump} />
-          </div>
-        </Card>
+          </Card>
+        </div>
       </div>
+
+      {!analytics && analyticsError && (
+        <Card role="alert" className="flex flex-wrap items-center gap-3 p-4 text-sm text-rose-700">
+          Could not load the charts: {analyticsError}
+          <Button variant="outline" size="sm" onClick={onRetryAnalytics}>
+            Try again
+          </Button>
+        </Card>
+      )}
 
       {analytics && (
         <div className="grid items-start gap-4 lg:grid-cols-2">
-          <Card className="p-4">
-            <ControlChart axis={axis} t={t} rows={analytics.team_state} sides={sides} markers={markers} />
+          <Card className="space-y-3 p-4">
+            <div className="flex items-center gap-2">
+              <label htmlFor="metric-chart" className="text-xs text-slate-600">
+                Chart
+              </label>
+              {metricSelect("metric-chart")}
+            </div>
+            <MetricChart
+              axis={axis}
+              t={t}
+              metric={metric}
+              analytics={analytics}
+              sides={sides}
+              markers={markers}
+              insightPoints={insightPoints}
+            />
           </Card>
           <Card className="p-4">
             <ShotMap axis={axis} t={t} shots={analytics.shots} sides={sides} nameOf={nameOf} />
