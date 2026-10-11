@@ -9,6 +9,7 @@ Built once per match file and cached (a few matches; keyed by file modification 
 replaying a match does not re-read 15 MB of tracking per request.
 """
 
+import bisect
 import json
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -18,9 +19,11 @@ from typing import Any
 from pydantic import BaseModel
 
 from pitch_ledger.engine.metrics import is_counted_pass, shot_xg
-from pitch_ledger.eventstore.rows import team_state_rows
+from pitch_ledger.engine.physical import physical
+from pitch_ledger.engine.windows import WINDOW_MS, MatchEngine, match_minute
+from pitch_ledger.eventstore.rows import STEP_MS, team_state_rows
 from pitch_ledger.matchlab.io import EVENTS_JSONL, TRACKING_JSONL, MatchFiles, read_match
-from pitch_ledger.schema import Event
+from pitch_ledger.schema import Event, TrackingSample
 from pitch_ledger.schema.enums import EventType, Outcome
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -79,6 +82,16 @@ class TeamMinute(BaseModel):
     control: int | None  # 0-100 per team (they do not sum to 100)
     possession_pct: float | None
     ppda: float | None
+    pass_accuracy: float | None  # % of counted passes completed
+    tempo: float | None  # passes per minute on the ball
+
+
+class ChaosMinute(BaseModel):
+    """The match's chaos level (0-100) at a whole minute, over the same 5-minute window."""
+
+    period: int
+    minute: float
+    chaos: int
 
 
 class ShotPoint(BaseModel):
@@ -97,7 +110,31 @@ class ShotPoint(BaseModel):
 
 class Analytics(BaseModel):
     team_state: list[TeamMinute]
+    chaos: list[ChaosMinute]
     shots: list[ShotPoint]
+
+
+class PlayerMinute(BaseModel):
+    """A player's whole-match totals up to ``clock_ms`` of ``period`` (included)."""
+
+    period: int
+    clock_ms: int
+    minute: float
+    passes: int
+    passes_completed: int
+    pass_accuracy: float | None  # %
+    shots: int
+    xg: float
+    goals: int
+    distance_km: float | None  # None until the player has been tracked
+    top_speed_kmh: float | None
+    sprints: int | None
+
+
+class PlayerTimeline(BaseModel):
+    player_id: str
+    team_id: str
+    minutes: list[PlayerMinute]
 
 
 class PassNode(BaseModel):
@@ -141,6 +178,7 @@ class MatchData:
     timeline: Timeline
     _events: list[Event] = field(default_factory=list)
     _analytics: Analytics | None = None
+    _players: dict[str, PlayerTimeline] | None = None
     _frames: dict[int, tuple[list[str], dict[int, list[float | None]]]] = field(
         default_factory=dict
     )
@@ -161,6 +199,12 @@ class MatchData:
         if self._analytics is None:
             self._analytics = build_analytics(self.files, self.events)
         return self._analytics
+
+    def player_timeline(self, player_id: str) -> PlayerTimeline | None:
+        """Every player's running totals, built on first use (one pass over tracking)."""
+        if self._players is None:
+            self._players = build_player_timelines(self.files, self.events, self.tracking_path)
+        return self._players.get(player_id)
 
     def pass_network(self, team_id: str, period: int, end_ms: int, window_s: int) -> PassNetwork:
         return build_pass_network(self.files, self.events, team_id, period, end_ms, window_s)
@@ -211,7 +255,8 @@ def build_timeline(files: MatchFiles) -> Timeline:
 
 
 def build_analytics(files: MatchFiles, events: list[Event]) -> Analytics:
-    """Team state per minute (the engine's rolling windows) and every shot with its xG."""
+    """Team state and match chaos per minute (the engine's rolling 5-minute windows) and
+    every shot with its xG."""
     away = files.match.away_team_id
     state = [
         TeamMinute(
@@ -220,8 +265,18 @@ def build_analytics(files: MatchFiles, events: list[Event]) -> Analytics:
             possession_pct=round(100 * r["possession_share"], 1)
             if r["possession_share"] is not None else None,
             ppda=r["ppda"],
+            pass_accuracy=round(100 * r["pass_accuracy"], 1)
+            if r["pass_accuracy"] is not None else None,
+            tempo=round(r["tempo"], 1) if r["tempo"] is not None else None,
         )
         for r in team_state_rows(files.match, events)
+    ]  # fmt: skip
+    engine = MatchEngine(files.match, events)
+    chaos = [
+        ChaosMinute(period=period, minute=round(match_minute(period, end_ms), 2),
+                    chaos=round(engine.chaos_window(period, max(0, end_ms - WINDOW_MS),
+                                                    end_ms).chaos))
+        for period, end_ms in minute_marks(engine, events, whole_only=True)
     ]  # fmt: skip
     shots: list[ShotPoint] = []
     count: dict[str, int] = {}
@@ -239,7 +294,91 @@ def build_analytics(files: MatchFiles, events: list[Event]) -> Analytics:
             outcome=e.outcome.value if e.outcome else "unknown",
             team_shots=count[e.team_id], team_xg=round(total[e.team_id], 2),
         ))  # fmt: skip
-    return Analytics(team_state=state, shots=shots)
+    return Analytics(team_state=state, chaos=chaos, shots=shots)
+
+
+def minute_marks(
+    engine: MatchEngine, events: list[Event], whole_only: bool = False
+) -> list[tuple[int, int]]:
+    """``(period, end_ms)`` at every whole minute of each period (the team-state minutes),
+    plus the period's end when it falls between minutes (unless ``whole_only``)."""
+    marks = []
+    for period in sorted({e.period for e in events}):
+        end = engine.period_end_ms(period) or max(e.clock_ms for e in events if e.period == period)
+        marks += [(period, ms) for ms in range(STEP_MS, end + 1, STEP_MS)]
+        if not whole_only and end % STEP_MS:
+            marks.append((period, end))
+    return marks
+
+
+def read_tracking_by_player(path: Path) -> dict[str, list[TrackingSample]]:
+    """Tracking rows per player in clock order (trusted, already validated match files)."""
+    found: dict[str, list[TrackingSample]] = {}
+    if path.exists():
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                if line.strip():
+                    row = json.loads(line)
+                    found.setdefault(row["player_id"], []).append(
+                        TrackingSample.model_construct(**row)
+                    )
+    for rows in found.values():
+        rows.sort(key=lambda s: (s.period, s.clock_ms))
+    return found
+
+
+def build_player_timelines(
+    files: MatchFiles, events: list[Event], tracking_path: Path
+) -> dict[str, PlayerTimeline]:
+    """Each player's whole-match totals at every minute mark.
+
+    Passing and shooting use the engine's definitions (counted passes, ``shot_xg``); running
+    sums ``engine.physical`` over consecutive windows, which add up to the whole match."""
+    marks = minute_marks(MatchEngine(files.match, events), events)
+    tracking = read_tracking_by_player(tracking_path)
+    result = {}
+    for player in files.players:
+        pid = player.player_id
+        own = [e for e in events if e.player_id == pid]
+        samples = tracking.get(pid, [])
+        keys = [(s.period, s.clock_ms) for s in samples]
+        passes = done = shots = goals = 0
+        xg = distance_m = top = 0.0
+        sprints = seconds = 0
+        i = 0
+        previous: dict[int, int] = {}
+        minutes = []
+        for period, end_ms in marks:
+            while i < len(own) and (own[i].period, own[i].clock_ms) <= (period, end_ms):
+                e = own[i]
+                if is_counted_pass(e):
+                    passes += 1
+                    done += e.outcome is Outcome.COMPLETE
+                elif e.event_type is EventType.SHOT:
+                    shots += 1
+                    xg += shot_xg(e)
+                    goals += e.outcome is Outcome.GOAL
+                i += 1
+            start_ms = previous.get(period, -1)
+            previous[period] = end_ms
+            lo = max(0, bisect.bisect_right(keys, (period, start_ms)) - 1)  # one sample before
+            hi = bisect.bisect_right(keys, (period, end_ms))
+            if run := physical(samples[lo:hi], period, start_ms, end_ms).get(pid):
+                distance_m += run.distance_m
+                sprints += run.sprints
+                top = max(top, run.top_speed_kmh)
+                seconds += run.seconds
+            minutes.append(PlayerMinute(
+                period=period, clock_ms=end_ms, minute=round(match_minute(period, end_ms), 2),
+                passes=passes, passes_completed=done,
+                pass_accuracy=round(100 * done / passes, 1) if passes else None,
+                shots=shots, xg=round(xg, 2), goals=goals,
+                distance_km=round(distance_m / 1000, 2) if seconds else None,
+                top_speed_kmh=round(top, 1) if seconds else None,
+                sprints=sprints if seconds else None,
+            ))  # fmt: skip
+        result[pid] = PlayerTimeline(player_id=pid, team_id=player.team_id, minutes=minutes)
+    return result
 
 
 def build_pass_network(

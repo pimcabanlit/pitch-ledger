@@ -3,6 +3,7 @@
 import asyncio
 import json
 import time
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -198,6 +199,16 @@ def test_match_centre_analytics_and_pass_network_come_from_the_engine(data_dir: 
     assert sum(s["outcome"] == "goal" for s in data["shots"]) == 5
     minutes = [m for m in data["team_state"] if m["team_id"] == "T02" and m["minute"] == 69.0]
     assert minutes and 0 <= minutes[0]["control"] <= 100  # whole numbers, as insights quote them
+    assert 0 <= minutes[0]["pass_accuracy"] <= 100 and minutes[0]["tempo"] > 0
+
+    from pitch_ledger.engine.windows import MatchEngine
+    from pitch_ledger.matchlab.io import read_match
+
+    engine = MatchEngine(read_match(data_dir / "M0002", with_tracking=False).match, events)
+    chaos = {(c["period"], c["minute"]): c["chaos"] for c in data["chaos"]}
+    assert len(chaos) == len(data["team_state"]) // 2  # one per minute, both teams share it
+    assert chaos[(2, 69.0)] == round(engine.chaos_window(2, 19 * 60_000, 24 * 60_000).chaos)
+    assert all(0 <= c <= 100 for c in chaos.values())
 
     params = {"team": "T02", "period": 2, "end_ms": 1431700, "window_s": 600}
     net = client.get("/api/v1/matches/M0002/pass-network", params=params).json()
@@ -211,11 +222,41 @@ def test_match_centre_analytics_and_pass_network_come_from_the_engine(data_dir: 
     assert client.get("/api/v1/matches/M0002/pass-network", params=bad).status_code == 404
 
 
+def test_player_timeline_running_totals_match_the_stats_tools(data_dir: Path) -> None:
+    from pitch_ledger.mcp_server.tools import StatsTools
+
+    client = _client(data_dir)
+    tools = StatsTools(data_dir / "M0002")
+    scorers = [e.player_id for e in tools.events if e.event_type.value == "shot"
+               and e.outcome is not None and e.outcome.value == "goal"]  # fmt: skip
+    for pid in {scorers[0], "T01-P01", "T02-P05"}:
+        assert pid is not None
+        timeline = client.get(f"/api/v1/matches/M0002/players/{pid}/timeline").json()
+        assert timeline["team_id"] == pid[:3]
+        rows = timeline["minutes"]
+        clocks = [(r["period"], r["clock_ms"]) for r in rows]
+        assert clocks == sorted(clocks) and rows[0]["clock_ms"] == 60_000
+        stats = tools.get_player_stats(pid)
+        last = rows[-1]  # the period end: whole-match totals
+        for key in ("passes", "passes_completed", "pass_accuracy", "shots", "xg", "goals",
+                    "sprints", "top_speed_kmh"):  # fmt: skip
+            assert last[key] == stats[key], (pid, key)
+        assert last["distance_km"] == pytest.approx(stats["distance_km"], abs=0.01)
+        assert all(a["passes"] <= b["passes"] for a, b in pairwise(rows))
+        half = [r for r in rows if r["period"] == 1][-1]  # period 1 totals, by the tools too
+        first = tools.get_player_stats(pid, period=1)
+        assert (half["passes"], half["goals"]) == (first["passes"], first["goals"])
+    assert client.get("/api/v1/matches/M0002/players/T05-P01/timeline").status_code == 404
+    assert client.get("/api/v1/matches/M0002/players/bad/timeline").status_code == 422
+
+
 def test_public_endpoints(data_dir: Path) -> None:
     client = _client(data_dir)
     assert client.get("/api/v1/health").json()["matches"] == 1
     [summary] = client.get("/api/v1/matches").json()
     assert summary["match_id"] == "M0002" and summary["away"]["name"] == "Corrowmere Town"
+    assert (summary["score_home"], summary["score_away"]) == (4, 1)
+    assert summary["aired_insights"] == 0  # the fixture's only insight is pending
     detail = client.get("/api/v1/matches/M0002").json()
     assert (detail["score_home"], detail["score_away"]) == (4, 1)
     assert "ratings" not in detail["players"][0]  # fans get names, not internals

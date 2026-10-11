@@ -36,12 +36,13 @@ class MatchSummary(BaseModel):
     venue: str
     home: TeamView
     away: TeamView
+    score_home: int | None = None  # after the last event (a goal counts at the shot)
+    score_away: int | None = None
+    aired_insights: int | None = None  # in the match list only
 
 
 class MatchDetail(MatchSummary):
     players: list[PlayerView]
-    score_home: int | None
-    score_away: int | None
     last_minute: float | None
 
 
