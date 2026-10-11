@@ -236,8 +236,8 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 | Web PubSub | Free tier (20 connections, 20k messages/day) |
 | Container images | GitHub Container Registry, public images (free; the repo stays private) instead of Azure Container Registry |
 | GitHub Actions | 2,000 free minutes a month for a private repo; a deploy is about 8 minutes |
-| Models | Main cost; token caps, small model for rewrites, develop locally first |
-| Guardrail | Budget alerts at $25 and $50 |
+| Models | Main variable cost; token caps, call budgets, small model for rewrites, develop locally first. Each run's cost is priced from its tokens (`ModelSettings` prices) and kept in the ADX table `RunUsage` (replay, live, producer decisions, evaluations), with cost per match and per aired insight on the ADX dashboard |
+| Guardrail | A $25 monthly budget with alerts at 50%, 80% and 100% (actual) and 100% (forecast); judging-period guardrails in docs/azure-setup.md, *Cost monitoring* |
 
 **Never** use the former employer's tenant, subscription or credits.
 

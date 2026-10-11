@@ -240,7 +240,7 @@ Menu names drift a little between versions of the web UI; when it differs, look 
    - Label `Match`, Parameter type **Single selection**, Variable name **`_match_id`** (exactly), Data type **string**.
    - Source **Query** → Data source `matchdata` → query `Events | distinct match_id | order by match_id asc` → Run → Value column `match_id`.
    - Default value **M0002** → **Done** → close. (A default *Time range* parameter may exist; our tiles don't use it, so it can stay or be removed.)
-5. **Add each tile** from `infra/adx/dashboard.kql` (8 tiles): **+ Add** → **Add tile** → data source `matchdata` → paste the query (the lines under one `// Tile` heading) → **Run** → **+ Add visual** → set the visual below → name the tile → **Apply changes**.
+5. **Add each tile** from `infra/adx/dashboard.kql` (10 tiles; 9 and 10 are cost): **+ Add** → **Add tile** → data source `matchdata` → paste the query (the lines under one `// Tile` heading) → **Run** → **+ Add visual** → set the visual below → name the tile → **Apply changes**.
 
    | Tile | Visual | Settings |
    | --- | --- | --- |
@@ -252,6 +252,8 @@ Menu names drift a little between versions of the web UI; when it differs, look 
    | 6. Insights | Table | — |
    | 7. Feed health | **Time chart** | X: `window_start`, Y: `p50_ms`, `p95_ms` (filled by the live service: M0002) |
    | 8. Ops alerts | Table | Filled by `live --store adx` (and `store` after a replay). If you added this tile before 2026-10-10, paste the updated query from `infra/adx/dashboard.kql`: it shows each alert's latest state |
+   | 9. Model cost per match | Table | All matches, last 30 days (`RunUsage`); no Match picker |
+   | 10. Model cost per day | **Column chart** | X: `day`, Y: `cost_usd`, Series: `kind` |
 
 6. **Arrange:** drag tile edges to resize; put tiles 1, 2 and 3 on top.
 7. **Auto refresh** (for live matches): ⋯ / Manage → **Auto refresh** → on, every 30 s (or the shortest offered).
@@ -610,8 +612,54 @@ Pay per token on a Standard or Global Standard deployment, with no hourly charge
 | `check-models` | 1 | 34 / 6 | ~$0 |
 | `--only momentum_shift,key_moment --budget 60` | 60 | 47,151 / 2,315 | ~2 US cents |
 | `--only momentum_shift --budget 25` | 18 | 17,678 / 1,325 | < 1 US cent |
+| M0002 goals only (`--only goal --budget 60`, 2026-10-11) | 49 | 54,862 / 4,150 | ~3 US cents |
 
 Calls rejected with 401 or 403 never reach the model and are not billed.
+
+## Cost monitoring
+
+**In the app (built 2026-10-11).**
+- Every run prices its tokens per tier at the US$-per-million prices in `ModelSettings`. The
+  defaults are the gpt-4.1-mini list price, $0.40 input and $1.60 output; check the pricing
+  page and override with `PITCH_LEDGER_PRICE_STRONG_INPUT` and the like.
+- `replay` and `live` print the model cost and the cost per aired insight. `run.json` holds
+  `cost_usd` and `cost_per_aired_insight`; the scorecard's `usage` holds `cost_usd`.
+- Each run is also a row in the ADX table `RunUsage`: replay and live jobs, every producer
+  decision (the API), and `evaluate --store`. Offline runs cost $0.
+- The ADX dashboard tiles 9 and 10 (`infra/adx/dashboard.kql`) show cost per match, per
+  aired insight and per day.
+- These are estimates from tokens and list prices. **The Azure bill (Cost Management) is the
+  source of truth.**
+
+**Owner steps (once).**
+1. ADX: re-run `infra/adx/tables.kql` in the query editor on `matchdata`. It adds
+   `RunUsage` and the season-history tables; existing tables are kept. Then add tiles 9 and
+   10 to the dashboard. Neither needs the Match picker.
+2. **Budget with alerts:**
+   - In the portal, search **Cost Management**, then **Budgets**, then **+ Add**. Scope:
+     your subscription.
+   - Name it `pitch-ledger-monthly`, reset period **Monthly**, amount **$25**. Event Hubs
+     alone is about $11 a month, so $15 would alert every month.
+   - **Next**. Add alert conditions **Actual** at 50%, 80% and 100%, and **Forecasted** at
+     100%. Recipient: your email. **Create**.
+3. **Monthly view by resource:**
+   - **Cost Management** → **Cost analysis**. Set the date range to **This month**,
+     **Group by: Resource**, and the chart to **Column (stacked)**.
+   - **Save as** `Pitch Ledger by resource`. Check it weekly until Nov 20.
+4. Tick the follow-up "Confirm a budget alert exists on the subscription" below.
+
+**Guardrails for judging (to Nov 20).**
+
+| Action | Who can do it | Model calls | Cost |
+| --- | --- | --- | --- |
+| Browse the Studio (homepage, Match Centre, Insight Story, producer console) | anyone | none | $0 (apps scale to zero, inside the free grant) |
+| Block an insight | any signed-in producer | none | $0 |
+| Approve a pending insight | any signed-in producer | about 6 | a fraction of a cent. Limited to 10 decisions a minute per producer and 120 calls per API process. M0003's 6 pending insights together cost under 1 cent |
+| Run `pitch-ledger-live` + `pitch-ledger-feed`, or `pitch-ledger-replay` | the owner only (portal, Run now) | about 80–170 per match | a few US cents per run |
+| Event Hubs (Basic) | always on | none | about $11 a month, fixed; delete after Nov 20 |
+
+Nothing runs on a schedule. Every Foundry call shows up in `RunUsage` and in Foundry →
+Tracing.
 
 ## Follow-ups
 
@@ -629,7 +677,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
 - [x] ADX tables created; `check-store` passes (streaming write readable after 3.5 s); M0002 loaded (`store --store adx`, 129,781 rows in 23 s); live `listen --store adx` verified with test match M0099 (1,343 rows, feed health).
 - [x] Live service in Container Apps with Foundry and the ADX store (2026-10-10): M0002 at 25x, all rows received, 54 triggers, 15 insights aired (225 overlays), planted error caught and corrected, no blocks; feed lag p95 under 5 s after packing tracking rows (it grew to 2 minutes with one row per message). The live job waits 10 idle minutes for the feed and the feed repeats the match reference, so the two jobs can start in either order (see Measured, 2026-10-10).
-- [x] ADX dashboard `Pitch Ledger control room` built from `infra/adx/dashboard.kql` (8 tiles, Match picker, live refresh); verified 2026-10-10 on the live M0002 run and on M0005. The six demo matches are in the event store (M0002 from the live service; the others written with `store`, so their insight, feed-health and ops-alert tiles are empty).
+- [x] ADX dashboard `Pitch Ledger control room` built from `infra/adx/dashboard.kql` (8 tiles then, Match picker, live refresh; cost tiles 9 and 10 added 2026-10-11, owner step in *Cost monitoring*); verified 2026-10-10 on the live M0002 run and on M0005. The six demo matches are in the event store (M0002 from the live service; the others written with `store`, so their insight, feed-health and ops-alert tiles are empty).
 - [x] ADX test matches (M0099, M0012) cleared (2026-10-10: tables emptied before the final live run).
 - [ ] ADX: the event store only appends, so before re-running a live match, empty its rows as database admin (`.execute database script <|` followed by one `.clear table <name> data` line per table, or `.delete table <name> records <| <name> | where match_id == 'M0002'` per table to keep other matches).
 - [ ] Service Bus: 16 triggers of test match M0012 sit in the `triggers` dead-letter queue from a run before the send/receive race fix (reason `stale`); harmless (later runs ignore them), clear them in the portal (Service Bus Explorer, dead-letter, receive) if you like.

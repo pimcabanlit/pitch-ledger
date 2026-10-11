@@ -32,7 +32,7 @@ from typing import Any, Literal
 
 from pitch_ledger.agents.auditor import Auditor
 from pitch_ledger.agents.flow import FULL_FLOW, Services
-from pitch_ledger.agents.model_manager import ModelManager, ModelSettings
+from pitch_ledger.agents.model_manager import ModelManager, ModelSettings, run_costs
 from pitch_ledger.agents.orchestrator import MatchContext, Orchestrator, Outcome
 from pitch_ledger.agents.queue import Delivery, TriggerQueue
 from pitch_ledger.eventstore.port import EventStore
@@ -40,6 +40,7 @@ from pitch_ledger.eventstore.rows import (
     FeedHealthMeter,
     history_rows,
     insight_status_row,
+    run_usage_row,
     trigger_row,
 )
 from pitch_ledger.feed.port import Delivered, FeedSubscriber
@@ -94,6 +95,7 @@ class LiveReport:
             },
             "failures": self.failures,
             "usage": self.usage,
+            **run_costs(self.usage, sum(o.status == "aired" for o in self.outcomes)),
         }  # fmt: skip
 
 
@@ -372,6 +374,13 @@ class LiveService:
         async with ModelManager(settings) as models:
             await asyncio.gather(self.ingest(), self.worker(models))
             self.report.usage = models.usage.as_dict()
+        if self.store is not None:  # the run's model cost, for the cost tiles
+            aired = sum(o.status == "aired" for o in self.report.outcomes)
+            match = ",".join(sorted(self.matches)) or "none"
+            self.store.append("RunUsage", [run_usage_row(
+                "live", match, self.report.usage, models.provider, models.version, aired,
+                time.time())])  # fmt: skip
+            self.store.flush()
         return self.report
 
 

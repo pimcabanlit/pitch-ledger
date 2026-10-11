@@ -59,3 +59,19 @@ OpsAlerts
 | project raised_at, severity, kind, message, acknowledged_by
 | order by raised_at desc
 | take 20
+
+// Tile 9. Model cost per match and per aired insight, last 30 days (table; all matches).
+// Cost is priced in code at the configured US$ per million tokens (RunUsage); the Azure
+// bill (Cost Management) is the source of truth for what was charged.
+RunUsage
+| where recorded_at > ago(30d)
+| summarize runs = count(), calls = sum(calls), cost_usd = round(sum(cost_usd), 4),
+    aired = sum(aired_insights) by match_id, kind
+| extend cost_per_aired_insight = iff(aired > 0, round(cost_usd / aired, 5), real(null))
+| order by cost_usd desc
+
+// Tile 10. Model cost per day by run kind (column chart: x = day, y = cost_usd, series = kind)
+RunUsage
+| where recorded_at > ago(30d)
+| summarize cost_usd = round(sum(cost_usd), 4) by day = startofday(recorded_at), kind
+| order by day asc

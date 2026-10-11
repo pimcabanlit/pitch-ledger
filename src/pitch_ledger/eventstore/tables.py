@@ -85,6 +85,14 @@ TABLES: dict[str, tuple[Column, ...]] = {
         ("passes_completed", "int"), ("pass_accuracy", "real"), ("distance_km", "real"),
         ("top_speed_kmh", "real"), ("sprints", "int"), ("recorded_at", "datetime"),
     ),
+    # Model cost: one row per run that called models (replay, live, producer decision,
+    # evaluation), priced at the configured US$ per million tokens.
+    "RunUsage": (
+        ("run_id", "string"), ("kind", "string"), ("match_id", "string"),
+        ("provider", "string"), ("model_version", "string"), ("calls", "int"),
+        ("input_tokens", "long"), ("output_tokens", "long"), ("cost_usd", "real"),
+        ("aired_insights", "int"), ("recorded_at", "datetime"),
+    ),
     # Evaluation history: each scorecard (and Foundry evaluation) run with its gates.
     "EvalRuns": (
         ("run_id", "string"), ("kind", "string"), ("generated_at", "datetime"),

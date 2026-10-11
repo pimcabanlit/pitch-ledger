@@ -11,9 +11,11 @@ runs the Personalizer and Translator), and the match's ops alerts with acknowled
 Run: ``pitch-ledger api`` (Uvicorn).
 """
 
+import asyncio
+import logging
 import time
 from collections import defaultdict, deque
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,15 +52,19 @@ from pitch_ledger.api.schemas import (
 )
 from pitch_ledger.api.settings import ApiSettings
 from pitch_ledger.api.story import build_broadcast, build_story, evidence_events
-from pitch_ledger.eventstore.rows import insight_status
+from pitch_ledger.eventstore.port import EventStore
+from pitch_ledger.eventstore.rows import insight_status, run_usage_row
 from pitch_ledger.feed.live import match_minute
 from pitch_ledger.infra_adapters.ledger_queue import LedgerQueueSettings
+from pitch_ledger.infra_adapters.stores import StoreSettings, open_store
 from pitch_ledger.infra_adapters.webpubsub import PushSettings, open_notifier
 from pitch_ledger.ledger import FileLedger, InMemoryLedger
 from pitch_ledger.matchlab.io import MatchFiles
 from pitch_ledger.ops import OpsDesk
 from pitch_ledger.push import Notifier
-from pitch_ledger.schema import OpsAlert, Overlay
+from pitch_ledger.schema import Insight, OpsAlert, Overlay
+
+log = logging.getLogger(__name__)
 
 MatchIdPath = Annotated[str, Path(pattern=r"^M\d{4}$")]
 InsightIdPath = Annotated[str, Path(pattern=r"^M\d{4}-I\d{4}$")]
@@ -91,7 +97,10 @@ def create_app(
     repository: MatchRepository | None = None,
     verifier: EntraVerifier | None = None,
     notifier: Notifier | None = None,
+    usage_store: EventStore | None = None,
 ) -> FastAPI:
+    """``usage_store`` keeps each decision's model cost (``RunUsage``); by default the ADX
+    event store when ``PITCH_LEDGER_STORE=adx``, else none (local runs write nothing)."""
     settings = settings or ApiSettings()
     repo = repository or MatchRepository(settings.data_dir, LedgerQueueSettings())
     tenant, audience = settings.api_tenant_id, settings.api_audience
@@ -111,6 +120,25 @@ def create_app(
     )
     app.add_middleware(GZipMiddleware, minimum_size=1000)  # timelines and tracking are large
     limiter = RateLimiter(settings.api_decisions_per_minute)
+    stores: list[EventStore] = [usage_store] if usage_store is not None else []
+
+    def keep_usage(insight: Insight, spent: dict[str, Any]) -> None:
+        """A decision's model cost to ``RunUsage`` (fail-open: never fails the decision)."""
+        if not stores:
+            store_settings = StoreSettings()
+            if store_settings.store != "adx":
+                return
+            try:
+                stores.append(open_store(store_settings, fail_open=True))
+            except Exception as exc:  # settings or sign-in: skip the cost row, keep serving
+                log.warning("decision cost not kept: %s", exc)
+                return
+        row = run_usage_row("decision", insight.match_id, spent["usage"], spent["provider"],
+                            spent["model_version"], int(insight_status(insight) == "aired"),
+                            time.time())  # fmt: skip
+        stores[0].append("RunUsage", [row])
+        stores[0].flush()
+
     centre = MatchCentre()
     push: Notifier = notifier or open_notifier(PushSettings())
 
@@ -312,11 +340,14 @@ def create_app(
         ledger, view = insight_of(insight_id)
         match_dir = repo.match_dir(view.insight.match_id)
         assert match_dir is not None  # insight_of checked the match exists
+        spent: dict[str, Any] = {}
         outcome = await decide_insight(match_dir, ledger, insight_id, who.producer_id,
                                        body.approve, body.reason,
                                        provider=settings.api_decision_provider,
-                                       notifier=push)  # fmt: skip
+                                       notifier=push, usage_out=spent)  # fmt: skip
         decided = ledger.get_insight(insight_id) or view.insight
+        if spent.get("usage", {}).get("calls"):
+            await asyncio.to_thread(keep_usage, decided, spent)
         signal = {"insight_id": insight_id, "status": insight_status(decided)}
         push.notify(decided.match_id, "producers", "insight_changed", signal)
         if signal["status"] == "aired":

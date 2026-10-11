@@ -415,3 +415,22 @@ def test_any_account_settings_build_a_verifier_without_a_tenant(tmp_path: Path) 
                            api_tenant_id=None, api_producers="any_account")  # fmt: skip
     app = create_app(settings)
     assert app.state.verifier is not None and app.state.verifier.any_account
+
+
+def test_a_decision_keeps_its_model_cost(data_dir: Path, tmp_path: Path) -> None:
+    from pitch_ledger.eventstore import FileEventStore
+
+    store = FileEventStore(tmp_path / "store")
+    app = create_app(_settings(data_dir), _repo(data_dir), None, NullNotifier(), usage_store=store)
+    client = TestClient(app)
+    [view] = client.get("/api/v1/matches/M0002/insights", params={"status": "pending"}).json()
+    insight_id = view["insight"]["insight_id"]
+    assert client.post(f"/api/v1/insights/{insight_id}/decision",
+                       json={"approve": True}).json()["status"] == "aired"  # fmt: skip
+    store.close()
+    [row] = [
+        json.loads(x) for x in (tmp_path / "store" / "RunUsage.jsonl").read_text().splitlines()
+    ]
+    assert (row["kind"], row["match_id"], row["aired_insights"]) == ("decision", "M0002", 1)
+    assert row["calls"] > 0 and row["cost_usd"] == 0.0  # offline templates: no cost
+    assert row["model_version"] == "offline-templates"

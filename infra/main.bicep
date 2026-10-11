@@ -383,7 +383,7 @@ var jobs = [
   {
     name: '${prefix}-replay'
     command: ['pitch-ledger', 'replay']
-    args: replayArgs
+    args: concat(replayArgs, empty(adxClusterUri) ? [] : ['--store', 'adx']) // model cost -> RunUsage
     cpu: '1.0'
     memory: '2Gi'
   }

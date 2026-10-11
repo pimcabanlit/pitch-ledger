@@ -290,6 +290,23 @@ def cmd_replay(args: argparse.Namespace) -> int:
         f"{usage['input_tokens']}, out {usage['output_tokens']}); stats calls "
         f"{summary['stats_calls']}; {summary['duration_s']} s"
     )
+    per = summary["cost_per_aired_insight"]
+    print(f"model cost US${summary['cost_usd']:.4f}"
+          + (f" (US${per:.5f} per aired insight)" if per is not None else ""))  # fmt: skip
+    if args.store:  # the run's model cost in the RunUsage table
+        import time
+
+        from pitch_ledger.eventstore.rows import run_usage_row
+        from pitch_ledger.infra_adapters.stores import open_store
+
+        store = open_store(_store_settings(args.store), fail_open=True)
+        try:
+            store.append("RunUsage", [run_usage_row(
+                "replay", run.match_id, usage, summary["provider"], summary["model_version"],
+                status.get("aired", 0), time.time())])  # fmt: skip
+            store.flush()
+        finally:
+            store.close()
     for dead in summary["dead_letters"]:
         print(
             f"DEAD LETTER {dead['trigger_id']} after {dead['deliveries']} deliveries: "
@@ -318,13 +335,18 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     if args.store:  # keep the run in the evaluation history (EvalRuns)
         import time
 
-        from pitch_ledger.eventstore.rows import eval_run_row
+        from pitch_ledger.eventstore.rows import eval_run_row, run_usage_row
         from pitch_ledger.infra_adapters.stores import open_store
 
         settings = _store_settings(args.store)
         store = open_store(settings)
         try:
-            store.append("EvalRuns", [eval_run_row(card, "scorecard", time.time())])
+            now = time.time()
+            store.append("EvalRuns", [eval_run_row(card, "scorecard", now)])
+            u = card["usage"]
+            store.append("RunUsage", [run_usage_row(
+                "evaluation", ",".join(card["matches"]), u, u.get("provider"),
+                u.get("model_version"), card["accuracy"]["aired_insights"], now)])  # fmt: skip
             store.flush()
         finally:
             store.close()
@@ -362,7 +384,8 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
     )
     print(
         f"  model calls {u.get('calls', 0)} ({u.get('failures', 0)} failed; tokens in "
-        f"{u.get('input_tokens', 0)}, out {u.get('output_tokens', 0)})"
+        f"{u.get('input_tokens', 0)}, out {u.get('output_tokens', 0)}; cost "
+        f"US${u.get('cost_usd', 0.0):.4f})"
     )
     for name, ok in card["gates"].items():
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
@@ -830,8 +853,8 @@ def cmd_live(args: argparse.Namespace) -> int:
                   f"{outcome.overlays:>2} overlays  {headline}")  # fmt: skip
     u, w = summary["usage"], summary["trigger_to_outcome_s"]
     print(f"processed {summary['processed']} triggers {summary['status']}; trigger to outcome "
-          f"p50 {w['p50']} s, max {w['max']} s; model calls {u.get('calls', 0)}; "
-          f"failures {len(summary['failures'])}")  # fmt: skip
+          f"p50 {w['p50']} s, max {w['max']} s; model calls {u.get('calls', 0)} "
+          f"(US${summary['cost_usd']:.4f}); failures {len(summary['failures'])}")  # fmt: skip
     return 0 if not summary["failures"] else 1
 
 
@@ -923,6 +946,9 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--budget", type=int, help="model call budget for paid providers")
     rep.add_argument("--ledger", choices=["file", "cosmos"], help="ledger (default: settings)")
     rep.add_argument("--queue", choices=["memory", "servicebus"], help="trigger queue")
+    rep.add_argument(
+        "--store", choices=["file", "adx"], help="also keep the run's model cost in RunUsage"
+    )
     rep.add_argument(
         "--history",
         choices=["file", "cosmos", "none"],

@@ -88,6 +88,27 @@ def history_rows(record: MatchRecord, recorded_at: float) -> dict[str, list[dict
     }
 
 
+def run_usage_row(
+    kind: str,
+    match_id: str,
+    usage: dict[str, Any],
+    provider: str | None,
+    model_version: str | None,
+    aired_insights: int,
+    recorded_at: float,
+) -> dict[str, Any]:
+    """A run's model usage and cost for the ``RunUsage`` table (``usage``: ``Usage.as_dict``)."""
+    at = _utc(recorded_at)
+    return {
+        "run_id": f"{kind}-{match_id}-{at}", "kind": kind, "match_id": match_id,
+        "provider": provider, "model_version": model_version,
+        "calls": int(usage.get("calls", 0)), "input_tokens": int(usage.get("input_tokens", 0)),
+        "output_tokens": int(usage.get("output_tokens", 0)),
+        "cost_usd": float(usage.get("cost_usd", 0.0)), "aired_insights": aired_insights,
+        "recorded_at": at,
+    }  # fmt: skip
+
+
 def eval_run_row(card: dict[str, Any], kind: str, recorded_at: float) -> dict[str, Any]:
     """A scorecard (or Foundry evaluation) run for the ``EvalRuns`` table."""
     generated = str(card.get("generated_at") or _utc(recorded_at))
