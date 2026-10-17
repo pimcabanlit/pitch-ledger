@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from pitch_ledger.api.plain import explain_alert, explain_step, reasons
+from pitch_ledger.api.plain import explain_alert, explain_step, reasons, why_clause
 from pitch_ledger.schema import AuditRecord, Insight, InsightSubject, OpsAlert, Trigger
 
 NOW = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
@@ -54,6 +54,17 @@ def test_budget_and_content_filter_fallbacks_say_why() -> None:
     assert "safety filter" in explain_alert(alert, INSIGHT, [blocked]).headline
     plain = _alert("model_fallback", "template copy used")  # no records to read
     assert explain_alert(plain).headline == "An insight aired with pre-written wording."
+
+
+def test_a_draft_with_no_usable_reply_is_not_blamed_on_the_text() -> None:
+    explainer = _audit("explainer", "fallback", ["explainer: no usable reply"])
+    alert = _alert("model_fallback", "template copy used for M0002-I0013 at 69' (explainer): "
+                   "explainer: no usable reply", ["M0002-I0017", "M0002-A0079"])  # fmt: skip
+    assert explain_alert(alert, INSIGHT, [explainer]).details == [
+        "Why: the AI gave no usable reply."]  # fmt: skip
+    assert why_clause(["the AI service did not answer", "too many numbers"]) == (
+        "the AI service did not answer and the AI's text had too many numbers"
+    )
 
 
 def test_blocks_dead_letters_and_feed_alerts() -> None:

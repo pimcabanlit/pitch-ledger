@@ -105,12 +105,16 @@ def test_a_beat_with_an_invented_number_falls_back_to_its_template(cases: list[C
         json.dumps({"texts": bad}),  # two beats fail
         json.dumps({"texts": {"plain.outlook": bad["plain.outlook"],
                               "numbers.buildup": good["numbers.buildup"]}}),  # one fixed
+        json.dumps({"texts": {"plain.outlook": bad["plain.outlook"]}}),  # still failing
     ])  # fmt: skip
     svc = _services(case, {"narrator": narrator})
     record = asyncio.run(tell_story(insight, case.trigger, case.facts, svc, facts))
 
     assert [sorted(r["drafts"]) for r in narrator.requests] == [
-        sorted(KEYS), ["numbers.buildup", "plain.outlook"]]  # fmt: skip
+        sorted(KEYS), ["numbers.buildup", "plain.outlook"], ["plain.outlook"]]  # fmt: skip
+    assert narrator.requests[0]["feedback"] == {}
+    assert sorted(narrator.requests[1]["feedback"]) == ["numbers.buildup", "plain.outlook"]
+    assert "numbers not in metrics: 99" in narrator.requests[2]["feedback"]["plain.outlook"]
     plain_en = record.beats_for("plain", "en")
     assert plain_en is not None
     assert plain_en.outlook == template_beats(facts, "plain", "en")["outlook"]

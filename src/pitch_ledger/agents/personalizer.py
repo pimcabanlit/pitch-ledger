@@ -18,10 +18,10 @@ async def personalize(
     metrics: dict[str, int | float],
     facts: Facts,
 ) -> dict[str, CheckedCopy]:
-    """English copy per mode; each one checked, retried alone once, else the template."""
+    """English copy per mode; each one checked, retried alone with feedback, else the template."""
     values = {**metrics, **facts.names()}
 
-    def request(wanted: list[str]) -> PersonalizeRequest:
+    def request(wanted: list[str], feedback: dict[str, str]) -> PersonalizeRequest:
         return PersonalizeRequest(
             copy_key=key,
             modes=wanted,
@@ -29,6 +29,7 @@ async def personalize(
             explanation=insight.explanation,
             metrics=metrics,
             facts=facts,
+            feedback=feedback,
         )
 
     return await checked_set(

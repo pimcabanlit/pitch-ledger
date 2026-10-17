@@ -623,6 +623,7 @@ Pay per token on a Standard or Global Standard deployment, with no hourly charge
 | `--only momentum_shift --budget 25` | 18 | 17,678 / 1,325 | < 1 US cent |
 | M0002 goals only (`--only goal --budget 60`, 2026-10-11) | 49 | 54,862 / 4,150 | ~3 US cents |
 | M0002 full replay with fan stories (`--budget 200`, cosmos ledger, 2026-10-17) | 119 (3 failed) | 135,507 / 15,178 | ~8 US cents (0.5 cents per aired insight) |
+| M0002 full replay after the fallback fixes (PR #10; `--budget 200`, local file ledger, 2026-10-17) | 111 (1 failed) | 139,672 / 14,426 | ~8 US cents; no text aired as a template (was 18 of 150 and 1 draft) |
 
 Calls rejected with 401 or 403 never reach the model and are not billed.
 
@@ -678,8 +679,8 @@ Tracing.
 - [x] Enterprise controls (2026-10-11): `infra/enterprise-controls.sh` run (tracing role, key auth off on Foundry, Cosmos DB, Event Hubs, Service Bus and Web PubSub, Azure AI Administrator removed from `pitch-ledger-dev`); every check passes with Entra ID only; content filter blocks the prompt-injection probe; traces visible in Foundry → Tracing (Enterprise controls, Verified).
 - [ ] Put a calendar reminder a week before the client secret expires.
 - [x] Fan story live (2026-10-17): M0002 re-run on Foundry after PR #7 deployed; 17 insights aired, planted error caught and corrected, 10 stories stored, all 120 beats written by the Narrator and Translator and passing their checks (none fell back). Model call budget raised to 160 (PR #8).
-- [ ] Copy quality: in the 2026-10-17 run, 8 of 9 ops alerts were on-screen versions that aired as templates because a Spanish or Filipino translation (mostly casual and single-metric) had more figures than its mode allows. The Translator seems to add numbers the English copy left out; tighten its prompt or pass it the mode's figure limit.
-- [ ] The Explainer's first momentum draft in that run came back as non-JSON three times (template used, then the planted error, then a model-written revision that aired). Check the trace if it recurs.
+- [x] Copy quality: in the 2026-10-17 run, 8 of 9 ops alerts were on-screen versions that aired as templates (18 of 150 texts) because a casual or single-metric text had more figures than its mode allows, mostly Spanish or Filipino translations of a bare English score like "4-1". Changed: the Translator prompt keeps exactly the English text's numbers, single-metric copy gets a label ("Score: 4-1"), and a failing text is retried up to twice with the rejected text and the reasons (it was retried once, blind). Confirmed by a local Foundry run of M0002 the same day: no fallbacks.
+- [x] The Explainer's momentum drafts in that run failed three times with "no JSON object in reply": the draft echoes up to 98 evidence IDs (about 8 tokens each), so the reply was most likely cut off at the 400-token cap. Changed: the Explainer and Narrator caps are 1,600 tokens, and a reply cut off at the cap is retried with twice the cap. Confirmed by a local Foundry run of M0002 the same day: no fallbacks.
 - [ ] Confirm a budget alert exists on the subscription.
 - [x] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User, and every resource is in Bicep under `infra/` (verified by the live runs, 2026-10-10). Key auth off: see Enterprise controls.
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.

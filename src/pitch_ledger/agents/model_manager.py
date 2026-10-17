@@ -46,9 +46,12 @@ TIER: dict[Role, Tier] = {
     "translator": "small",
 }
 MAX_OUTPUT_TOKENS: dict[Role, int] = {
-    "explainer": 400,
-    "auditor": 300,
-    "narrator": 500,
+    # A draft echoes its evidence IDs, about 8 tokens each: the demo's momentum shifts cite
+    # 33 to 98 events, enough to cut a 400-token reply short of its closing brace. A cap
+    # bounds the cost; only the tokens written are paid for.
+    "explainer": 1600,
+    "auditor": 600,  # a review listing several issues ran past 300 in a Foundry run
+    "narrator": 1600,
     "personalizer": 700,  # five modes in one reply
     "translator": 400,  # two languages in one reply
 }
@@ -240,9 +243,11 @@ class ModelManager:
         reply: type[T],
         max_tokens: int | None = None,
     ) -> T:
-        """Run one agent call and parse its JSON reply; retries once, then gives up
-        (``max_tokens``: a larger output cap than the role's, for a longer reply)."""
+        """Run one agent call and parse its JSON reply; retries once (with twice the output
+        cap if the reply was cut off), then gives up (``max_tokens``: a larger output cap
+        than the role's, for a longer reply)."""
         last: Exception | None = None
+        cap = max_tokens or MAX_OUTPUT_TOKENS[role]
         for _ in range(2):
             if self.paid and self.usage.calls >= self.settings.model_call_budget:
                 raise ModelUnavailable("model call budget spent") from last
@@ -253,7 +258,7 @@ class ModelManager:
                 instructions=instructions,
                 name=role,
                 default_options={
-                    "max_tokens": max_tokens or MAX_OUTPUT_TOKENS[role],
+                    "max_tokens": cap,
                     "temperature": self.settings.model_temperature,
                 },
             )
@@ -266,6 +271,9 @@ class ModelManager:
                                       int(details.get("output_token_count") or 0))  # fmt: skip
                 if response.finish_reason == "content_filter":
                     raise ChatClientContentFilterException("reply filtered")
+                if response.finish_reason == "length":
+                    cap *= 2
+                    raise ValueError(f"reply cut off at the output cap ({cap // 2} tokens)")
                 return parse_json(response.text, reply)
             except ChatClientContentFilterException as exc:  # a retry would be blocked too
                 self.usage.failures += 1
