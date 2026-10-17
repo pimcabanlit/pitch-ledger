@@ -603,6 +603,15 @@ How to read the error codes:
 - **403 from the model endpoint**: the app is recognized but not allowed. Check the role, its scope (the Foundry resource) and that it's assigned to the right identity.
 - **In IAM, a service principal row shows its Application (client) ID**, the same value as `AZURE_CLIENT_ID`. A token's `oid` claim is a different ID (the object ID) for the same app. Don't compare those two.
 
+## Lessons learned (fan story, 2026-10-17)
+
+| # | Symptom | Cause | Fix |
+| --- | --- | --- | --- |
+| 16 | (Caught before it happened.) Re-running M0002 with the new story step would have made every live M0002 page fail | The deployed API's Cosmos loader looked up every document's `kind` and raised on one it didn't know; the new code writes a `story` document per insight | The loader now skips unknown kinds. Order matters for any new ledger document: merge and deploy the code that reads it, then run what writes it |
+| 17 | A full Foundry replay of M0002 used 119 of its 120 allowed calls | The fan story adds two calls (Narrator, Translator) to each fully explained insight, so a full insight is 10 calls, not 8 | The budget is 160 per run (`modelCallBudget`, `model_call_budget`). Whenever a step adds model calls, re-check the budget against a full replay |
+| 18 | The live Studio couldn't be opened from a Claude Code cloud session (`connect_rejected`) | The session's egress proxy doesn't allow the Container Apps host | Verify a live run by reading the ledger back from Cosmos DB (`MatchRepository(...).ledger("M0002")`), or open the site yourself |
+| 19 | A Studio file came back with every line reformatted | `npx prettier` was run, but the repo has no Prettier config or dependency | Use only the repo's own checks (`tsc`, `npm run lint`); check `git diff --stat` before committing |
+
 ## Observed cost and usage
 
 Pay per token on a Standard or Global Standard deployment, with no hourly charge.
@@ -613,6 +622,7 @@ Pay per token on a Standard or Global Standard deployment, with no hourly charge
 | `--only momentum_shift,key_moment --budget 60` | 60 | 47,151 / 2,315 | ~2 US cents |
 | `--only momentum_shift --budget 25` | 18 | 17,678 / 1,325 | < 1 US cent |
 | M0002 goals only (`--only goal --budget 60`, 2026-10-11) | 49 | 54,862 / 4,150 | ~3 US cents |
+| M0002 full replay with fan stories (`--budget 200`, cosmos ledger, 2026-10-17) | 119 (3 failed) | 135,507 / 15,178 | ~8 US cents (0.5 cents per aired insight) |
 
 Calls rejected with 401 or 403 never reach the model and are not billed.
 
@@ -667,6 +677,9 @@ Tracing.
 
 - [x] Enterprise controls (2026-10-11): `infra/enterprise-controls.sh` run (tracing role, key auth off on Foundry, Cosmos DB, Event Hubs, Service Bus and Web PubSub, Azure AI Administrator removed from `pitch-ledger-dev`); every check passes with Entra ID only; content filter blocks the prompt-injection probe; traces visible in Foundry → Tracing (Enterprise controls, Verified).
 - [ ] Put a calendar reminder a week before the client secret expires.
+- [x] Fan story live (2026-10-17): M0002 re-run on Foundry after PR #7 deployed; 17 insights aired, planted error caught and corrected, 10 stories stored, all 120 beats written by the Narrator and Translator and passing their checks (none fell back). Model call budget raised to 160 (PR #8).
+- [ ] Copy quality: in the 2026-10-17 run, 8 of 9 ops alerts were on-screen versions that aired as templates because a Spanish or Filipino translation (mostly casual and single-metric) had more figures than its mode allows. The Translator seems to add numbers the English copy left out; tighten its prompt or pass it the mode's figure limit.
+- [ ] The Explainer's first momentum draft in that run came back as non-JSON three times (template used, then the planted error, then a model-written revision that aired). Check the trace if it recurs.
 - [ ] Confirm a budget alert exists on the subscription.
 - [x] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User, and every resource is in Bicep under `infra/` (verified by the live runs, 2026-10-10). Key auth off: see Enterprise controls.
 - [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
