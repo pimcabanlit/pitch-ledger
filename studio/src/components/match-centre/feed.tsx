@@ -65,7 +65,7 @@ export function Feed({ items, onJump }: { items: FeedItem[]; onJump: (t: number)
                 )}
                 {item.insightId && (
                   <Link href={`/insights/${item.insightId}`} className="text-xs text-sky-700 hover:underline">
-                    How we know →
+                    Tell me more →
                   </Link>
                 )}
               </div>
