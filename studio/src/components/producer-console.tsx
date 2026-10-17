@@ -1,10 +1,10 @@
 "use client";
 
-import { CheckCircle2, ChevronRight, CircleAlert, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, CircleAlert, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { EvidenceTable } from "@/components/evidence-table";
+import { InsightProcess } from "@/components/insight-process";
 import { OpsPanel } from "@/components/ops-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import {
   ApiError,
-  LANGUAGES,
   api,
   type AlertView,
   type InsightDetail,
@@ -20,7 +19,6 @@ import {
   type InsightView,
   type MatchSummary,
 } from "@/lib/api";
-import { metricLabel, metricUnit } from "@/lib/metrics";
 import { useRealtime } from "@/lib/realtime";
 import { matchMinute, minuteLabel } from "@/lib/utils";
 
@@ -38,14 +36,6 @@ const AUDIT_LABELS: Record<string, string> = {
   corrected: "Auditor: passed after a fix",
   blocked: "Auditor: blocked",
 };
-const MODE_LABELS: Record<string, string> = {
-  casual: "Casual fan",
-  analyst: "Analyst",
-  club_focus: "Club focus",
-  player_focus: "Player focus",
-  single_metric: "Single metric",
-};
-const LANGUAGE_NAMES: Record<string, string> = { ...Object.fromEntries(LANGUAGES.map((l) => [l.code, l.label])), es: "Spanish" };
 const POLL_MS = 10000; // without push
 
 function signInMessage(error: unknown): string {
@@ -249,7 +239,7 @@ export function ProducerConsole() {
           />
         ) : (
           <Card className="flex items-center justify-center p-8 text-sm text-slate-500">
-            Select an insight to review its audit trail and evidence.
+            Select an insight to see how it was made, stage by stage.
           </Card>
         )}
       </div>
@@ -273,10 +263,6 @@ function InsightPanel({
   onDecide: (approve: boolean) => void;
 }) {
   const i = detail.insight;
-  const [technical, setTechnical] = useState(false);
-  const preview = detail.overlays.filter(
-    (o) => ["analyst", "casual"].includes(o.audience_mode) && ["en", "es"].includes(o.language),
-  );
   return (
     <Card>
       <CardHeader className="space-y-1">
@@ -319,73 +305,8 @@ function InsightPanel({
         </CardContent>
       )}
 
-      <CardContent className="space-y-4">
-        <section>
-          <h3 className="mb-2 flex items-center gap-1 text-sm font-medium">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden /> How it was checked
-            <button
-              onClick={() => setTechnical((v) => !v)}
-              aria-expanded={technical}
-              className="ml-auto flex items-center gap-0.5 text-xs font-normal text-slate-500 hover:text-slate-700"
-            >
-              <ChevronRight className={`h-3 w-3 transition-transform ${technical ? "rotate-90" : ""}`} aria-hidden />
-              Technical details
-            </button>
-          </h3>
-          <ol className="space-y-1">
-            {detail.audits.map((a) => (
-              <li key={a.audit_id} className="flex gap-2 text-sm">
-                <span
-                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                    a.passed === false ? "bg-rose-500" : a.passed ? "bg-emerald-500" : "bg-slate-300"
-                  }`}
-                />
-                <div className="min-w-0">
-                  <p className="text-slate-700">{a.summary}</p>
-                  {technical && (
-                    <p className="font-mono text-xs break-words text-slate-400">
-                      r{a.round} {a.actor} · {a.action}
-                      {a.findings.length > 0 && ` · ${a.findings.join("; ")}`}
-                    </p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
-
-        <section>
-          <h3 className="mb-2 text-sm font-medium">The numbers (computed from match data)</h3>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(i.metrics).map(([k, v]) => (
-              <Badge key={k}>
-                {metricLabel(k)}: {v}
-                {metricUnit(k)}
-              </Badge>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <h3 className="mb-2 text-sm font-medium">Match events it is based on ({detail.evidence.length})</h3>
-          <EvidenceTable evidence={detail.evidence} names={names} />
-        </section>
-
-        {preview.length > 0 && (
-          <section>
-            <h3 className="mb-2 text-sm font-medium">On air (analyst and casual fan, in English and Spanish)</h3>
-            <ul className="space-y-1">
-              {preview.map((o) => (
-                <li key={o.overlay_id} className="text-sm">
-                  <Badge className="mr-2">
-                    {MODE_LABELS[o.audience_mode] ?? o.audience_mode} · {LANGUAGE_NAMES[o.language] ?? o.language}
-                  </Badge>
-                  {o.text}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+      <CardContent>
+        <InsightProcess detail={detail} names={names} />
       </CardContent>
     </Card>
   );

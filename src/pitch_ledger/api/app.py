@@ -32,6 +32,7 @@ from pitch_ledger.api.match_centre import (
     Timeline,
     TrackingWindow,
 )
+from pitch_ledger.api.narrative import build_narratives
 from pitch_ledger.api.plain import explain_alert, explain_step
 from pitch_ledger.api.repository import MatchRepository
 from pitch_ledger.api.schemas import (
@@ -54,7 +55,7 @@ from pitch_ledger.api.schemas import (
     team_view,
 )
 from pitch_ledger.api.settings import ApiSettings
-from pitch_ledger.api.story import build_broadcast, build_story, evidence_events
+from pitch_ledger.api.story import build_broadcast, build_process, build_story, evidence_events
 from pitch_ledger.eventstore.port import EventStore
 from pitch_ledger.eventstore.rows import insight_status, run_usage_row
 from pitch_ledger.feed.live import match_minute
@@ -283,9 +284,12 @@ def create_app(
         ledger, view = aired(insight_id)
         files = match_files(view.insight.match_id)
         trigger = ledger.get_trigger(view.insight.trigger_id or "")
+        overlays = ledger.overlays(insight_id)
+        narratives = build_narratives(centre_data(view.insight.match_id), view.insight, trigger,
+                                      overlays)  # fmt: skip
         return build_story(summary(files), view.insight, trigger, ledger.audits(insight_id),
-                           ledger.overlays(insight_id),
-                           {e["event_id"]: e for e in files.events})  # fmt: skip
+                           overlays, {e["event_id"]: e for e in files.events},
+                           narratives)  # fmt: skip
 
     @app.get("/api/v1/insights/{insight_id}/broadcast", response_model=BroadcastPackage)
     def broadcast(insight_id: InsightIdPath) -> BroadcastPackage:
@@ -330,10 +334,13 @@ def create_app(
         ledger, view = insight_of(insight_id)
         events = {e["event_id"]: e for e in match_files(view.insight.match_id).events}
         evidence = evidence_events(events, view.insight.evidence_event_ids)
-        steps = [AuditStep(**a.model_dump(), summary=explain_step(a))
-                 for a in ledger.audits(insight_id)]  # fmt: skip
+        audits = ledger.audits(insight_id)
+        steps = [AuditStep(**a.model_dump(), summary=explain_step(a)) for a in audits]
+        overlays = ledger.overlays(insight_id)
+        trigger = ledger.get_trigger(view.insight.trigger_id or "")
+        process = build_process(view.insight, trigger, audits, overlays, evidence)
         return InsightDetail(**view.model_dump(), audits=steps, evidence=evidence,
-                             overlays=ledger.overlays(insight_id))  # fmt: skip
+                             overlays=overlays, process=process)  # fmt: skip
 
     @app.post("/api/v1/insights/{insight_id}/decision", response_model=DecisionResult)
     async def decision(

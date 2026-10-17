@@ -24,7 +24,8 @@ function urgency(a: AlertView) {
 /**
  * Ops alerts for the selected match, newest first: one plain headline per alert (what
  * happened) and what to do about it, with the details and the technical log behind a
- * toggle. Open alerts stay on top until a producer acknowledges them.
+ * toggle. Open alerts stay on top until a producer acknowledges them. The panel starts
+ * collapsed to its header, whose badges still say whether anything needs the producer.
  */
 export function OpsPanel({
   alerts,
@@ -35,6 +36,7 @@ export function OpsPanel({
   onAcknowledge: (alertId: string) => Promise<void>;
   onOpenInsight: (insightId: string) => void;
 }) {
+  const [collapsed, setCollapsed] = useState(true); // details on demand; the badges say if anything needs you
   const [showDone, setShowDone] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,8 +65,15 @@ export function OpsPanel({
 
   return (
     <Card aria-label="Ops alerts">
-      <CardHeader className="flex flex-row flex-wrap items-center gap-2 text-sm font-medium">
-        Ops alerts
+      <CardHeader className={`flex flex-row flex-wrap items-center gap-2 text-sm font-medium ${collapsed ? "border-b-0" : ""}`}>
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          aria-expanded={!collapsed}
+          className="flex items-center gap-1 hover:text-slate-700"
+        >
+          <ChevronRight className={`h-4 w-4 transition-transform ${collapsed ? "" : "rotate-90"}`} aria-hidden />
+          Ops alerts
+        </button>
         {alerts !== null &&
           (needYou.length ? (
             <Badge tone={needYou.some((a) => a.severity === "critical") ? "critical" : "warning"}>
@@ -74,6 +83,14 @@ export function OpsPanel({
             <Badge tone="aired">Nothing needs you</Badge>
           ))}
         {fyi.length > 0 && <span className="text-xs font-normal text-slate-500">{fyi.length} FYI</span>}
+        {collapsed ? (
+          <button
+            onClick={() => setCollapsed(false)}
+            className="ml-auto text-xs font-normal text-sky-700 underline-offset-2 hover:underline"
+          >
+            Show details
+          </button>
+        ) : (
         <span className="ml-auto flex items-center gap-3">
           {fyi.length > 1 && (
             <button
@@ -93,8 +110,9 @@ export function OpsPanel({
             </button>
           )}
         </span>
+        )}
       </CardHeader>
-      {alerts === null ? (
+      {collapsed ? null : alerts === null ? (
         <p className="px-4 py-3 text-sm text-slate-500">Loading ops alerts…</p>
       ) : shown.length === 0 ? (
         <p className="flex items-center gap-2 px-4 py-3 text-sm text-slate-500">

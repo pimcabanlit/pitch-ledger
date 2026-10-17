@@ -17,8 +17,10 @@ from pitch_ledger.api.schemas import (
     BroadcastGraphic,
     BroadcastPackage,
     EvidenceEvent,
+    InsightProcess,
     InsightStory,
     MatchSummary,
+    StoryNarrative,
     StoryStage,
     StoryStep,
     StoryTrigger,
@@ -170,18 +172,16 @@ def _stages(
     ]  # fmt: skip
 
 
-def build_story(
-    match: MatchSummary,
+def build_process(
     insight: Insight,
     trigger: Trigger | None,
     audits: Sequence[AuditRecord],
     overlays: Sequence[Overlay],
-    events: Mapping[str, Mapping[str, Any]],
-) -> InsightStory:
+    evidence: Sequence[EvidenceEvent],
+) -> InsightProcess:
+    """The pipeline behind one insight: what the producer console's process flow shows."""
     allowed = list((trigger.metrics if trigger else insight.metrics).values())
     steps = [_step(a, allowed) for a in audits]
-    evidence = evidence_events(events, insight.evidence_event_ids)
-    status = insight_status(insight)
     ordered = sorted(overlays, key=lambda o: o.overlay_id)
     story_trigger = None
     if trigger is not None:
@@ -194,17 +194,37 @@ def build_story(
             windows=_windows(trigger),
             season_matches=list(_season_matches(trigger)),
         )
+    return InsightProcess(
+        trigger=story_trigger,
+        stages=_stages(insight, trigger, steps, evidence, ordered, insight_status(insight)),
+        steps=steps,
+        evidence_counts=dict(Counter(e.event_type for e in evidence).most_common()),
+    )
+
+
+def build_story(
+    match: MatchSummary,
+    insight: Insight,
+    trigger: Trigger | None,
+    audits: Sequence[AuditRecord],
+    overlays: Sequence[Overlay],
+    events: Mapping[str, Mapping[str, Any]],
+    narratives: Sequence[StoryNarrative] = (),
+) -> InsightStory:
+    evidence = evidence_events(events, insight.evidence_event_ids)
+    process = build_process(insight, trigger, audits, overlays, evidence)
     return InsightStory(
         match=match,
         insight=insight.model_copy(update={"approved_by": approval_label(insight.approved_by)}),
-        status=status,
+        status=insight_status(insight),
         minute=round(match_minute(insight.period, insight.clock_ms), 1),
-        trigger=story_trigger,
-        stages=_stages(insight, trigger, steps, evidence, ordered, status),
-        steps=steps,
+        trigger=process.trigger,
+        stages=process.stages,
+        steps=process.steps,
         evidence=evidence,
-        evidence_counts=dict(Counter(e.event_type for e in evidence).most_common()),
-        overlays=ordered,
+        evidence_counts=process.evidence_counts,
+        overlays=sorted(overlays, key=lambda o: o.overlay_id),
+        narratives=list(narratives),
     )
 
 

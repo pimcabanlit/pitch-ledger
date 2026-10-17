@@ -92,6 +92,11 @@ def test_audit_steps_and_reasons_in_plain_words() -> None:
         "auditor", "check", ["evidence M0002-E000999 is not part of this moment"], False
     )
     assert explain_step(failed) == "The Auditor found a problem: it cited the wrong match events."
+    planted = _audit("auditor", "check", ["INS-01: '32' in the text matches no cited metric "
+                                          "(cited: turnovers_after=16)"], False)  # fmt: skip
+    assert explain_step(planted) == (
+        "The Auditor found a problem: a number that does not match the match data."
+    )
     assert explain_step(_audit("test", "inject_error", ["control 61"])).startswith("Demo test")
     assert explain_step(_audit("p-1", "producer_block", ["off brand"])) == "A producer blocked it."
     assert reasons(["STYLE: cliché 'game of two halves'", "STYLE: weird new rule"]) == [

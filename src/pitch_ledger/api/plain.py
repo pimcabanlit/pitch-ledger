@@ -33,7 +33,8 @@ _REASONS: tuple[tuple[str, str], ...] = (
     (r"model unavailable|timeout|timed out", "the AI service did not answer"),
     (r"copy has \d+ figures", "too many numbers"),
     (r"ordinals|write minutes like", "minutes in the wrong format"),
-    (r"numbers not in metrics|does not recompute|not one of the trigger's metrics",
+    (r"numbers not in metrics|matches no cited metric|does not recompute"
+     r"|not one of the trigger's metrics",
      "a number that does not match the match data"),
     (r"evidence", "it cited the wrong match events"),
     (r"characters \(max|words \(max|sentences \(max", "too long"),

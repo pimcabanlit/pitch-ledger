@@ -140,6 +140,25 @@ def test_insight_story_traces_an_aired_insight_without_producer_identity(
 
     assert stages["explained"]["detail"] == "2 drafts by the explainer"  # the planted, the fix
 
+    # The fan story: one per audience mode and language, the middle beat the aired version.
+    stories = {(n["mode"], n["language"]): n for n in story["narratives"]}
+    assert len(stories) == 12  # casual, analyst, club and player focus, in three languages
+    analyst = stories["analyst", "en"]
+    assert analyst["title"] == story["insight"]["headline"]
+    assert (
+        "From 47' to 57', Corrowmere Town had 63.6% of the ball and a control score of 49."
+        in analyst["buildup"]
+    )
+    assert analyst["moment"] == next(
+        o["text"]
+        for o in story["overlays"]
+        if (o["audience_mode"], o["language"]) == ("analyst", "en")
+    )
+    assert "1 shot worth 0.07 xG" in analyst["outlook"]
+    casual = stories["casual", "en"]
+    assert "63.6" not in casual["buildup"] and "xG" not in casual["outlook"]  # plain words
+    assert stories["casual", "es"]["title"] == "Corrowmere Town pierde el control"
+
     # Two on-screen versions that fell back to templates do not make the insight a template.
     from pitch_ledger.schema import AuditRecord
 
@@ -295,6 +314,11 @@ def test_pending_insight_is_hidden_from_fans_until_a_producer_approves(data_dir:
     assert any(a["action"] == "inject_error" for a in detail["audits"])
     assert all(a["summary"] for a in detail["audits"])
     assert detail["evidence"] and detail["overlays"] == []
+    stages = {s["key"]: s for s in detail["process"]["stages"]}  # the producer's process flow
+    assert stages["audited"]["done"] and not stages["approved"]["done"]
+    assert stages["approved"]["detail"] == "Waiting for a producer"
+    assert detail["process"]["trigger"]["windows"][0]["label"] == "before"
+    assert sum(detail["process"]["evidence_counts"].values()) == len(detail["evidence"])
 
     result = client.post(f"/api/v1/insights/{insight_id}/decision", json={"approve": True})
     assert result.status_code == 200, result.text
