@@ -1,5 +1,4 @@
 import { ArrowLeftRight, Flag, Goal, RectangleVertical, Sparkles, Target } from "lucide-react";
-import Link from "next/link";
 
 import { minuteLabel } from "@/lib/utils";
 
@@ -13,7 +12,6 @@ export interface FeedItem {
   text?: string;
   color: string;
   insightId?: string;
-  chips?: string[]; // figures for the viewer's chosen metric that this insight carries
   mine?: boolean; // about the followed player
 }
 
@@ -26,8 +24,19 @@ const ICONS = {
   insight: Sparkles,
 };
 
-/** What has happened up to the replay clock, newest first; a click jumps the clock there. */
-export function Feed({ items, onJump }: { items: FeedItem[]; onJump: (t: number) => void }) {
+/**
+ * What has happened up to the replay clock, newest first; a click on the minute jumps the clock
+ * there, and "Tell me more" opens an insight's story.
+ */
+export function Feed({
+  items,
+  onJump,
+  onStory,
+}: {
+  items: FeedItem[];
+  onJump: (t: number) => void;
+  onStory: (insightId: string) => void;
+}) {
   if (!items.length) return <p className="px-4 py-3 text-sm text-slate-500">Nothing yet: press play.</p>;
   return (
     <ol className="divide-y divide-slate-100">
@@ -54,19 +63,10 @@ export function Feed({ items, onJump }: { items: FeedItem[]; onJump: (t: number)
               <div className="min-w-0 flex-1">
                 <p className={`text-sm ${item.kind === "goal" ? "font-semibold" : ""}`}>{item.title}</p>
                 {item.text && <p className="text-sm leading-snug text-slate-700">{item.text}</p>}
-                {item.chips && item.chips.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {item.chips.map((chip) => (
-                      <span key={chip} className="rounded-full bg-white px-2 py-0.5 font-mono text-[11px] text-slate-700 ring-1 ring-slate-200">
-                        {chip}
-                      </span>
-                    ))}
-                  </div>
-                )}
                 {item.insightId && (
-                  <Link href={`/insights/${item.insightId}`} className="text-xs text-sky-700 hover:underline">
+                  <button onClick={() => item.insightId && onStory(item.insightId)} className="text-xs text-sky-700 hover:underline">
                     Tell me more →
-                  </Link>
+                  </button>
                 )}
               </div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import { type Axis, minuteAt, toAxis } from "@/components/match-centre/replay";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -37,7 +37,7 @@ interface Series {
 }
 
 const W = 600;
-const H = 220;
+const H = 400; // the shot map's proportions (111 x 74), so the two sit as a matched pair
 const M = { top: 16, right: 44, bottom: 24, left: 34 };
 const TICKS = [0, 15, 30, 45, 60, 75, 90];
 const CHAOS_COLOR = "#475569";
@@ -77,6 +77,7 @@ export function MetricChart({
   sides,
   markers,
   insightPoints,
+  picker,
 }: {
   axis: Axis;
   t: number;
@@ -85,6 +86,7 @@ export function MetricChart({
   sides: Side[];
   markers: { t: number; color: string; label: string }[];
   insightPoints: InsightPoint[];
+  picker?: ReactNode; // the metric selector, at the start of the header
 }) {
   const def = METRICS[metric];
   const [hover, setHover] = useState<number | null>(null);
@@ -150,8 +152,9 @@ export function MetricChart({
   const ends = visible.map((s) => s.points.at(-1));
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex min-h-9 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+        {picker}
         <span className="flex items-center gap-1 font-medium text-slate-900">
           {def.label}
           {def.source === "insights" ? " (fastest so far)" : ""} at {readMinute}
@@ -235,7 +238,7 @@ export function MetricChart({
         <line x1={x(Math.min(t, axis.total))} x2={x(Math.min(t, axis.total))} y1={M.top} y2={H - M.bottom} stroke="#0f172a" strokeWidth={1} opacity={0.5} />
         {hover !== null && <line x1={x(hover)} x2={x(hover)} y1={M.top} y2={H - M.bottom} stroke="#64748b" strokeWidth={1} />}
       </svg>
-      <p className="text-[11px] text-slate-500">{NOTES[metric]}</p>
+      <p className="mt-auto text-[11px] text-slate-500">{NOTES[metric]}</p>
     </div>
   );
 }

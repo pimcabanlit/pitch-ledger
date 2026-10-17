@@ -41,9 +41,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Suspense fallback={<PlainNavLinks />}>
               <ActiveNavLinks />
             </Suspense>
-            <span className="ml-auto hidden text-xs text-slate-500 md:inline">
-              Synthetic data · fictional clubs
-            </span>
           </nav>
         </header>
         <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">

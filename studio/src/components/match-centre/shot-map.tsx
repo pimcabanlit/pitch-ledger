@@ -25,8 +25,8 @@ export function ShotMap({
   const shown = shots.filter((s) => toAxis(axis, s.period, s.clock_ms) <= t);
   const latest = (team: string) => shown.filter((s) => s.team_id === team).at(-1);
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-slate-600">
+    <div className="flex h-full flex-col gap-2">
+      <div className="flex min-h-9 flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
         <span className="font-medium text-slate-900">Shots so far</span>
         {sides.map((side) => {
           const last = latest(side.team_id);
@@ -69,7 +69,7 @@ export function ShotMap({
           );
         })}
       </ChartPitch>
-      <p className="text-[11px] text-slate-500">
+      <p className="mt-auto text-[11px] text-slate-500">
         Size by expected goals (xG, computed in code from the shot&apos;s position and type). Filled: goal.
         Hover a shot for details.
       </p>
