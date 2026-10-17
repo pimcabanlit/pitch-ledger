@@ -56,7 +56,11 @@ FORM_RULES = {
     "en": (
         (r"\d+[.,]\d+\s*(?:'|minutes?\b|mins?\b)", "write minutes whole, like 77'"),
         (r"\b\d+(?:st|nd|rd|th)\b", "no ordinals; write minutes like 77'"),
-        (r"\bcontrol\b[^.;]{0,40}?\d+(?:[.,]\d+)?\s*%", "the control score is an index, not a %"),
+        # The % must be on the control figure itself: "control 49 to 6, possession 26.5%" is fine.
+        (
+            r"\bcontrol\b[^.;\d]{0,40}?\d+(?:[.,]\d+)?(?:\s*(?:-|\u2013|→|to)\s*\d+(?:[.,]\d+)?)?\s*%",
+            "the control score is an index, not a %",
+        ),
         (r"\b(?:we|our|us)\b", "no first person; the broadcaster stays neutral"),
         (
             r"\b(?:he|him|his|she|her|hers|himself|herself)\b",
