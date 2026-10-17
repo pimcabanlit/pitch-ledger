@@ -277,7 +277,9 @@ function InsightPanel({
             </span>
           )}
           {detail.status === "aired" && (
-            <Link href={`/insights/${i.insight_id}`} className="ml-auto text-sky-700 hover:underline">
+            <Link
+              href={`/matches/${i.match_id}?t=${matchMinute(i.period, i.clock_ms).toFixed(1)}&story=${i.insight_id}`}
+              className="ml-auto text-sky-700 hover:underline">
               Open story →
             </Link>
           )}

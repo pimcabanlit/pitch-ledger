@@ -23,6 +23,7 @@ import {
   useTracking,
 } from "@/components/match-centre/replay";
 import { ShotMap } from "@/components/match-centre/shot-map";
+import { StoryPanel } from "@/components/insight-story";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -37,7 +38,7 @@ import {
   type Overlay,
   type Timeline,
 } from "@/lib/api";
-import { METRIC_KEYS, METRICS, metricLabel, metricUnit, type MetricKey } from "@/lib/metrics";
+import { METRIC_KEYS, METRICS, type MetricKey } from "@/lib/metrics";
 import { usePreferences } from "@/lib/preferences";
 import { useRealtime } from "@/lib/realtime";
 import { minuteLabel } from "@/lib/utils";
@@ -89,6 +90,7 @@ export function MatchCentre({ params }: { params: Promise<{ id: string }> }) {
       analyticsError={analyticsError}
       onRetryAnalytics={() => (setAnalyticsError(null), setAttempt((n) => n + 1))}
       startMinute={Number(search.get("t") ?? "") || null}
+      startStory={search.get("story")}
     />
   );
 }
@@ -105,6 +107,12 @@ export function MatchSkeleton() {
       </div>
     </div>
   );
+}
+
+/** Scroll an element to the top of the view, smoothly unless the reader prefers less motion. */
+function scrollTo(el: HTMLElement | null) {
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  el?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
 }
 
 function Field({ label, children, tip }: { label: string; children: React.ReactNode; tip?: React.ReactNode }) {
@@ -126,6 +134,7 @@ function Centre({
   analyticsError,
   onRetryAnalytics,
   startMinute,
+  startStory,
 }: {
   match: MatchDetail;
   timeline: Timeline;
@@ -133,6 +142,7 @@ function Centre({
   analyticsError: string | null;
   onRetryAnalytics: () => void;
   startMinute: number | null;
+  startStory: string | null;
 }) {
   const axis = useMemo(() => buildAxis(timeline), [timeline]);
   const [playing, setPlaying] = useState(false);
@@ -150,6 +160,18 @@ function Centre({
     started.current = true;
     setT(axisFromMinute(axis, startMinute));
   }, [axis, startMinute, setT]);
+
+  // "Tell me more": the story opens under the replay controls, above the charts, and the page
+  // scrolls to it each time one is picked (from the feed, the caption or a key moment).
+  const [story, setStory] = useState<{ id: string; asked: number } | null>(() =>
+    startStory ? { id: startStory, asked: 0 } : null,
+  );
+  const storyRef = useRef<HTMLDivElement>(null);
+  const pitchRef = useRef<HTMLDivElement>(null);
+  const openStory = useCallback((id: string) => setStory((s) => ({ id, asked: (s?.asked ?? 0) + 1 })), []);
+  useEffect(() => {
+    if (story) scrollTo(storyRef.current);
+  }, [story]);
 
   // Aired overlays in the viewer's mode and language (a slow reply for a left selection is ignored).
   const selection = `${mode}/${language}`;
@@ -238,12 +260,9 @@ function Centre({
         else if (e.type === "period_end") items.push({ ...base, kind: "period", title: e.period === 1 ? "Half-time" : "Full-time" });
       });
     }
-    const carries = METRICS[metric].carries;
     for (const { overlay, t: at } of insights) {
       if (at > tick) continue;
-      const figures = Object.entries((overlay.data.metrics ?? {}) as Record<string, number>).filter(([k]) => carries(k));
       items.push({
-        chips: figures.map(([k, v]) => `${metricLabel(k)} ${v}${metricUnit(k)}`),
         mine: !!followed && overlay.data.player_id === followed.player_id,
         id: overlay.overlay_id, t: at, order: overlay.period * 1e8 + overlay.trigger_clock_ms * 10 + 5,
         minute: (overlay.period === 2 ? 45 : 0) + overlay.trigger_clock_ms / 60000,
@@ -252,7 +271,7 @@ function Centre({
       });  // prettier-ignore
     }
     return items.sort((a, b) => b.order - a.order); // newest first; the second half follows half-time
-  }, [tick, insightsOnly, insights, timeline, times, keep, nameOf, colorOf, teams, metric, followed]);
+  }, [tick, insightsOnly, insights, timeline, times, keep, nameOf, colorOf, teams, followed]);
 
   const moments = insights.filter((i) => !i.overlay.template.endsWith("_badge")); // badges: captions only
   const sides: Side[] = [match.home, match.away].map((team) => ({
@@ -272,7 +291,7 @@ function Centre({
     ? insights.filter((i) => i.t <= tick && i.overlay.data.player_id === followed.player_id).reverse()
     : [];
   const metricSelect = (id: string) => (
-    <Select id={id} value={metric} onChange={(e) => setPrefs({ metric: e.target.value as MetricKey })}>
+    <Select id={id} aria-label="Chart" value={metric} onChange={(e) => setPrefs({ metric: e.target.value as MetricKey })}>
       {METRIC_KEYS.map((k) => (
         <option key={k} value={k}>
           {METRICS[k].label}
@@ -353,19 +372,21 @@ function Centre({
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="space-y-3">
-          <Pitch dots={dots} ball={ball} label={`${match.home.name} v ${match.away.name}, replay`}>
-            {caption && <Caption overlay={caption} subject={subject(caption)} color={colorOf(caption.data.team_id as string | null)} />}
-            <ScoreBug
-              home={match.home}
-              away={match.away}
-              scoreHome={now?.score_home ?? 0}
-              scoreAway={now?.score_away ?? 0}
-              minute={minuteLabel(minuteAt(axis, t))}
-              half={ended ? "Full-time" : period === 1 ? "1st half" : "2nd half"}
-            />
-          </Pitch>
+          <div ref={pitchRef} className="scroll-mt-20">
+            <Pitch dots={dots} ball={ball} label={`${match.home.name} v ${match.away.name}, replay`}>
+              {caption && <Caption overlay={caption} subject={subject(caption)} color={colorOf(caption.data.team_id as string | null)} onStory={openStory} />}
+              <ScoreBug
+                home={match.home}
+                away={match.away}
+                scoreHome={now?.score_home ?? 0}
+                scoreAway={now?.score_away ?? 0}
+                minute={minuteLabel(minuteAt(axis, t))}
+                half={ended ? "Full-time" : period === 1 ? "1st half" : "2nd half"}
+              />
+            </Pitch>
+          </div>
           {caption && (
-            <Caption inline overlay={caption} subject={subject(caption)} color={colorOf(caption.data.team_id as string | null)} />
+            <Caption inline overlay={caption} subject={subject(caption)} color={colorOf(caption.data.team_id as string | null)} onStory={openStory} />
           )}
           <p className="sr-only" aria-live="polite">
             {caption ? `${subject(caption)}: ${caption.text}` : ""}
@@ -431,7 +452,7 @@ function Centre({
                 {moments.map((m) => (
                   <button
                     key={m.overlay.overlay_id}
-                    onClick={() => jump(m.t)}
+                    onClick={() => (jump(m.t), openStory(m.overlay.insight_id))}
                     className="rounded-full border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50"
                   >
                     {minuteLabel((m.overlay.period === 2 ? 45 : 0) + m.overlay.trigger_clock_ms / 60000)}{" "}
@@ -441,6 +462,15 @@ function Centre({
               </div>
             )}
           </Card>
+          {story && (
+            <Card ref={storyRef} className="scroll-mt-20" aria-label="Tell me more">
+              <StoryPanel
+                insightId={story.id}
+                onWatch={(minute) => (jump(axisFromMinute(axis, minute)), scrollTo(pitchRef.current))}
+                onClose={() => setStory(null)}
+              />
+            </Card>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -475,7 +505,7 @@ function Centre({
               )}
             </CardHeader>
             <div className="max-h-[36rem] overflow-auto">
-              <Feed items={feed} onJump={jump} />
+              <Feed items={feed} onJump={jump} onStory={openStory} />
             </div>
           </Card>
         </div>
@@ -491,15 +521,10 @@ function Centre({
       )}
 
       {analytics && (
-        <div className="grid items-start gap-4 lg:grid-cols-2">
-          <Card className="space-y-3 p-4">
-            <div className="flex items-center gap-2">
-              <label htmlFor="metric-chart" className="text-xs text-slate-600">
-                Chart
-              </label>
-              {metricSelect("metric-chart")}
-            </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card className="p-4">
             <MetricChart
+              picker={metricSelect("metric-chart")}
               axis={axis}
               t={t}
               metric={metric}

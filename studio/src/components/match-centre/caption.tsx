@@ -1,21 +1,21 @@
-import Link from "next/link";
-
 import type { Overlay } from "@/lib/api";
 import { minuteLabel, matchMinute } from "@/lib/utils";
 
 /**
  * The broadcast lower-third for one aired insight: minute, subject and the overlay text in
- * the viewer's mode and language, with a link to how it was checked.
+ * the viewer's mode and language, with a button that opens its story.
  */
 export function Caption({
   overlay,
   subject,
   color,
+  onStory,
   inline = false,
 }: {
   overlay: Overlay;
   subject: string;
   color: string;
+  onStory: (insightId: string) => void;
   inline?: boolean; // phones: below the pitch instead of over it
 }) {
   return (
@@ -42,12 +42,12 @@ export function Caption({
           </div>
           <p className="text-sm leading-snug sm:text-base">{overlay.text}</p>
         </div>
-        <Link
-          href={`/insights/${overlay.insight_id}`}
+        <button
+          onClick={() => onStory(overlay.insight_id)}
           className="flex shrink-0 items-center border-l border-white/10 px-3 text-xs text-sky-300 hover:bg-white/5"
         >
           Tell me more →
-        </Link>
+        </button>
       </div>
     </div>
   );
