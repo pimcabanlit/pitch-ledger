@@ -5,10 +5,12 @@ import json
 
 import pytest
 
+from pitch_ledger.agents import copy
 from pitch_ledger.agents.auditor import Auditor, not_a_problem
 from pitch_ledger.agents.contracts import InsightDraft, ReviewVerdict
 from pitch_ledger.agents.flow import Services, decide, explain_and_audit, localize, template_insight
 from pitch_ledger.agents.model_manager import ModelManager, ModelSettings
+from pitch_ledger.agents.translator import translate
 from pitch_ledger.ledger import InMemoryLedger
 from pitch_ledger.ops import OpsDesk, review_insight
 from pitch_ledger.schema import Insight, Trigger
@@ -188,6 +190,37 @@ def test_translator_number_change_falls_back_to_template(cases: list[Case]) -> N
     assert all("999" in f for f in fallback[0].findings)
 
 
+def test_a_translation_that_adds_a_figure_is_retried_with_the_reason(cases: list[Case]) -> None:
+    case = _case(cases, "M0002", "momentum_shift")
+    key = copy.copy_key(case.trigger)
+    values = {**case.trigger.metrics, **case.facts.names()}
+    es, fil = (copy.mode_text(key, "single_metric", lang, values) for lang in ("es", "fil"))
+    padded = f"{es} Pérdidas: {case.trigger.metrics['turnovers_after']:g}."
+    translator = ScriptedChatClient([json.dumps({"texts": {"es": padded, "fil": fil}}),
+                                     json.dumps({"texts": {"es": es}})])  # fmt: skip
+    svc = _services(case, {"translator": translator})
+    english = copy.mode_text(key, "single_metric", "en", values)
+    done = asyncio.run(translate(svc.models, key, "single_metric", ["es", "fil"], english,
+                                 dict(case.trigger.metrics), case.facts))  # fmt: skip
+    assert (done["es"].text, done["es"].source) == (es, "model")
+    assert (done["fil"].text, done["fil"].source) == (fil, "model")
+    first, retry = translator.requests
+    assert first["feedback"] == {} and retry["languages"] == ["es"]
+    assert retry["feedback"]["es"].startswith(f"Rejected: {padded!r}. Fix: STYLE: single_metric")
+
+
+def test_copy_still_failing_after_two_retries_falls_back(cases: list[Case]) -> None:
+    case = _case(cases, "M0002", "momentum_shift")
+    bad = json.dumps({"texts": {"es": "Control 999", "fil": "Control 999"}})
+    translator = ScriptedChatClient([bad] * 3)
+    svc = _services(case, {"translator": translator})
+    done = asyncio.run(translate(svc.models, copy.copy_key(case.trigger), "casual",
+                                 ["es", "fil"], "x", dict(case.trigger.metrics),
+                                 case.facts))  # fmt: skip
+    assert {c.source for c in done.values()} == {"template"} and len(translator.requests) == 3
+    assert all(len(c.findings) == 3 for c in done.values())
+
+
 def test_speed_alert_auto_path_uses_no_model(cases: list[Case]) -> None:
     case = _case(cases, "M0002", "shot_speed")
     svc = _services(case)
@@ -247,15 +280,15 @@ def test_failing_mode_is_asked_again_alone_then_falls_back(cases: list[Case]) ->
                                           "single_metric")}  # fmt: skip
     first = {"texts": {**good, "casual": "What a stunning goal, 77 of them!"}}
     again = {"texts": {"casual": "Still 77 stunning goals"}}
-    personalizer = ScriptedChatClient([json.dumps(first), json.dumps(again)])
+    personalizer = ScriptedChatClient([json.dumps(first), json.dumps(again), json.dumps(again)])
     svc = _services(case, {"personalizer": personalizer})
     insight = decide(asyncio.run(explain_and_audit(case.trigger, case.facts, svc)), case.trigger,
                      svc, "producer_demo")  # fmt: skip
     overlays = asyncio.run(localize(insight, case.trigger, case.facts, svc))
-    assert [r["modes"] for r in personalizer.requests] == [list(svc.modes), ["casual"]]
+    assert [r["modes"] for r in personalizer.requests] == [list(svc.modes), ["casual"], ["casual"]]
     english = {o.audience_mode.value: o.text for o in overlays if o.language == "en"}
     assert english["analyst"] == "Good analyst copy"  # passed the checks first time
-    assert "stunning" not in english["casual"]  # template copy after two failures
+    assert "stunning" not in english["casual"]  # template copy after three failures
     [fallback] = [a for a in svc.ledger.audits(insight.insight_id) if a.action == "fallback"]
     assert fallback.findings[0].startswith("casual/en:") and "cliché" in fallback.findings[0]
 

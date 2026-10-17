@@ -92,6 +92,8 @@ class PersonalizeRequest(_Model):
     explanation: str
     metrics: dict[str, int | float]
     facts: Facts
+    feedback: dict[str, str] = Field(default_factory=dict)
+    """Per key, the text a previous reply gave and why it was rejected, to fix in this one."""
 
 
 class TranslateRequest(_Model):
@@ -104,6 +106,8 @@ class TranslateRequest(_Model):
     text: str
     metrics: dict[str, int | float]
     facts: Facts
+    feedback: dict[str, str] = Field(default_factory=dict)
+    """Per key, the text a previous reply gave and why it was rejected, to fix in this one."""
 
 
 StoryFacts = dict[str, str | int | float | list[str]]
@@ -121,6 +125,8 @@ class StoryRequest(_Model):
     """Computed in code: names, the score, minutes, and every number a beat may use."""
     signals: list[str] = Field(default_factory=list)
     drafts: dict[str, str]
+    feedback: dict[str, str] = Field(default_factory=dict)
+    """Per key, the text a previous reply gave and why it was rejected, to fix in this one."""
 
 
 class TranslateStoryRequest(_Model):
@@ -132,6 +138,8 @@ class TranslateStoryRequest(_Model):
     texts: dict[str, str]
     drafts: dict[str, str]
     facts: StoryFacts
+    feedback: dict[str, str] = Field(default_factory=dict)
+    """Per key, the text a previous reply gave and why it was rejected, to fix in this one."""
 
 
 class CopyText(_Model):

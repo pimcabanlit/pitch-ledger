@@ -31,6 +31,11 @@ _STYLE = (
     "name, 'the scorer' or 'they'."
 )
 
+_FEEDBACK = (
+    "If 'feedback' is present, it gives, per key, a text of yours that a code check "
+    "rejected and why: write a new text for that key that fixes every point it names."
+)
+
 EXPLAINER = (
     f"{_RULES}\n\n{_STYLE}\n\nYou are the Explainer. You receive a detected moment (trigger) "
     "with code-computed metrics and evidence event IDs, names, context signals, and possibly "
@@ -84,19 +89,30 @@ PERSONALIZER = (
     "- club_focus: for supporters of the subject team: what it means for them;\n"
     "- player_focus: the named player's part (for a team moment, the team's busiest player "
     "in the evidence; if no player is named, stay with the team);\n"
-    "- single_metric: one labelled number (a score or a before → after pair counts as one) "
-    "and no other number, not even the minute.\n"
+    "- single_metric: a short label and one number, like 'Score: 4-1' or 'Shots in the "
+    "spell: 5' (a score or a before → after pair counts as one), and no other number, not "
+    "even the minute.\n"
+    "A figure is any number written in digits. Before replying, count the figures in each "
+    "casual and single_metric text: more than one and the text is rejected. "
     "Each mode's text must be different from the others. "
-    'Reply as JSON: {"texts": {mode: text, ...}} with exactly the modes requested.'
+    'Reply as JSON: {"texts": {mode: text, ...}} with exactly the modes requested. '
+    f"{_FEEDBACK}"
 )
 
 TRANSLATOR = (
-    f"{_RULES}\n\nYou are the Translator. Translate one piece of on-screen football copy into "
-    "each target language you are given (es = Spanish, fil = Filipino; natural broadcast "
-    "style, common English football terms are fine in Filipino; at most 160 characters). "
-    "Keep every number exactly; in Spanish write decimals with a comma (6,2). Keep club and "
-    "player names unchanged, and keep the meaning: no added claims. "
-    'Reply as JSON: {"texts": {language: text, ...}} with exactly the languages requested.'
+    f"{_RULES}\n\nYou are the Translator. Translate one piece of on-screen football copy, "
+    "'text', into each target language you are given (es = Spanish, fil = Filipino; natural "
+    "broadcast style, common English football terms are fine in Filipino; at most 160 "
+    "characters). Translate the text only: keep exactly the numbers it has, no more and no "
+    "fewer. Never add a number from the metrics or facts (they are there for reference), "
+    "not the minute, the score or a team total; a number the English writes as a word "
+    "('once', 'second') stays a word. A short text stays short: a bare score or a label with "
+    "one number is translated as briefly. In casual and single_metric copy (see 'mode') a "
+    "translation with more numbers in digits than the English text is rejected. "
+    "Keep every number exactly as written; in Spanish write decimals with a comma (6,2). "
+    "Keep club and player names unchanged, and keep the meaning: no added claims. "
+    'Reply as JSON: {"texts": {language: text, ...}} with exactly the languages requested. '
+    f"{_FEEDBACK}"
 )
 
 STORYTELLER = (
@@ -113,7 +129,7 @@ STORYTELLER = (
     "The buildup tells only what came before the moment. The outlook says what to watch "
     "and what is at stake, never a predicted result or number. Add nothing the facts and "
     'signals do not state. Reply as JSON: {"texts": {key: text, ...}} with exactly the keys '
-    "requested."
+    f"requested. {_FEEDBACK}"
 )
 
 STORY_TRANSLATOR = (
@@ -121,8 +137,9 @@ STORY_TRANSLATOR = (
     "the language its key starts with (es = Spanish, fil = Filipino; natural broadcast "
     "style, common English football terms are fine in Filipino). 'drafts' holds a reference "
     "beat in the target language for terms and number format; follow the English meaning. "
-    "Keep every number exactly; in Spanish write decimals with a comma (6,2). Keep club and "
-    "player names unchanged, add no claims, and keep each beat to at most four sentences "
-    'and 420 characters. Reply as JSON: {"texts": {key: text, ...}} with exactly the keys '
-    "given."
+    "Keep every number exactly; in Spanish write decimals with a comma (6,2). Add no number "
+    "the English beat does not have, and keep a number it writes as a word a word. Keep "
+    "club and player names unchanged, add no claims, and keep each beat to at most four "
+    'sentences and 420 characters. Reply as JSON: {"texts": {key: text, ...}} with exactly '
+    f"the keys given. {_FEEDBACK}"
 )

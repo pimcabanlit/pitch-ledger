@@ -14,26 +14,30 @@ from pitch_ledger.schema import TrackingSample, Trigger
 
 FILTERED = "<filtered>"
 """A scripted reply the content filter cut (finish reason ``content_filter``)."""
+CUT = '{"headline": "Cut off'
+"""A scripted reply cut off at the output cap (finish reason ``length``)."""
 
 
 class ScriptedChatClient(FunctionInvocationLayer[Any], BaseChatClient[Any]):
     """Returns each scripted reply in turn (an Exception is raised instead of returned).
-    ``requests`` records every request payload received."""
+    ``requests`` records every request payload received, ``caps`` its output cap."""
 
     def __init__(self, replies: list[str | Exception]) -> None:
         super().__init__()
         self.replies = list(replies)
         self.requests: list[dict[str, Any]] = []
+        self.caps: list[int | None] = []
 
     async def _inner_get_response(
         self, *, messages: Any, stream: bool, options: Any, **kwargs: Any
     ) -> Any:
         self.requests.append(json.loads(messages[-1].text))
+        self.caps.append(dict(options or {}).get("max_tokens"))
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
         usage = UsageDetails(input_token_count=100, output_token_count=20)
-        finish = "content_filter" if reply == FILTERED else "stop"  # a reply the filter cut
+        finish = {FILTERED: "content_filter", CUT: "length"}.get(reply, "stop")
         return ChatResponse(messages=[Message(role="assistant", contents=[reply])],
                             usage_details=usage, finish_reason=finish)  # fmt: skip
 

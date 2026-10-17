@@ -18,13 +18,12 @@ async def translate(
     metrics: dict[str, int | float],
     facts: Facts,
 ) -> dict[str, CheckedCopy]:
-    """Copy per language; each one checked, retried alone once, else the template."""
+    """Copy per language; each one checked, retried alone with feedback, else the template."""
     values = {**metrics, **facts.names()}
 
-    def request(wanted: list[str]) -> TranslateRequest:
-        return TranslateRequest(
-            copy_key=key, mode=mode, languages=wanted, text=text, metrics=metrics, facts=facts
-        )
+    def request(wanted: list[str], feedback: dict[str, str]) -> TranslateRequest:
+        return TranslateRequest(copy_key=key, mode=mode, languages=wanted, text=text,
+                                metrics=metrics, facts=facts, feedback=feedback)  # fmt: skip
 
     return await checked_set(
         models,

@@ -7,7 +7,9 @@ from agent_framework.exceptions import ChatClientContentFilterException
 
 from pitch_ledger.agents import copy, prompts
 from pitch_ledger.agents.contracts import ExplainRequest, InsightDraft
+from pitch_ledger.agents.flow import FULL_FLOW
 from pitch_ledger.agents.model_manager import (
+    MAX_OUTPUT_TOKENS,
     ModelManager,
     ModelSettings,
     ModelUnavailable,
@@ -17,7 +19,7 @@ from pitch_ledger.agents.model_manager import (
 from pitch_ledger.agents.offline import OfflineChatClient
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 from tests.agents.conftest import Case
-from tests.agents.fakes import FILTERED, ScriptedChatClient
+from tests.agents.fakes import CUT, FILTERED, ScriptedChatClient
 
 
 def _request(case: Case) -> ExplainRequest:
@@ -52,6 +54,27 @@ def test_retry_once_then_success(cases: list[Case]) -> None:
     assert manager.usage.calls == 2 and manager.usage.failures == 1
     assert manager.usage.input_tokens == 200
     assert client.requests[0]["task"] == "explain"
+
+
+def test_a_reply_cut_off_at_the_cap_is_retried_with_twice_the_cap(cases: list[Case]) -> None:
+    good = InsightDraft(headline="h", explanation="e", metric_keys=[],
+                        evidence_event_ids=[]).model_dump_json()  # fmt: skip
+    client = ScriptedChatClient([CUT, good])
+    manager = ModelManager(ModelSettings(), clients={"explainer": client})
+    draft = asyncio.run(manager.complete("explainer", prompts.EXPLAINER,
+                                         _request(_momentum(cases)), InsightDraft))  # fmt: skip
+    assert draft.headline == "h" and manager.usage.failures == 1
+    assert client.caps == [MAX_OUTPUT_TOKENS["explainer"], 2 * MAX_OUTPUT_TOKENS["explainer"]]
+
+
+def test_the_draft_cap_fits_the_longest_evidence_list(cases: list[Case]) -> None:
+    """A draft echoes its evidence IDs (about 8 tokens each, quotes and comma included):
+    the longest full-flow list in the demo matches must fit, with room for the text."""
+    longest = max(len(c.trigger.evidence_event_ids) for c in cases
+                  if c.trigger.insight_type in FULL_FLOW)  # fmt: skip
+    assert longest >= 30
+    for role in ("explainer", "narrator"):
+        assert longest * 8 + 400 <= MAX_OUTPUT_TOKENS[role]
 
 
 def test_two_failures_raise_model_unavailable(cases: list[Case]) -> None:

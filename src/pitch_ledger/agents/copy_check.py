@@ -1,10 +1,10 @@
-"""Model copy with code checks: retry the failing copies once, then fall back per copy.
+"""Model copy with code checks: retry the failing copies with feedback, then fall back per copy.
 
 Every copy must use only metric numbers (the number check) and meet the editorial rules
 for on-screen text (length, no clichés or unsupported claims). One model call writes a
 set of copies (all modes, or all languages of one mode); copies that fail are asked for
-again on their own, once; any still failing use the template text, which is built from the
-same code-computed numbers.
+again on their own, up to twice, each time with the rejected text and why it failed; any
+still failing use the template text, which is built from the same code-computed numbers.
 """
 
 from collections.abc import Callable, Mapping
@@ -18,7 +18,7 @@ from pitch_ledger.agents.model_manager import ModelManager, ModelUnavailable, Ro
 from pitch_ledger.engine.season import has_season_facts
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 
-ATTEMPTS = 2
+ATTEMPTS = 3  # the first reply and two retries of the failing copies, with feedback
 
 
 @dataclass
@@ -40,11 +40,16 @@ def copy_problems(
     return problems + (mode_issues(text, mode) if mode else [])
 
 
+def rejected(text: str, problems: list[str]) -> str:
+    """Feedback for a retry: the rejected text and what to fix."""
+    return f"Rejected: {text!r}. Fix: {'; '.join(problems)}."
+
+
 async def checked_set(
     models: ModelManager,
     role: Role,
     instructions: str,
-    request_for: Callable[[list[str]], BaseModel],
+    request_for: Callable[[list[str], dict[str, str]], BaseModel],
     languages: Mapping[str, str],
     metrics: Mapping[str, float],
     templates: Mapping[str, str],
@@ -53,23 +58,26 @@ async def checked_set(
     max_tokens: int | None = None,
 ) -> dict[str, CheckedCopy]:
     """Copies for every key of ``languages`` (key -> its language), checked one by one
-    (``modes``: key -> its audience mode, for the per-mode depth rules; ``problems``: a
-    check of its own, (key, text) -> why it may not air, in place of the on-screen one)."""
+    (``request_for(keys, feedback)``: the request for those keys, with the feedback on
+    their rejected texts; ``modes``: key -> its audience mode, for the per-mode depth rules;
+    ``problems``: a check of its own, (key, text) -> why it may not air, in place of the
+    on-screen one)."""
     findings: dict[str, list[str]] = {k: [] for k in languages}
     done: dict[str, CheckedCopy] = {}
+    feedback: dict[str, str] = {}
     pending = list(languages)
     for _ in range(ATTEMPTS):
         if not pending:
             break
         try:
             reply = await models.complete(
-                role, instructions, request_for(pending), CopySet, max_tokens
+                role, instructions, request_for(pending, feedback), CopySet, max_tokens
             )
         except ModelUnavailable as exc:
             for k in pending:
                 findings[k].append(f"model unavailable: {exc}")
             break
-        failing = []
+        feedback = {}  # for the keys that fail this round, which are asked for again
         for k in pending:
             text = (reply.texts.get(k) or "").strip()
             found = (
@@ -79,10 +87,10 @@ async def checked_set(
             )
             if found:
                 findings[k].append("; ".join(found))
-                failing.append(k)
+                feedback[k] = rejected(text, found)
             else:
                 done[k] = CheckedCopy(text, "model", findings[k])
-        pending = failing
+        pending = list(feedback)
     for k in pending:
         done[k] = CheckedCopy(templates[k], "template", findings[k])
     return {k: done[k] for k in languages}

@@ -4,7 +4,8 @@ The Narrator rewrites the English template beats (buildup and outlook, plain and
 depth) as broadcast prose in one call; the Translator renders them in the other languages
 in one call. Every beat passes the story checks (``agents.story.beat_problems``: numbers
 from the computed facts only, the form rules, the plain depth's figure limit); a failing
-beat is asked for again on its own, once, then the template beat airs instead.
+beat is asked for again on its own with the reasons, up to twice, then the template beat
+airs instead.
 """
 
 from collections.abc import Sequence
@@ -74,13 +75,14 @@ async def tell(
             models,
             "narrator",
             prompts.STORYTELLER,
-            lambda keys: StoryRequest(
+            lambda keys, feedback: StoryRequest(
                 copy_key=copy_key,
                 headline=insight.headline,
                 explanation=insight.explanation,
                 facts=sheet,
                 signals=list(signals),
                 drafts={k: templates["en"][k] for k in keys},
+                feedback=feedback,
             ),
             wanted_en,
             {},
@@ -97,10 +99,11 @@ async def tell(
             models,
             "translator",
             prompts.STORY_TRANSLATOR,
-            lambda keys: TranslateStoryRequest(
+            lambda keys, feedback: TranslateStoryRequest(
                 texts={k: english[k.split(":")[1]].text for k in keys},
                 drafts={k: templates[wanted[k]][k.split(":")[1]] for k in keys},
                 facts=sheet,
+                feedback=feedback,
             ),
             wanted,
             {},
