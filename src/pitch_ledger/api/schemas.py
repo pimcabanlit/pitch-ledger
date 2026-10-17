@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pitch_ledger.schema import AuditRecord, Insight, Overlay
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay
 
 InsightStatus = Literal["aired", "pending", "blocked"]
 AlertState = Literal["open", "all"]
@@ -60,10 +60,24 @@ class EvidenceEvent(BaseModel):
     outcome: str | None
 
 
+class AuditStep(AuditRecord):
+    summary: str  # the step in plain words (api.plain.explain_step)
+
+
 class InsightDetail(InsightView):
-    audits: list[AuditRecord]
+    audits: list[AuditStep]
     evidence: list[EvidenceEvent]
     overlays: list[Overlay]
+
+
+class AlertView(OpsAlert):
+    """An ops alert with plain words for the producer (api.plain.explain_alert); ``message``
+    stays the technical text."""
+
+    headline: str
+    action: str
+    needs_action: bool
+    details: list[str]
 
 
 class DecisionRequest(BaseModel):
