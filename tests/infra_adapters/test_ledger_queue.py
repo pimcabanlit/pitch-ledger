@@ -70,7 +70,8 @@ def test_replay_through_the_cosmos_ledger_and_reload(match_dir: Path, tmp_path: 
     assert (story.match_id, f"{story.insight_id}-story") in container.docs
     alert = OpsDesk(reloaded).raise_alert("M0002", "feed_gap", "warning", "gap", ["M0002-E000001"])
     assert alert is not None and alert.alert_id == "M0002-X0001"
-    again = CosmosLedger(container)
+    container.upsert_item({"id": "M0002-I0001-future", "match_id": "M0002", "kind": "future"})
+    again = CosmosLedger(container)  # a kind from a newer version is skipped, not fatal
     again.load("M0002")
     assert again.alerts("M0002") == [alert] and again.next_id("M0002", "X") == "M0002-X0002"
 

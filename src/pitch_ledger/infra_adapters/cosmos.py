@@ -118,6 +118,8 @@ class CosmosLedger(InMemoryLedger):
                 k: v for k, v in doc.items() if k not in ("id", "kind") and not k.startswith("_")
             }
             kind: DocKind = doc["kind"]
+            if kind not in ID_KIND:  # written by a newer version: skip rather than fail
+                continue
             if kind == "trigger":
                 super().save_trigger(Trigger.model_validate(body))
             elif kind == "insight":
