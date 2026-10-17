@@ -80,6 +80,25 @@ def test_house_style_catches_real_model_slips(text: str, mode: str | None, probl
     assert any(problem in i for i in issues), issues
 
 
+@pytest.mark.parametrize(
+    ("text", "flagged"),
+    [
+        ("Control fell from 49 to 6, with possession down to 26.5%.", False),
+        ("Their control score sat at 49 while possession was 63.6%.", False),
+        ("Control dropped to 6% at 69'.", True),
+        ("Control fell from 49 to 6%.", True),
+        ("Control 49 → 6%.", True),
+    ],
+)
+def test_the_control_percent_rule_looks_only_at_the_control_figure(
+    text: str, flagged: bool
+) -> None:
+    """A possession percentage next to the control score is not a slip (the likely reason
+    a Foundry story beat was rejected three times in a row)."""
+    issues = editorial_issues(text, "story")
+    assert any("index, not a %" in i for i in issues) is flagged, issues
+
+
 def test_sentence_split_ignores_initials_and_decimals() -> None:
     assert (
         len(sentences("L. Haugland scores from a 0.23 xG chance. It completes a hat-trick.")) == 2
