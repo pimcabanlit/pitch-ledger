@@ -34,6 +34,7 @@ PRE_WRITTEN = "Pre-written wording uses the same checked numbers, so nothing wro
 _REASONS: tuple[tuple[str, str], ...] = (
     (r"budget spent", "the AI call budget was used up"),
     (r"content filter", "the safety filter stopped it"),
+    (r"no usable reply", "the AI gave no usable reply"),
     (r"model unavailable|timeout|timed out", "the AI service did not answer"),
     (r"(?:copy|beat) has \d+ figures", "too many numbers"),
     (r"ordinals|write minutes like", "minutes in the wrong format"),
@@ -46,6 +47,8 @@ _REASONS: tuple[tuple[str, str], ...] = (
     (r"unsupported claim", "a claim we have no data for"),
     (r"repeat", "it repeated itself"),
 )  # fmt: skip
+# Reasons where the AI wrote nothing usable, so there was no text to fault.
+_NO_TEXT = frozenset({"the AI gave no usable reply", "the AI service did not answer"})
 _VERSION = re.compile(r"^([a-z_]+)/([a-z]{2,3}): ")
 
 
@@ -68,6 +71,15 @@ def reasons(findings: Iterable[str]) -> list[str]:
         if reason not in found:
             found.append(reason)
     return found
+
+
+def why_clause(why: Sequence[str]) -> str:
+    """Reasons as one clause: ["too many numbers"] -> "the AI's text had too many numbers"."""
+    text = [r for r in why if r not in _NO_TEXT]
+    clauses = [r for r in why if r in _NO_TEXT]
+    if text:
+        clauses.append(f"the AI's text had {join(text)}")
+    return join(clauses)
 
 
 def join(items: Sequence[str]) -> str:
@@ -123,7 +135,7 @@ def _fallback(alert: OpsAlert, insight: Insight | None, audits: Sequence[AuditRe
         lead = f"{_plural(count, 'version')} of {what} aired with pre-written wording."
     else:
         lead = f"{what[0].upper()}{what[1:]} aired with pre-written wording."
-    details = [f"Why: the AI's text had {join(why)}."] if why else []
+    details = [f"Why: {why_clause(why)}."] if why else []
     if per_mode:
         details.append(
             f"Affected: {'; '.join(f'{m} in {join(langs)}' for m, langs in per_mode.items())}."
@@ -203,11 +215,11 @@ def explain_step(record: AuditRecord) -> str:
             per_mode = versions(record.findings)
             n = sum(len(langs) for langs in per_mode.values()) or len(record.findings)
             return (f"{_plural(n, 'on-screen version')} used pre-written wording "
-                    f"(the AI's text had {join(why)}).")  # fmt: skip
+                    f"({why_clause(why)}).")  # fmt: skip
         case "fallback" if record.actor == "story_check":
             n = sum(len(langs) for langs in versions(record.findings).values())
             return (f"{_plural(n or len(record.findings), 'story beat')} used pre-written "
-                    f"wording (the AI's text had {join(why)}).")  # fmt: skip
+                    f"wording ({why_clause(why)}).")  # fmt: skip
         case "fallback":
             return f"Pre-written wording was used instead of the AI's text{because}."
         case "inject_error":
