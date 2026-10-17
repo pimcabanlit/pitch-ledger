@@ -84,6 +84,9 @@ def test_ops_alerts_listed_and_acknowledged_by_the_signed_in_producer(data_dir: 
     client = _client(data_dir, notifier=push)
     listed = client.get("/api/v1/matches/M0002/alerts", params={"state": "open"}).json()
     assert [a["alert_id"] for a in listed] == ["M0002-X0002", "M0002-X0001"]  # newest first
+    gap = listed[1]  # plain words for the producer; the technical text stays in message
+    assert gap["headline"] == "The live match data stopped arriving for 12 seconds."
+    assert gap["needs_action"] and gap["message"] == "No feed message for 12 s"
     acked = client.post("/api/v1/alerts/M0002-X0001/acknowledge")
     assert acked.status_code == 200 and acked.json()["acknowledged_by"] == "producer_local"
     assert push.sent[-1] == ("producers.M0002", {"event": "alert_changed", "match_id": "M0002",
@@ -290,6 +293,7 @@ def test_pending_insight_is_hidden_from_fans_until_a_producer_approves(data_dir:
     detail = client.get(f"/api/v1/insights/{insight_id}").json()
     assert detail["insight"]["audit_status"] == "corrected"  # the planted error was caught
     assert any(a["action"] == "inject_error" for a in detail["audits"])
+    assert all(a["summary"] for a in detail["audits"])
     assert detail["evidence"] and detail["overlays"] == []
 
     result = client.post(f"/api/v1/insights/{insight_id}/decision", json={"approve": True})

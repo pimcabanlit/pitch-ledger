@@ -63,7 +63,7 @@ Across every service: Microsoft Entra ID (managed identities, producer sign-in),
 10. **Recap.** At half-time and full-time the orchestrator hands off to the Narrator; recaps go through the same audit.
 11. **Keep the record.** At full time the match's record (result, team and player match stats, goals) goes to the season history in Cosmos DB and the event store, so later matches can look back on it.
 
-Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed lag, validation rejects, blocked insights, dead-lettered triggers, model fallbacks) as they happen, and the **ADX dashboard** gives producers and analysts the control-room view of the match and the pipeline.
+Alongside the flow, the producer console shows **ops alerts** (feed gaps, feed lag, validation rejects, blocked insights, dead-lettered triggers, model fallbacks) as they happen, each as one plain sentence saying what happened and whether the producer needs to do anything (`pitch_ledger.api.plain`; the technical text sits behind a Details toggle), and the **ADX dashboard** gives producers and analysts the control-room view of the match and the pipeline.
 
 ## Components
 

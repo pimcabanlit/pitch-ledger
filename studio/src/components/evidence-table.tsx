@@ -1,7 +1,19 @@
 import type { EvidenceEvent } from "@/lib/api";
 
-/** The feed events an insight cites, in citation order (minute, type, team, player, outcome). */
-export function EvidenceTable({ evidence, maxHeight = "max-h-48" }: { evidence: EvidenceEvent[]; maxHeight?: string }) {
+/**
+ * The feed events an insight cites, in citation order (minute, type, team, player, outcome).
+ * `names` maps team and player IDs to names; without one the IDs show.
+ */
+export function EvidenceTable({
+  evidence,
+  maxHeight = "max-h-48",
+  names = {},
+}: {
+  evidence: EvidenceEvent[];
+  maxHeight?: string;
+  names?: Record<string, string>;
+}) {
+  const name = (id: string | null) => (id ? (names[id] ?? id) : "");
   return (
     <div className={`${maxHeight} overflow-auto rounded border border-slate-100`}>
       <table className="w-full text-xs whitespace-nowrap">
@@ -20,9 +32,9 @@ export function EvidenceTable({ evidence, maxHeight = "max-h-48" }: { evidence: 
             <tr key={e.event_id} className="border-t border-slate-100">
               <td className="px-2 py-1 font-mono">{e.minute.toFixed(1)}</td>
               <td className="px-2 py-1">{e.event_type.replaceAll("_", " ")}</td>
-              <td className="px-2 py-1">{e.team_id}</td>
-              <td className="px-2 py-1">{e.player_id}</td>
-              <td className="px-2 py-1">{e.outcome}</td>
+              <td className="px-2 py-1">{name(e.team_id)}</td>
+              <td className="px-2 py-1">{name(e.player_id)}</td>
+              <td className="px-2 py-1">{e.outcome?.replaceAll("_", " ")}</td>
               <td className="hidden px-2 py-1 font-mono text-slate-400 sm:table-cell">{e.event_id}</td>
             </tr>
           ))}

@@ -32,9 +32,12 @@ from pitch_ledger.api.match_centre import (
     Timeline,
     TrackingWindow,
 )
+from pitch_ledger.api.plain import explain_alert, explain_step
 from pitch_ledger.api.repository import MatchRepository
 from pitch_ledger.api.schemas import (
     AlertState,
+    AlertView,
+    AuditStep,
     BroadcastPackage,
     DecisionRequest,
     DecisionResult,
@@ -327,8 +330,10 @@ def create_app(
         ledger, view = insight_of(insight_id)
         events = {e["event_id"]: e for e in match_files(view.insight.match_id).events}
         evidence = evidence_events(events, view.insight.evidence_event_ids)
-        return InsightDetail(**view.model_dump(), audits=ledger.audits(insight_id),
-                             evidence=evidence, overlays=ledger.overlays(insight_id))  # fmt: skip
+        steps = [AuditStep(**a.model_dump(), summary=explain_step(a))
+                 for a in ledger.audits(insight_id)]  # fmt: skip
+        return InsightDetail(**view.model_dump(), audits=steps, evidence=evidence,
+                             overlays=ledger.overlays(insight_id))  # fmt: skip
 
     @app.post("/api/v1/insights/{insight_id}/decision", response_model=DecisionResult)
     async def decision(
@@ -356,17 +361,32 @@ def create_app(
                               audit_status=outcome.audit_status, overlays=outcome.overlays,
                               approved_by=decided.approved_by)  # fmt: skip
 
-    @app.get("/api/v1/matches/{match_id}/alerts", response_model=list[OpsAlert])
+    @app.get("/api/v1/matches/{match_id}/alerts", response_model=list[AlertView])
     def alerts(
         match_id: MatchIdPath,
         who: Annotated[Producer, Depends(producer)],
         state: AlertState = "all",
-    ) -> list[OpsAlert]:
-        """The match's ops alerts, newest first (``open``: not acknowledged yet)."""
+    ) -> list[AlertView]:
+        """The match's ops alerts, newest first (``open``: not acknowledged yet), each with a
+        plain headline and what to do for the producer."""
         match_files(match_id)
-        found = [a for a in repo.ledger(match_id).alerts(match_id)
+        ledger = repo.ledger(match_id)
+        found = [a for a in ledger.alerts(match_id)
                  if state == "all" or a.acknowledged_by is None]  # fmt: skip
-        return sorted(found, key=lambda a: (a.raised_at, a.alert_id), reverse=True)
+        views = []
+        for a in sorted(found, key=lambda a: (a.raised_at, a.alert_id), reverse=True):
+            insight_id = next((r for r in a.refs if "-I" in r), None)
+            trigger_id = next((r for r in a.refs if "-T" in r), None)
+            brief = explain_alert(
+                a,
+                ledger.get_insight(insight_id) if insight_id else None,
+                ledger.audits(insight_id) if insight_id else [],
+                ledger.get_trigger(trigger_id) if trigger_id else None,
+            )
+            views.append(AlertView(**a.model_dump(), headline=brief.headline,
+                                   action=brief.action, needs_action=brief.needs_action,
+                                   details=brief.details))  # fmt: skip
+        return views
 
     @app.post("/api/v1/alerts/{alert_id}/acknowledge", response_model=OpsAlert)
     def acknowledge(alert_id: AlertIdPath, who: Annotated[Producer, Depends(producer)]) -> OpsAlert:

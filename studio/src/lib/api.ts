@@ -90,6 +90,10 @@ export interface AuditRecord {
   explanation: string | null;
 }
 
+export interface AuditStep extends AuditRecord {
+  summary: string; // the step in plain words
+}
+
 export interface EvidenceEvent {
   event_id: string;
   minute: number;
@@ -100,7 +104,7 @@ export interface EvidenceEvent {
 }
 
 export interface InsightDetail extends InsightView {
-  audits: AuditRecord[];
+  audits: AuditStep[];
   evidence: EvidenceEvent[];
   overlays: Overlay[];
 }
@@ -288,6 +292,14 @@ export interface OpsAlert {
   acknowledged_at: string | null;
 }
 
+/** An alert with plain words for the producer; `message` stays the technical text. */
+export interface AlertView extends OpsAlert {
+  headline: string; // one sentence: what happened
+  action: string; // what to do, often "No action needed."
+  needs_action: boolean;
+  details: string[];
+}
+
 export interface PushSignal {
   event: "overlays_changed" | "insight_changed" | "alert_changed" | string;
   match_id: string;
@@ -360,7 +372,7 @@ export const api = {
   },
   negotiate: (matchId: string, producer = false) =>
     request<Realtime>(`/realtime/negotiate${producer ? "/producer" : ""}?match_id=${matchId}`),
-  alerts: (matchId: string) => request<OpsAlert[]>(`/matches/${matchId}/alerts`),
+  alerts: (matchId: string) => request<AlertView[]>(`/matches/${matchId}/alerts`),
   acknowledge: (alertId: string) =>
     request<OpsAlert>(`/alerts/${alertId}/acknowledge`, { method: "POST" }),
   decide: (id: string, approve: boolean, reason?: string) =>
