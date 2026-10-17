@@ -159,12 +159,30 @@ export interface StoryTrigger {
   season_matches: string[]; // earlier matches this season behind any season facts
 }
 
+/** One depth and language of the stored "Tell me more" story (schema.story). */
+export interface StoryBeats {
+  depth: "plain" | "numbers"; // plain: every mode but the analyst
+  language: string;
+  buildup: string;
+  outlook: string;
+  sources: Record<string, "model" | "template">; // who wrote each beat
+}
+
+export interface StoryRecord {
+  insight_id: string;
+  match_id: string;
+  beats: StoryBeats[];
+  model_version: string;
+  written_at: string | null;
+}
+
 /** The pipeline behind one insight, stage by stage (api.story.build_process). */
 export interface InsightProcess {
   trigger: StoryTrigger | null;
   stages: StoryStage[];
   steps: StoryStep[];
   evidence_counts: Record<string, number>;
+  story: StoryRecord | null; // none: the story page uses template beats
 }
 
 /** The fan story for one audience mode and language (api.narrative). */

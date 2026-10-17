@@ -98,6 +98,17 @@ def test_audit_steps_and_reasons_in_plain_words() -> None:
         "The Auditor found a problem: a number that does not match the match data."
     )
     assert explain_step(_audit("test", "inject_error", ["control 61"])).startswith("Demo test")
+    story = _audit("story_check", "fallback", [
+        "plain_outlook/es: STYLE: plain story beat has 3 figures (max 2)",
+        "numbers_buildup/fil: numbers not in metrics: 7",
+    ])  # fmt: skip
+    assert explain_step(story) == ("2 story beats used pre-written wording (the AI's text had "
+                                   "too many numbers and a number that does not match the "
+                                   "match data).")  # fmt: skip
+    alert = _alert("model_fallback", "template copy used", ["M0002-I0017", "M0002-A0079"])
+    assert explain_alert(alert, INSIGHT, [story]).details[-1] == (
+        "Affected: Fan story outlook in Spanish; Analyst story buildup in Filipino."
+    )
     assert explain_step(_audit("p-1", "producer_block", ["off brand"])) == "A producer blocked it."
     assert reasons(["STYLE: cliché 'game of two halves'", "STYLE: weird new rule"]) == [
         "a cliché", "it broke the house style"]  # fmt: skip

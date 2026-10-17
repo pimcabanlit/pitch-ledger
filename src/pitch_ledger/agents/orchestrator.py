@@ -13,12 +13,14 @@
          analyst      casual     club_focus   player_focus  single_metric
             └────────────┴────────────┴──────┬──────┴─────────────┘
            (Translator: other languages,     v
-            one call per mode)            publish (overlays to the ledger)
+            one call per mode)            publish (overlays to the ledger, then the
+                                          "Tell me more" story on the full route)
 
 Explain/audit is the Explainer ⇄ Auditor maker-checker loop. The approval gate passes
 speed alerts by rule and other insights only with a producer's approval; without one
 they wait (``pending``). The Personalizer writes every mode's English copy in one call;
-the five audience modes then translate concurrently. Each run yields one
+the five audience modes then translate concurrently. On the full route the Narrator and
+Translator then write the story beats (``flow.tell_story``). Each run yields one
 ``Outcome``. ``replay`` feeds a match's triggers through the trigger queue in match-clock
 order (retries, then dead letter), as the live service will from Service Bus.
 """
@@ -58,9 +60,11 @@ from pitch_ledger.agents.flow import (
     personalize_modes,
     producer_block,
     publish,
+    tell_story,
     template_insight,
 )
 from pitch_ledger.agents.queue import InMemoryTriggerQueue, TriggerQueue
+from pitch_ledger.agents.story import StoryFacts, story_facts
 from pitch_ledger.engine.windows import match_minute
 from pitch_ledger.schema import Event, Insight, Match, Player, Team, Trigger
 from pitch_ledger.schema.enums import AuditStatus
@@ -79,6 +83,10 @@ class MatchContext:
     teams: Sequence[Team]
     players: Sequence[Player]
     events_by_id: dict[str, Event]
+
+    def story(self, insight: Insight, trigger: Trigger) -> StoryFacts:
+        return story_facts(self.match, self.teams, self.players,
+                           list(self.events_by_id.values()), insight, trigger)  # fmt: skip
 
     def facts(self, trigger: Trigger) -> Facts:
         return build_facts(
@@ -267,7 +275,8 @@ class ModeWriter(_Step):
 
 
 class Publisher(_Step):
-    """Overlay builder: every copy (mode and language) becomes an overlay in the ledger."""
+    """Overlay builder: every copy (mode and language) becomes an overlay in the ledger;
+    then, on the full route, the story beats."""
 
     @handler
     async def run(self, parts: list[ModeCopy], ctx: WorkflowContext[Never, Outcome]) -> None:
@@ -275,6 +284,12 @@ class Publisher(_Step):
         overlays = publish(
             job.insight, job.trigger, self.orch.svc, (row for p in parts for row in p.rows)
         )
+        if job.route == "full":
+            try:
+                story = self.orch.context.story(job.insight, job.trigger)
+                await tell_story(job.insight, job.trigger, job.facts, self.orch.svc, story)
+            except Exception:  # the overlays are on air; the API falls back to template beats
+                log.exception("story for %s not written", job.insight.insight_id)
         await ctx.yield_output(
             _outcome(job.insight, job.trigger, job.route, status="aired", overlays=len(overlays))
         )

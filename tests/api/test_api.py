@@ -124,7 +124,8 @@ def test_insight_story_traces_an_aired_insight_without_producer_identity(
                             "published"] and all(s["done"] for s in stages.values())  # fmt: skip
     assert stages["detected"]["detail"] == "Momentum shift at 69'"
     assert stages["audited"]["detail"].startswith("Corrected after 1 revision")
-    assert stages["published"]["detail"] == "15 overlays: 5 audience modes × 3 languages"  # noqa: RUF001
+    published = "15 overlays: 5 audience modes × 3 languages"  # noqa: RUF001
+    assert stages["published"]["detail"] == f"{published}; fan story by the Narrator and Translator"
     assert stages["explained"]["at"] and stages["approved"]["at"]  # timestamps recorded
     planted = next(s for s in story["steps"] if s["action"] == "inject_error")
     assert planted["role"] == "test" and planted["unsupported_numbers"] == ["32"]
@@ -168,12 +169,19 @@ def test_insight_story_traces_an_aired_insight_without_producer_identity(
         trigger_id=view["insight"]["trigger_id"], round=0, actor="copy_check",
         action="fallback", findings=["single_metric/es: two figures", "single_metric/fil: x"],
     ))  # fmt: skip
+    ledger.add_audit(AuditRecord(
+        audit_id=ledger.next_id("M0002", "A"), match_id="M0002", insight_id=insight_id,
+        trigger_id=view["insight"]["trigger_id"], round=0, actor="story_check",
+        action="fallback", findings=["plain_outlook/es: STYLE: story beat has 5 sentences (max 4)"],
+    ))  # fmt: skip
     ledger.flush()
     stages = {s["key"]: s for s in client.get(f"/api/v1/insights/{insight_id}/story").json()[
         "stages"]}  # fmt: skip
     assert stages["explained"]["detail"] == "2 drafts by the explainer"
-    assert stages["published"]["detail"].endswith("; 2 of them from templates (the model's text "
-                                                  "failed the number or style check)")  # fmt: skip
+    assert (
+        "; 2 of them from templates (the model's text failed the number or style check); "
+        "fan story by the Narrator and Translator" in stages["published"]["detail"]
+    )
 
     package = client.get(f"/api/v1/insights/{insight_id}/broadcast").json()
     assert package["format"] == "pitch-ledger.broadcast/1"

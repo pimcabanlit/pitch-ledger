@@ -3,7 +3,7 @@
 from collections import Counter
 
 from pitch_ledger.ledger.repository import IdKind
-from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, StoryRecord, Trigger
 
 
 class InMemoryLedger:
@@ -13,6 +13,7 @@ class InMemoryLedger:
         self._insights: dict[str, Insight] = {}
         self._audits: list[AuditRecord] = []
         self._overlays: dict[str, Overlay] = {}
+        self._stories: dict[str, StoryRecord] = {}
         self._alerts: dict[str, OpsAlert] = {}
 
     def load(self, match_id: str) -> None:
@@ -49,6 +50,15 @@ class InMemoryLedger:
 
     def overlays(self, insight_id: str | None = None) -> list[Overlay]:
         return [o for o in self._overlays.values() if insight_id in (None, o.insight_id)]
+
+    def put_story(self, story: StoryRecord) -> None:
+        self._stories[story.insight_id] = story
+
+    def story(self, insight_id: str) -> StoryRecord | None:
+        return self._stories.get(insight_id)
+
+    def stories(self, match_id: str | None = None) -> list[StoryRecord]:
+        return [s for s in self._stories.values() if match_id in (None, s.match_id)]
 
     def put_alert(self, alert: OpsAlert) -> None:
         self._alerts[alert.alert_id] = alert

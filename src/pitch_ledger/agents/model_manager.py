@@ -233,9 +233,15 @@ class ModelManager:
         await self.close()
 
     async def complete[T: BaseModel](
-        self, role: Role, instructions: str, request: BaseModel, reply: type[T]
+        self,
+        role: Role,
+        instructions: str,
+        request: BaseModel,
+        reply: type[T],
+        max_tokens: int | None = None,
     ) -> T:
-        """Run one agent call and parse its JSON reply; retries once, then gives up."""
+        """Run one agent call and parse its JSON reply; retries once, then gives up
+        (``max_tokens``: a larger output cap than the role's, for a longer reply)."""
         last: Exception | None = None
         for _ in range(2):
             if self.paid and self.usage.calls >= self.settings.model_call_budget:
@@ -247,7 +253,7 @@ class ModelManager:
                 instructions=instructions,
                 name=role,
                 default_options={
-                    "max_tokens": MAX_OUTPUT_TOKENS[role],
+                    "max_tokens": max_tokens or MAX_OUTPUT_TOKENS[role],
                     "temperature": self.settings.model_temperature,
                 },
             )

@@ -23,6 +23,7 @@ import {
   type AuditStep,
   type InsightDetail,
   type StageKey,
+  type StoryBeats,
   type StoryStage,
   type StoryStep,
 } from "@/lib/api";
@@ -46,6 +47,9 @@ const MODE_LABELS: Record<string, string> = {
 const LANGUAGE_NAMES: Record<string, string> = Object.fromEntries(LANGUAGES.map((l) => [l.code, l.label]));
 const PRODUCER_ACTIONS = new Set(["producer_approve", "producer_block"]);
 const COPY_CHECK = "copy_check";
+const STORY_CHECK = "story_check";
+const OUTPUT_CHECKS = new Set([COPY_CHECK, STORY_CHECK]); // fallbacks of published text, not drafts
+const DEPTH_LABELS = { plain: "Fan story (every mode but the analyst)", numbers: "Analyst story" } as const;
 const DRAFT_ACTIONS = new Set(["draft", "fallback"]);
 
 function label(text: string): string {
@@ -247,7 +251,7 @@ function Analyzed({ detail, names }: { detail: InsightDetail; names: Record<stri
 function Explained({ detail }: { detail: InsightDetail }) {
   const i = detail.insight;
   const drafts = (detail.process?.steps ?? []).filter(
-    (s) => DRAFT_ACTIONS.has(s.action) && s.agent !== COPY_CHECK && (s.headline || s.explanation),
+    (s) => DRAFT_ACTIONS.has(s.action) && !OUTPUT_CHECKS.has(s.agent) && (s.headline || s.explanation),
   );
   return (
     <>
@@ -398,7 +402,7 @@ function Approved({ detail }: { detail: InsightDetail }) {
 }
 
 function Published({ detail }: { detail: InsightDetail }) {
-  const fallbacks = detail.audits.filter((a) => a.actor === COPY_CHECK);
+  const fallbacks = detail.audits.filter((a) => OUTPUT_CHECKS.has(a.actor));
   const byMode = useMemo(() => {
     const grouped = new Map<string, typeof detail.overlays>();
     for (const o of detail.overlays) grouped.set(o.audience_mode, [...(grouped.get(o.audience_mode) ?? []), o]);
@@ -431,6 +435,46 @@ function Published({ detail }: { detail: InsightDetail }) {
           </div>
         ))}
       </div>
+      {detail.process?.story && <StoryBeatsList beats={detail.process.story.beats} />}
     </>
+  );
+}
+
+/** The stored "Tell me more" beats, by depth then language; template beats are marked. */
+function StoryBeatsList({ beats }: { beats: StoryBeats[] }) {
+  return (
+    <div className="space-y-2 border-t border-slate-200 pt-2">
+      {(["plain", "numbers"] as const).map((depth) => (
+        <div key={depth}>
+          <h4 className="mb-1 text-xs font-semibold text-slate-600">{DEPTH_LABELS[depth]}</h4>
+          <ul className="space-y-1.5">
+            {beats
+              .filter((b) => b.depth === depth)
+              .map((b) => (
+                <li key={b.language} className="flex gap-2 text-sm">
+                  <span className="w-16 shrink-0 text-xs leading-5 text-slate-500">
+                    {LANGUAGE_NAMES[b.language] ?? b.language}
+                  </span>
+                  <div className="min-w-0 space-y-0.5 text-slate-800">
+                    {(["buildup", "outlook"] as const).map((beat) =>
+                      b[beat] ? (
+                        <p key={beat}>
+                          <span className="text-xs text-slate-500">{beat === "buildup" ? "Buildup" : "Outlook"}: </span>
+                          {b[beat]}
+                          {b.sources[beat] === "template" && (
+                            <Badge tone="warning" className="ml-1 align-middle text-[10px]">
+                              template
+                            </Badge>
+                          )}
+                        </p>
+                      ) : null,
+                    )}
+                  </div>
+                </li>
+              ))}
+          </ul>
+        </div>
+      ))}
+    </div>
   );
 }

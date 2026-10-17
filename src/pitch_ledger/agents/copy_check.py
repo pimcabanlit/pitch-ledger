@@ -49,9 +49,12 @@ async def checked_set(
     metrics: Mapping[str, float],
     templates: Mapping[str, str],
     modes: Mapping[str, str] | None = None,
+    problems: Callable[[str, str], list[str]] | None = None,
+    max_tokens: int | None = None,
 ) -> dict[str, CheckedCopy]:
     """Copies for every key of ``languages`` (key -> its language), checked one by one
-    (``modes``: key -> its audience mode, for the per-mode depth rules)."""
+    (``modes``: key -> its audience mode, for the per-mode depth rules; ``problems``: a
+    check of its own, (key, text) -> why it may not air, in place of the on-screen one)."""
     findings: dict[str, list[str]] = {k: [] for k in languages}
     done: dict[str, CheckedCopy] = {}
     pending = list(languages)
@@ -59,7 +62,9 @@ async def checked_set(
         if not pending:
             break
         try:
-            reply = await models.complete(role, instructions, request_for(pending), CopySet)
+            reply = await models.complete(
+                role, instructions, request_for(pending), CopySet, max_tokens
+            )
         except ModelUnavailable as exc:
             for k in pending:
                 findings[k].append(f"model unavailable: {exc}")
@@ -67,9 +72,13 @@ async def checked_set(
         failing = []
         for k in pending:
             text = (reply.texts.get(k) or "").strip()
-            problems = copy_problems(text, metrics, languages[k], (modes or {}).get(k))
-            if problems:
-                findings[k].append("; ".join(problems))
+            found = (
+                problems(k, text)
+                if problems
+                else copy_problems(text, metrics, languages[k], (modes or {}).get(k))
+            )
+            if found:
+                findings[k].append("; ".join(found))
                 failing.append(k)
             else:
                 done[k] = CheckedCopy(text, "model", findings[k])

@@ -1,7 +1,7 @@
 """Azure Cosmos DB ledger adapter (NoSQL API, free tier).
 
 One container (``ledger``, partition key ``/match_id``): every trigger, insight, audit
-record, overlay and ops alert is a document ``{"id", "match_id", "kind", ...model fields}``,
+record, overlay, story and ops alert is a document ``{"id", "match_id", "kind", ...model fields}``,
 so a match's ledger is one partition. An ops alert's own ``kind`` (feed_gap, ...) is stored
 as ``alert_kind``, since ``kind`` names the document type. The adapter is the in-memory
 ledger with write-through: reads come from memory, every write is upserted at once (the
@@ -23,14 +23,15 @@ from pydantic import BaseModel
 from pitch_ledger.core.checks import Check, short_error
 from pitch_ledger.ledger import InMemoryLedger
 from pitch_ledger.ledger.repository import IdKind
-from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, StoryRecord, Trigger
 
-DocKind = Literal["trigger", "insight", "audit", "overlay", "alert"]
+DocKind = Literal["trigger", "insight", "audit", "overlay", "story", "alert"]
 ID_KIND: dict[DocKind, IdKind | None] = {
     "trigger": None,
     "insight": "I",
     "audit": "A",
     "overlay": "O",
+    "story": None,
     "alert": "X",
 }
 
@@ -126,6 +127,8 @@ class CosmosLedger(InMemoryLedger):
             elif kind == "overlay":  # match_id is the partition key only, not an overlay field
                 body.pop("match_id", None)
                 super().put_overlay(Overlay.model_validate(body))
+            elif kind == "story":
+                super().put_story(StoryRecord.model_validate(body))
             elif kind == "alert":
                 body["kind"] = body.pop("alert_kind")
                 super().put_alert(OpsAlert.model_validate(body))
@@ -169,6 +172,11 @@ class CosmosLedger(InMemoryLedger):
         self._write(
             match_id, {**to_doc("overlay", overlay.overlay_id, overlay), "match_id": match_id}
         )
+
+    def put_story(self, story: StoryRecord) -> None:
+        self._touch(story.match_id)
+        super().put_story(story)
+        self._write(story.match_id, to_doc("story", f"{story.insight_id}-story", story))
 
     def put_alert(self, alert: OpsAlert) -> None:
         self._touch(alert.match_id)

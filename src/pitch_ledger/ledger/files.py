@@ -1,8 +1,8 @@
 """Local file ledger: the in-memory ledger persisted as JSONL under ``<match_dir>/ledger/``.
 
-Files: ``insights.jsonl``, ``audits.jsonl``, ``overlays.jsonl``, ``triggers.jsonl`` and
-``alerts.jsonl``,
-rewritten in full by ``flush()`` (a replay writes once at the end).
+Files: ``insights.jsonl``, ``audits.jsonl``, ``overlays.jsonl``, ``stories.jsonl``,
+``triggers.jsonl`` and ``alerts.jsonl``, rewritten in full by ``flush()`` (a replay writes
+once at the end).
 """
 
 from pathlib import Path
@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from pitch_ledger.ledger.memory import InMemoryLedger
 from pitch_ledger.ledger.repository import IdKind
-from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, StoryRecord, Trigger
 
 
 class FileLedger(InMemoryLedger):
@@ -29,6 +29,8 @@ class FileLedger(InMemoryLedger):
             self.add_audit(AuditRecord.model_validate_json(line))
         for line in self._lines("overlays"):
             self.put_overlay(Overlay.model_validate_json(line))
+        for line in self._lines("stories"):
+            self.put_story(StoryRecord.model_validate_json(line))
         for line in self._lines("alerts"):
             self.put_alert(OpsAlert.model_validate_json(line))
         for insight in self.insights():
@@ -57,6 +59,7 @@ class FileLedger(InMemoryLedger):
             "insights": list(self.insights()),
             "audits": list(self.audits()),
             "overlays": list(self.overlays()),
+            "stories": list(self.stories()),
             "alerts": list(self.alerts()),
         }
         paths = []

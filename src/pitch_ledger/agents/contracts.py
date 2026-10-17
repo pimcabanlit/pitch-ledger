@@ -106,6 +106,34 @@ class TranslateRequest(_Model):
     facts: Facts
 
 
+StoryFacts = dict[str, str | int | float | list[str]]
+
+
+class StoryRequest(_Model):
+    """Narrator: the "Tell me more" beats in English, one text per key ("plain.buildup",
+    "numbers.outlook", ...), each a rewrite of its template draft from the same facts."""
+
+    task: Literal["story"] = "story"
+    copy_key: str
+    headline: str
+    explanation: str
+    facts: StoryFacts
+    """Computed in code: names, the score, minutes, and every number a beat may use."""
+    signals: list[str] = Field(default_factory=list)
+    drafts: dict[str, str]
+
+
+class TranslateStoryRequest(_Model):
+    """Translator: English story beats into other languages, one text per key
+    ("es:plain.buildup", ...); ``texts`` holds the English beat for each key and ``drafts``
+    the template beat in the target language, as a reference for terms and number format."""
+
+    task: Literal["translate_story"] = "translate_story"
+    texts: dict[str, str]
+    drafts: dict[str, str]
+    facts: StoryFacts
+
+
 class CopyText(_Model):
     text: str
 

@@ -285,11 +285,12 @@ def create_app(
         files = match_files(view.insight.match_id)
         trigger = ledger.get_trigger(view.insight.trigger_id or "")
         overlays = ledger.overlays(insight_id)
+        stored = ledger.story(insight_id)
         narratives = build_narratives(centre_data(view.insight.match_id), view.insight, trigger,
-                                      overlays)  # fmt: skip
+                                      overlays, stored)  # fmt: skip
         return build_story(summary(files), view.insight, trigger, ledger.audits(insight_id),
                            overlays, {e["event_id"]: e for e in files.events},
-                           narratives)  # fmt: skip
+                           narratives, stored)  # fmt: skip
 
     @app.get("/api/v1/insights/{insight_id}/broadcast", response_model=BroadcastPackage)
     def broadcast(insight_id: InsightIdPath) -> BroadcastPackage:
@@ -338,7 +339,8 @@ def create_app(
         steps = [AuditStep(**a.model_dump(), summary=explain_step(a)) for a in audits]
         overlays = ledger.overlays(insight_id)
         trigger = ledger.get_trigger(view.insight.trigger_id or "")
-        process = build_process(view.insight, trigger, audits, overlays, evidence)
+        process = build_process(view.insight, trigger, audits, overlays, evidence,
+                                ledger.story(insight_id))  # fmt: skip
         return InsightDetail(**view.model_dump(), audits=steps, evidence=evidence,
                              overlays=overlays, process=process)  # fmt: skip
 

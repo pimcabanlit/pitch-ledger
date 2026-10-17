@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, StoryRecord
 
 InsightStatus = Literal["aired", "pending", "blocked"]
 AlertState = Literal["open", "all"]
@@ -155,6 +155,8 @@ class InsightProcess(BaseModel):
     stages: list[StoryStage]
     steps: list[StoryStep]
     evidence_counts: dict[str, int]
+    story: StoryRecord | None = None
+    """The "Tell me more" beats as stored (none: the story page uses template beats)."""
 
 
 class StoryNarrative(BaseModel):

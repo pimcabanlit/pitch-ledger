@@ -20,6 +20,7 @@ from pitch_ledger.schema.ops import OpsAlert
 from pitch_ledger.schema.overlay import Overlay
 from pitch_ledger.schema.reference import Match, Player, Ratings, Team
 from pitch_ledger.schema.scenario import Effect, ExpectedDetection, Scenario, ScenarioTrigger
+from pitch_ledger.schema.story import StoryBeats, StoryRecord
 from pitch_ledger.schema.tracking import TrackingSample
 from pitch_ledger.schema.trigger import Trigger
 
@@ -46,6 +47,8 @@ __all__ = [
     "Scenario",
     "ScenarioTrigger",
     "ShotDetails",
+    "StoryBeats",
+    "StoryRecord",
     "SubstitutionDetails",
     "Team",
     "TrackingSample",

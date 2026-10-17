@@ -91,7 +91,7 @@ What is left: chaos and tempo are on screen and explained, but not yet narrated 
 
 | Requirement | Status | What Pitch Ledger does | Where to see it |
 | --- | --- | --- | --- |
-| Clear natural-language output in multiple languages for global studio and streaming | **Implemented** | Every aired insight in English, Spanish and Filipino, for all five modes. The Translator keeps every number exactly, and a code check rejects any translation whose numbers do not match; a rejected line falls back to a template | Fan view *Language* selector |
+| Clear natural-language output in multiple languages for global studio and streaming | **Implemented** | Every aired insight in English, Spanish and Filipino, for all five modes. The Translator keeps every number exactly, and a code check rejects any translation whose numbers do not match; a rejected line falls back to a template. "Tell me more" tells each moment as a three-beat story (the buildup, what just happened, what it could mean) in all three languages, plain for fans and with figures for analysts; the Narrator and Translator write the beats from code-computed facts, and each beat is number- and style-checked or falls back to its template | Fan view *Language* selector; *Tell me more* |
 | More languages | **Nice to have** | Languages are a setting plus one phrase table per language; each extra language adds translator calls per aired insight | (gap 7) |
 
 ## Fit with the intended use

@@ -101,7 +101,7 @@ def test_replay_m0002_end_to_end_over_mcp(m0002_dir: Path, tmp_path: Path) -> No
 
     names = {p.name for p in (tmp_path / "ledger").iterdir()}
     assert names == {"triggers.jsonl", "insights.jsonl", "audits.jsonl", "overlays.jsonl",
-                     "alerts.jsonl", "run.json"}  # fmt: skip
+                     "stories.jsonl", "alerts.jsonl", "run.json"}  # fmt: skip
     assert ledger.alerts() == [] and s["ops_alerts"] == 0  # nothing blocked, no fallbacks
     assert json.loads((tmp_path / "ledger" / "run.json").read_text())["overlays"] == s["overlays"]
     assert (m0002_dir / "triggers.jsonl").exists()

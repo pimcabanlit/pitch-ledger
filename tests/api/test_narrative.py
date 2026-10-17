@@ -7,8 +7,9 @@ from pathlib import Path
 import pytest
 
 from pitch_ledger.agents.replay import ReplayOptions, replay_match
+from pitch_ledger.agents.story import STORY_MODES
 from pitch_ledger.api.match_centre import MatchCentre
-from pitch_ledger.api.narrative import STORY_MODES, build_narratives
+from pitch_ledger.api.narrative import build_narratives
 from pitch_ledger.cli import main
 from pitch_ledger.ledger import FileLedger
 from pitch_ledger.schema import Insight
@@ -31,7 +32,8 @@ def _stories(match_dir: Path) -> dict[str, tuple[Insight, dict[tuple[str, str], 
     out = {}
     for insight in ledger.insights("M0004"):
         trigger = ledger.get_trigger(insight.trigger_id or "")
-        stories = build_narratives(data, insight, trigger, ledger.overlays(insight.insight_id))
+        stories = build_narratives(data, insight, trigger, ledger.overlays(insight.insight_id),
+                                   ledger.story(insight.insight_id))  # fmt: skip
         out[insight.insight_id] = (insight, {(n.mode, n.language): n for n in stories})
     return out
 
@@ -72,3 +74,25 @@ def test_red_card_story_sets_the_stakes(red_card_match: Path) -> None:
     after = next(s for i, s in stories.values() if i.period == 2 and i.clock_ms > red.clock_ms
                  and "with 10" in i.headline)  # fmt: skip
     assert "since H. Barreiro's red card" in after["analyst", "en"].buildup
+
+
+def test_full_route_insights_store_their_story_and_the_page_serves_it(
+    red_card_match: Path,
+) -> None:
+    ledger = FileLedger(red_card_match / "ledger")
+    data = MatchCentre().get(red_card_match)
+    stored = [s for i in ledger.insights("M0004") if (s := ledger.story(i.insight_id))]
+    badges = [i for i in ledger.insights("M0004") if i.insight_type.value == "speed_alert"]
+    assert len(stored) >= 5 and all(ledger.story(i.insight_id) is None for i in badges)
+    insight = next(i for i in ledger.insights("M0004") if " sent off" in i.headline)
+    record = ledger.story(insight.insight_id)
+    assert record is not None and record in stored
+    assert len(record.beats) == 6 and record.model_version == "offline-templates"
+    trigger = ledger.get_trigger(insight.trigger_id or "")
+    edited = record.model_copy(update={"beats": [
+        b.model_copy(update={"buildup": f"Stored {b.depth} {b.language}."}) for b in record.beats
+    ]})  # fmt: skip
+    told = build_narratives(data, insight, trigger, ledger.overlays(insight.insight_id), edited)
+    by_key = {(n.mode, n.language): n for n in told}
+    assert by_key["analyst", "es"].buildup == "Stored numbers es."
+    assert by_key["club_focus", "fil"].buildup == "Stored plain fil."
