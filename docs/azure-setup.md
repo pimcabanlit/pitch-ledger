@@ -654,8 +654,8 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 | --- | --- | --- | --- |
 | Browse the Studio (homepage, Match Centre, Insight Story, producer console) | anyone | none | $0 (apps scale to zero, inside the free grant) |
 | Block an insight | any signed-in producer | none | $0 |
-| Approve a pending insight | any signed-in producer | about 6 | a fraction of a cent. Limited to 10 decisions a minute per producer and 120 calls per API process. M0003's 6 pending insights together cost under 1 cent |
-| Run `pitch-ledger-live` + `pitch-ledger-feed`, or `pitch-ledger-replay` | the owner only (portal, Run now) | about 80–170 per match | a few US cents per run |
+| Approve a pending insight | any signed-in producer | about 8 | a fraction of a cent. Limited to 10 decisions a minute per producer and 160 calls per API process. M0003's 6 pending insights together cost under 1 cent |
+| Run `pitch-ledger-live` + `pitch-ledger-feed`, or `pitch-ledger-replay` | the owner only (portal, Run now) | about 80–190 per match | a few US cents per run |
 | Event Hubs (Basic) | always on | none | about $11 a month, fixed; delete after Nov 20 |
 
 Nothing runs on a schedule. Every Foundry call shows up in `RunUsage` and in Foundry →

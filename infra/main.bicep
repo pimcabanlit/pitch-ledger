@@ -70,7 +70,7 @@ param modelStrong string = 'gpt-4.1-mini'
 param modelSmall string = 'gpt-4.1-mini'
 
 @description('Model calls allowed per run (cost cap).')
-param modelCallBudget int = 120
+param modelCallBudget int = 160
 
 @description('Azure Data Explorer free cluster URI; empty: the jobs write the event store as files.')
 param adxClusterUri string = ''

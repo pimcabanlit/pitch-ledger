@@ -70,7 +70,7 @@ class ModelSettings(BaseSettings):
             "PITCH_LEDGER_FOUNDRY_PROJECT_ENDPOINT", "FOUNDRY_PROJECT_ENDPOINT"
         ),
     )
-    model_call_budget: int = 120  # calls per run, paid providers only
+    model_call_budget: int = 160  # calls per run, paid providers only (a full M0002 replay: ~120)
     # US$ per million tokens per tier. Defaults: the gpt-4.1-mini list price (check the
     # Azure pricing page for the region and deployment type; override by environment).
     price_strong_input: float = 0.40
