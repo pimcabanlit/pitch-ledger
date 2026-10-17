@@ -166,6 +166,12 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 
    Open (owner): create the budget and the saved view, then tick the follow-up.
 
+6. **Fan story and producer process flow.** Done 2026-10-17 (PRs #7 and #8):
+   - "Tell me more" is a three-beat story for fans (the buildup, what just happened, what it could mean) in the reader's audience mode and language: plain words for fans, figures for analysts;
+   - the Narrator and Translator write the beats from facts computed in code; each beat is number- and style-checked, else its template airs; stories are stored in the ledger;
+   - the pipeline view (stages, metrics, evidence, agent handoffs, published versions, the story) moved to the producer console as a vertical, clickable flow; ops alerts start collapsed;
+   - live on M0002 after a Foundry re-run; a full insight now costs 10 model calls, and the per-run budget is 160.
+
 **Done when:** the homepage and UI changes are live, the requirements map is complete with every gap either closed or labelled, match results are stored as history and readable by the engine, and cost per match plus a confirmed budget alert are documented.
 
 ### Phase 6 — Polish, video, submission (Oct 24–27)
@@ -184,7 +190,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 3. 0:25 Planted collapse at 60': momentum shift detected; Explainer's draft appears with evidence.
 4. 0:45 Auditor catches an over-reaching number and blocks it; corrected insight passes.
 5. 1:00 Producer approves; overlay fires on screen.
-6. 1:10 Same moment for an analyst (numbers) and a casual fan (one sentence), in English and Filipino or Spanish.
+6. 1:10 Same moment for an analyst (numbers) and a casual fan (one sentence), in English and Filipino or Spanish; "Tell me more" tells it as a three-beat story.
 7. 1:30 Full-time recap with evidence trail; trace and evaluation scorecard.
 8. 1:45 Architecture slide and close.
 
