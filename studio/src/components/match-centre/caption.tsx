@@ -46,7 +46,7 @@ export function Caption({
           href={`/insights/${overlay.insight_id}`}
           className="flex shrink-0 items-center border-l border-white/10 px-3 text-xs text-sky-300 hover:bg-white/5"
         >
-          How we know →
+          Tell me more →
         </Link>
       </div>
     </div>
