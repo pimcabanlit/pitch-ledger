@@ -50,7 +50,7 @@ MAX_OUTPUT_TOKENS: dict[Role, int] = {
     # 33 to 98 events, enough to cut a 400-token reply short of its closing brace. A cap
     # bounds the cost; only the tokens written are paid for.
     "explainer": 1600,
-    "auditor": 300,
+    "auditor": 600,  # a review listing several issues ran past 300 in a Foundry run
     "narrator": 1600,
     "personalizer": 700,  # five modes in one reply
     "translator": 400,  # two languages in one reply
