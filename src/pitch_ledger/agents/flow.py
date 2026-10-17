@@ -9,6 +9,9 @@
    mode in the other languages in one call; every copy passes the number and editorial
    checks or falls back to template copy.
 4. ``publish``: the Overlay builder turns each copy into an overlay in the ledger.
+5. ``tell_story`` (full route only): the Narrator and Translator write the "Tell me more"
+   beats from code-computed facts; each beat passes the story checks or falls back to its
+   template.
 """
 
 import asyncio
@@ -26,9 +29,11 @@ from pitch_ledger.agents.explainer import draft_insight, plant_error, template_d
 from pitch_ledger.agents.model_manager import ModelManager, ModelUnavailable
 from pitch_ledger.agents.overlay_builder import build_overlay
 from pitch_ledger.agents.personalizer import personalize
+from pitch_ledger.agents.story import StoryFacts
+from pitch_ledger.agents.storyteller import tell
 from pitch_ledger.agents.translator import translate
 from pitch_ledger.ledger.repository import Ledger
-from pitch_ledger.schema import AuditRecord, Insight, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, Overlay, StoryRecord, Trigger
 from pitch_ledger.schema.audit import AuditAction
 from pitch_ledger.schema.enums import AuditStatus, InsightType
 
@@ -351,6 +356,21 @@ def publish(
     if fallbacks:
         svc.audit(insight.insight_id, trigger, 0, "copy_check", "fallback", findings=fallbacks)
     return overlays
+
+
+async def tell_story(
+    insight: Insight, trigger: Trigger, facts: Facts, svc: Services, story: StoryFacts
+) -> StoryRecord:
+    """The "Tell me more" beats for an aired insight, stored with one fallback record for
+    the beats that aired as templates."""
+    told = await tell(
+        svc.models, copy.copy_key(trigger), insight, facts.signals, story, svc.languages
+    )
+    svc.ledger.put_story(told.record)
+    if told.fallbacks:
+        svc.audit(insight.insight_id, trigger, 0, "story_check", "fallback",
+                  findings=told.fallbacks)  # fmt: skip
+    return told.record
 
 
 async def localize(

@@ -135,7 +135,7 @@ az bicep build --file infra/main.bicep && az bicep lint --file infra/main.bicep 
 az deployment group create -g <resource-group> --parameters infra/main.bicepparam   # deploy by hand (normally the Deploy workflow)
 ```
 
-Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `triggers.jsonl`, `alerts.jsonl`, `run.json`). Season history: `data/history/records.jsonl` (one match record per line). Scenario definitions live in `scenarios/<scenario_id>.yaml`; `scenarios/matches.yaml` gives the demo matches their seeds and weekly kick-offs.
+Match directory: `match.json` (match, teams, players), `events.jsonl` / `tracking.jsonl` (live-feed format), `events.parquet` / `tracking.parquet` (same rows; `details` as a JSON string), `triggers.jsonl` (after `detect` or `replay`), `ledger/` (after `replay`: `insights.jsonl`, `audits.jsonl`, `overlays.jsonl`, `stories.jsonl`, `triggers.jsonl`, `alerts.jsonl`, `run.json`). Season history: `data/history/records.jsonl` (one match record per line). Scenario definitions live in `scenarios/<scenario_id>.yaml`; `scenarios/matches.yaml` gives the demo matches their seeds and weekly kick-offs.
 
 ## Definition of done for any change
 

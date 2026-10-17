@@ -4,7 +4,15 @@ from pathlib import Path
 
 from pitch_ledger.agents.queue import InMemoryTriggerQueue
 from pitch_ledger.ledger import FileLedger, InMemoryLedger
-from pitch_ledger.schema import AuditRecord, Insight, InsightSubject, Overlay, Trigger
+from pitch_ledger.schema import (
+    AuditRecord,
+    Insight,
+    InsightSubject,
+    Overlay,
+    StoryBeats,
+    StoryRecord,
+    Trigger,
+)
 
 
 def _trigger(n: int = 1) -> Trigger:
@@ -35,7 +43,16 @@ def _fill(ledger: InMemoryLedger) -> Insight:
                                trigger_clock_ms=1_000_000, display_ms=8000, priority=1,
                                template="momentum_bar", audience_mode="analyst", language="en",
                                text="Control 6", data={"control": 6}))  # fmt: skip
+    ledger.put_story(_story(insight))
     return insight
+
+
+def _story(insight: Insight) -> StoryRecord:
+    beats = StoryBeats(depth="plain", language="en", buildup="It was level.",
+                       outlook="Watch the next spell.",
+                       sources={"buildup": "model", "outlook": "template"})  # fmt: skip
+    return StoryRecord(insight_id=insight.insight_id, match_id=insight.match_id, beats=[beats],
+                       model_version="offline-templates")  # fmt: skip
 
 
 def test_ids_are_sequential_per_match_and_kind() -> None:
@@ -51,6 +68,9 @@ def test_memory_ledger_round_trip() -> None:
     assert ledger.get_insight(insight.insight_id) == insight
     assert [a.action for a in ledger.audits(insight.insight_id)] == ["approve"]
     assert len(ledger.overlays(insight.insight_id)) == 1
+    stored = ledger.story(insight.insight_id)
+    assert stored is not None and stored.beats_for("plain", "en") == _story(insight).beats[0]
+    assert stored.beats_for("numbers", "en") is None
     updated = insight.model_copy(
         update={"audit_status": "approved", "approved_by": "producer_demo"}
     )
@@ -63,13 +83,16 @@ def test_file_ledger_persists_and_resumes_ids(tmp_path: Path) -> None:
     insight = _fill(ledger)
     paths = ledger.flush()
     assert {p.name for p in paths} == {"triggers.jsonl", "insights.jsonl", "audits.jsonl",
-                                       "overlays.jsonl", "alerts.jsonl"}  # fmt: skip
+                                       "overlays.jsonl", "stories.jsonl",
+                                       "alerts.jsonl"}  # fmt: skip
     again = FileLedger(tmp_path / "ledger")
     assert again.get_insight(insight.insight_id) == insight
     assert again.triggers["M0002-T0001"] == _trigger()
     assert again.next_id("M0002", "I") == "M0002-I0002"
     assert again.next_id("M0002", "A") == "M0002-A0002"
     assert again.get_trigger("M0002-T0001") == _trigger()
+    assert again.story(insight.insight_id) == _story(insight)
+    assert again.story("M0002-I0099") is None
     fresh = FileLedger(tmp_path / "ledger", fresh=True)
     assert fresh.insights() == [] and fresh.next_id("M0002", "I") == "M0002-I0001"
 

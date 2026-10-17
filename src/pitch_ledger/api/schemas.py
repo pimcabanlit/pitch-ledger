@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, StoryRecord
 
 InsightStatus = Literal["aired", "pending", "blocked"]
 AlertState = Literal["open", "all"]
@@ -68,6 +68,7 @@ class InsightDetail(InsightView):
     audits: list[AuditStep]
     evidence: list[EvidenceEvent]
     overlays: list[Overlay]
+    process: "InsightProcess | None" = None  # the process flow (api.story.build_process)
 
 
 class AlertView(OpsAlert):
@@ -147,6 +148,28 @@ class StoryTrigger(BaseModel):
     season_matches: list[str] = []  # earlier matches this season behind any season facts
 
 
+class InsightProcess(BaseModel):
+    """The pipeline behind one insight, stage by stage, for the producer console."""
+
+    trigger: StoryTrigger | None
+    stages: list[StoryStage]
+    steps: list[StoryStep]
+    evidence_counts: dict[str, int]
+    story: StoryRecord | None = None
+    """The "Tell me more" beats as stored (none: the story page uses template beats)."""
+
+
+class StoryNarrative(BaseModel):
+    """The fan story of an aired insight for one audience mode and language (api.narrative)."""
+
+    mode: str
+    language: str
+    title: str
+    buildup: str  # what led to the moment
+    moment: str  # what just happened: the aired on-screen version
+    outlook: str  # what it could mean
+
+
 class InsightStory(BaseModel):
     """An aired insight traced end to end: detection, numbers, agents, approval, overlays."""
 
@@ -160,6 +183,7 @@ class InsightStory(BaseModel):
     evidence: list[EvidenceEvent]
     evidence_counts: dict[str, int]
     overlays: list[Overlay]
+    narratives: list[StoryNarrative] = []
 
 
 class BroadcastGraphic(BaseModel):

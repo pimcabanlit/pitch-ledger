@@ -17,8 +17,10 @@ from pitch_ledger.api.schemas import (
     BroadcastGraphic,
     BroadcastPackage,
     EvidenceEvent,
+    InsightProcess,
     InsightStory,
     MatchSummary,
+    StoryNarrative,
     StoryStage,
     StoryStep,
     StoryTrigger,
@@ -27,12 +29,14 @@ from pitch_ledger.api.schemas import (
 from pitch_ledger.engine.windows import match_minute
 from pitch_ledger.eventstore.rows import insight_status
 from pitch_ledger.ops.alerts import minute_label
-from pitch_ledger.schema import AuditRecord, Insight, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, Overlay, StoryRecord, Trigger
 from pitch_ledger.validation.insight_rules import unsupported_numbers
 
 PRODUCER_ACTIONS = {"producer_approve", "producer_block"}
 DRAFT_ACTIONS = {"draft", "fallback"}
 COPY_CHECK = "copy_check"  # its fallbacks: on-screen versions that use template text
+STORY_CHECK = "story_check"  # its fallbacks: "Tell me more" beats that use template text
+OUTPUT_CHECKS = {COPY_CHECK, STORY_CHECK}
 VERDICTS = {"approve", "correct", "block"}
 AUTO_RULE = "auto-approval rule"
 
@@ -111,6 +115,7 @@ def _stages(
     evidence: Sequence[EvidenceEvent],
     overlays: Sequence[Overlay],
     status: str,
+    story: StoryRecord | None = None,
 ) -> list[StoryStage]:
     minute = minute_label(insight.period, insight.clock_ms)
     rule = (trigger.rule_id if trigger else insight.insight_type.value).replace("_", " ")
@@ -119,7 +124,7 @@ def _stages(
     span = f" ({after.start_minute:.0f}'–{after.end_minute:.0f}')" if after else ""  # noqa: RUF001
     computed = len(trigger.metrics) if trigger else len(insight.metrics)
     # The insight's own drafts; the copy check's fallbacks concern on-screen versions.
-    text_steps = [s for s in steps if s.action in DRAFT_ACTIONS and s.agent != COPY_CHECK]
+    text_steps = [s for s in steps if s.action in DRAFT_ACTIONS and s.agent not in OUTPUT_CHECKS]
     drafts = [s for s in text_steps if s.action == "draft"]
     revisions = sum(s.action == "revise" for s in steps)
     agent = insight.created_by_agent
@@ -151,6 +156,15 @@ def _stages(
     if overlays and templated:
         published += (f"; {templated} of them from templates (the model's text failed the "
                       "number or style check)")  # fmt: skip
+    if overlays and story is not None:
+        sources = [src for b in story.beats for src in b.sources.values()]
+        templated = sum(src == "template" for src in sources)
+        if templated == len(sources):
+            published += "; fan story from templates"
+        else:
+            published += "; fan story by the Narrator and Translator"
+            if templated:
+                published += f" ({templated} of {len(sources)} beats from templates)"
     return [
         StoryStage(key="detected", label="Detected", done=True,
                    detail=f"{rule.capitalize()} at {minute}"),
@@ -170,18 +184,17 @@ def _stages(
     ]  # fmt: skip
 
 
-def build_story(
-    match: MatchSummary,
+def build_process(
     insight: Insight,
     trigger: Trigger | None,
     audits: Sequence[AuditRecord],
     overlays: Sequence[Overlay],
-    events: Mapping[str, Mapping[str, Any]],
-) -> InsightStory:
+    evidence: Sequence[EvidenceEvent],
+    story: StoryRecord | None = None,
+) -> InsightProcess:
+    """The pipeline behind one insight: what the producer console's process flow shows."""
     allowed = list((trigger.metrics if trigger else insight.metrics).values())
     steps = [_step(a, allowed) for a in audits]
-    evidence = evidence_events(events, insight.evidence_event_ids)
-    status = insight_status(insight)
     ordered = sorted(overlays, key=lambda o: o.overlay_id)
     story_trigger = None
     if trigger is not None:
@@ -194,17 +207,40 @@ def build_story(
             windows=_windows(trigger),
             season_matches=list(_season_matches(trigger)),
         )
+    return InsightProcess(
+        trigger=story_trigger,
+        stages=_stages(insight, trigger, steps, evidence, ordered, insight_status(insight),
+                       story),
+        steps=steps,
+        evidence_counts=dict(Counter(e.event_type for e in evidence).most_common()),
+        story=story,
+    )  # fmt: skip
+
+
+def build_story(
+    match: MatchSummary,
+    insight: Insight,
+    trigger: Trigger | None,
+    audits: Sequence[AuditRecord],
+    overlays: Sequence[Overlay],
+    events: Mapping[str, Mapping[str, Any]],
+    narratives: Sequence[StoryNarrative] = (),
+    story: StoryRecord | None = None,
+) -> InsightStory:
+    evidence = evidence_events(events, insight.evidence_event_ids)
+    process = build_process(insight, trigger, audits, overlays, evidence, story)
     return InsightStory(
         match=match,
         insight=insight.model_copy(update={"approved_by": approval_label(insight.approved_by)}),
-        status=status,
+        status=insight_status(insight),
         minute=round(match_minute(insight.period, insight.clock_ms), 1),
-        trigger=story_trigger,
-        stages=_stages(insight, trigger, steps, evidence, ordered, status),
-        steps=steps,
+        trigger=process.trigger,
+        stages=process.stages,
+        steps=process.steps,
         evidence=evidence,
-        evidence_counts=dict(Counter(e.event_type for e in evidence).most_common()),
-        overlays=ordered,
+        evidence_counts=process.evidence_counts,
+        overlays=sorted(overlays, key=lambda o: o.overlay_id),
+        narratives=list(narratives),
     )
 
 
@@ -232,7 +268,7 @@ def build_broadcast(
         graphics=graphics,
         audit=BroadcastAudit(
             status=insight.audit_status.value,
-            drafts=sum(a.action in DRAFT_ACTIONS and a.actor != COPY_CHECK for a in audits),
+            drafts=sum(a.action in DRAFT_ACTIONS and a.actor not in OUTPUT_CHECKS for a in audits),
             revisions=sum(a.action == "revise" for a in audits),
             approval=approval_label(insight.approved_by),
             model_version=insight.model_version,

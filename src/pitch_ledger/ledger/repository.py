@@ -1,4 +1,5 @@
-"""The insight ledger: triggers, insights, audit trail, overlays and ops alerts per match.
+"""The insight ledger: triggers, insights, audit trail, overlays, stories and ops alerts
+per match.
 
 ``Ledger`` is the interface; ``InMemoryLedger`` backs tests and ``FileLedger`` local
 replays. The Cosmos DB adapter (Phase 4) implements the same interface.
@@ -6,7 +7,7 @@ replays. The Cosmos DB adapter (Phase 4) implements the same interface.
 
 from typing import Literal, Protocol
 
-from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, Trigger
+from pitch_ledger.schema import AuditRecord, Insight, OpsAlert, Overlay, StoryRecord, Trigger
 
 IdKind = Literal["I", "O", "A", "X"]  # insight, overlay, audit, ops alert
 
@@ -31,6 +32,10 @@ class Ledger(Protocol):
     def put_overlay(self, overlay: Overlay) -> None: ...
 
     def overlays(self, insight_id: str | None = None) -> list[Overlay]: ...
+
+    def put_story(self, story: StoryRecord) -> None: ...
+
+    def story(self, insight_id: str) -> StoryRecord | None: ...
 
     def put_alert(self, alert: OpsAlert) -> None: ...
 

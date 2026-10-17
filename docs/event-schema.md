@@ -287,8 +287,8 @@ An insight airs only when `approved_by` is set and `audit_status` is not `blocke
 | --- | --- | --- |
 | audit_id | string | M0002-A0071 |
 | match_id, insight_id, trigger_id | string | M0002, M0002-I0016, M0002-T0040 |
-| round | integer | 1, 2, 3 for explain/audit rounds; 0 for producer and copy steps |
-| actor | string | `explainer`, `narrator`, `auditor`, `copy_check`, `test`, or the producer's name |
+| round | integer | 1, 2, 3 for explain/audit rounds; 0 for producer, copy and story steps |
+| actor | string | `explainer`, `narrator`, `auditor`, `copy_check`, `story_check`, `test`, or the producer's name |
 | action | enum | `draft`, `inject_error`, `check`, `review`, `revise`, `approve`, `correct`, `block`, `producer_approve`, `producer_block`, `fallback` |
 | passed | boolean | false for a check with findings |
 | findings | list | ["INS-01: '32' in the text matches no cited metric (cited: turnovers_after=16, …)"] |
@@ -323,6 +323,22 @@ A planted error (`inject_error`, actor `test`) is recorded as such, so the trail
 | acknowledged_by, acknowledged_at | string, datetime | the producer from the verified token; null until acknowledged |
 
 Numbers in a message (seconds, latencies, counts, minutes) come from code, like every other figure. Rules and thresholds: docs/architecture.md, Ops alerts.
+
+**story** (the "Tell me more" beats of one aired full-flow insight; ledger file `stories.jsonl`, Cosmos DB document `<insight_id>-story`)
+
+| Field | Type | Example |
+| --- | --- | --- |
+| insight_id, match_id | string | M0002-I0013, M0002 |
+| beats | list | one entry per depth and language (2 × 3) |
+| beats[].depth | enum | `plain` (every audience mode but the analyst) or `numbers` (the analyst) |
+| beats[].language | string | `en`, `es`, `fil` |
+| beats[].buildup | string | what led to the moment, from events before it only |
+| beats[].outlook | string | what to watch from here; never a predicted result or number |
+| beats[].sources | object | {buildup: `model`, outlook: `template`}: who wrote each beat |
+| model_version | string | `offline-templates` or `foundry:<strong>\|<small>` |
+| written_at | datetime | 2026-10-24T14:21:09.1Z |
+
+Facts for the beats (score and goals so far, shots, xG and possession before the moment, red cards, the trigger's windows and metrics) are computed in code (`agents/story.py`). The Narrator rewrites the English template beats and the Translator renders the other languages; each beat must pass the story checks (every number from those facts, at most 4 sentences and 360 characters in English or 420 otherwise, the house style, and at most 2 figures at `plain` depth, goal minutes aside), else it is asked for once more, then the template beat is stored and a `story_check` `fallback` audit record names why. The middle beat, what just happened, is the aired overlay for the reader's mode and language.
 
 **overlay** (one per audience and language)
 

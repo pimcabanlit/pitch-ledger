@@ -10,13 +10,16 @@ back for revision, and model copy that fails it falls back to the template.
 import re
 from typing import Literal
 
-Kind = Literal["headline", "explanation", "overlay"]
+Kind = Literal["headline", "explanation", "overlay", "story"]
 
 HEADLINE_MAX_WORDS = 10
 EXPLANATION_MAX_SENTENCES = 2
 EXPLANATION_MAX_CHARS = 320
 OVERLAY_MAX_CHARS = {"en": 140}
 OVERLAY_MAX_CHARS_OTHER = 160  # Spanish and Filipino run longer than English
+STORY_MAX_SENTENCES = 4  # one beat of the "Tell me more" story: short, for a live match
+STORY_MAX_CHARS = {"en": 360}
+STORY_MAX_CHARS_OTHER = 420
 
 CLICHES = (
     "showcas", "testament", "masterclass", "thrilling", "statement win", "game-changer",
@@ -123,6 +126,13 @@ def editorial_issues(
             issues.append(
                 f"STYLE: explanation has {len(stripped)} characters (max {EXPLANATION_MAX_CHARS})"
             )
+    elif kind == "story":
+        n = len(sentences(stripped))
+        if n > STORY_MAX_SENTENCES:
+            issues.append(f"STYLE: story beat has {n} sentences (max {STORY_MAX_SENTENCES})")
+        limit = STORY_MAX_CHARS.get(language, STORY_MAX_CHARS_OTHER)
+        if len(stripped) > limit:
+            issues.append(f"STYLE: story beat has {len(stripped)} characters (max {limit})")
     else:
         limit = OVERLAY_MAX_CHARS.get(language, OVERLAY_MAX_CHARS_OTHER)
         if len(stripped) > limit:

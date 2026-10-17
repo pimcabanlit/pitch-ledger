@@ -56,7 +56,7 @@ def test_replay_through_the_cosmos_ledger_and_reload(match_dir: Path, tmp_path: 
     insights = run.ledger.insights("M0002")
     assert [i.audit_status.value for i in insights] == ["corrected"]
     kinds = sorted({d["kind"] for d in container.docs.values()})
-    assert kinds == ["audit", "insight", "overlay", "trigger"]
+    assert kinds == ["audit", "insight", "overlay", "story", "trigger"]
     assert ledger.writes >= len(container.docs)  # upserts can rewrite a document
     assert (tmp_path / "ledger" / "run.json").exists()
 
@@ -65,9 +65,13 @@ def test_replay_through_the_cosmos_ledger_and_reload(match_dir: Path, tmp_path: 
     assert reloaded.next_id("M0002", "I") == "M0002-I0002"  # counters continue
     assert reloaded.get_insight(insights[0].insight_id) == insights[0]
     assert len(reloaded.overlays()) == len(run.ledger.overlays())
+    story = run.ledger.story(insights[0].insight_id)
+    assert story is not None and reloaded.story(story.insight_id) == story
+    assert (story.match_id, f"{story.insight_id}-story") in container.docs
     alert = OpsDesk(reloaded).raise_alert("M0002", "feed_gap", "warning", "gap", ["M0002-E000001"])
     assert alert is not None and alert.alert_id == "M0002-X0001"
-    again = CosmosLedger(container)
+    container.upsert_item({"id": "M0002-I0001-future", "match_id": "M0002", "kind": "future"})
+    again = CosmosLedger(container)  # a kind from a newer version is skipped, not fatal
     again.load("M0002")
     assert again.alerts("M0002") == [alert] and again.next_id("M0002", "X") == "M0002-X0002"
 

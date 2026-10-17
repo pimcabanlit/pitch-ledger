@@ -88,6 +88,7 @@ export interface AuditRecord {
   findings: string[];
   headline: string | null;
   explanation: string | null;
+  recorded_at: string | null; // when the step happened (older records: null)
 }
 
 export interface AuditStep extends AuditRecord {
@@ -107,6 +108,7 @@ export interface InsightDetail extends InsightView {
   audits: AuditStep[];
   evidence: EvidenceEvent[];
   overlays: Overlay[];
+  process: InsightProcess | null; // the producer console's process flow
 }
 
 export interface DecisionResult {
@@ -147,25 +149,64 @@ export interface StoryWindow {
   end_minute: number;
 }
 
+export interface StoryTrigger {
+  trigger_id: string;
+  rule_id: string;
+  minute: number;
+  detector: string | null;
+  metrics: Record<string, number>;
+  windows: StoryWindow[];
+  season_matches: string[]; // earlier matches this season behind any season facts
+}
+
+/** One depth and language of the stored "Tell me more" story (schema.story). */
+export interface StoryBeats {
+  depth: "plain" | "numbers"; // plain: every mode but the analyst
+  language: string;
+  buildup: string;
+  outlook: string;
+  sources: Record<string, "model" | "template">; // who wrote each beat
+}
+
+export interface StoryRecord {
+  insight_id: string;
+  match_id: string;
+  beats: StoryBeats[];
+  model_version: string;
+  written_at: string | null;
+}
+
+/** The pipeline behind one insight, stage by stage (api.story.build_process). */
+export interface InsightProcess {
+  trigger: StoryTrigger | null;
+  stages: StoryStage[];
+  steps: StoryStep[];
+  evidence_counts: Record<string, number>;
+  story: StoryRecord | null; // none: the story page uses template beats
+}
+
+/** The fan story for one audience mode and language (api.narrative). */
+export interface StoryNarrative {
+  mode: string;
+  language: string;
+  title: string;
+  buildup: string; // what led to the moment
+  moment: string; // what just happened: the aired on-screen version
+  outlook: string; // what it could mean
+}
+
 export interface InsightStory {
   match: MatchSummary;
   insight: Insight;
   status: InsightStatus;
   minute: number;
-  trigger: {
-    trigger_id: string;
-    rule_id: string;
-    minute: number;
-    detector: string | null;
-    metrics: Record<string, number>;
-    windows: StoryWindow[];
-    season_matches: string[]; // earlier matches this season behind any season facts
-  } | null;
+  trigger: StoryTrigger | null;
   stages: StoryStage[];
   steps: StoryStep[];
   evidence: EvidenceEvent[];
   evidence_counts: Record<string, number>;
   overlays: Overlay[];
+  narratives: StoryNarrative[];
 }
 
 export interface TimelineEvent {
@@ -364,12 +405,6 @@ export const api = {
     request<PassNetwork>(`/matches/${matchId}/pass-network?team=${team}&period=${period}&end_ms=${endMs}`),
   tracking: (matchId: string, period: number, fromS: number, toS: number) =>
     request<TrackingWindow>(`/matches/${matchId}/tracking?period=${period}&from_s=${fromS}&to_s=${toS}`),
-  /** The broadcast package as JSON text (shown and downloaded as is). */
-  broadcast: async (insightId: string) => {
-    const response = await fetch(`/api/v1/insights/${insightId}/broadcast`, { cache: "no-store" });
-    if (!response.ok) throw new ApiError(response.status, response.statusText);
-    return JSON.stringify(await response.json(), null, 2);
-  },
   negotiate: (matchId: string, producer = false) =>
     request<Realtime>(`/realtime/negotiate${producer ? "/producer" : ""}?match_id=${matchId}`),
   alerts: (matchId: string) => request<AlertView[]>(`/matches/${matchId}/alerts`),

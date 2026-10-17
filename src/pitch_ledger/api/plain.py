@@ -20,6 +20,10 @@ MODE_LABELS = {
     "club_focus": "Club focus",
     "player_focus": "Player focus",
     "single_metric": "Single metric",
+    "plain_buildup": "Fan story buildup",
+    "plain_outlook": "Fan story outlook",
+    "numbers_buildup": "Analyst story buildup",
+    "numbers_outlook": "Analyst story outlook",
 }
 LANGUAGE_LABELS = {"en": "English", "es": "Spanish", "fil": "Filipino"}
 NOTHING_TO_DO = "No action needed."
@@ -31,9 +35,10 @@ _REASONS: tuple[tuple[str, str], ...] = (
     (r"budget spent", "the AI call budget was used up"),
     (r"content filter", "the safety filter stopped it"),
     (r"model unavailable|timeout|timed out", "the AI service did not answer"),
-    (r"copy has \d+ figures", "too many numbers"),
+    (r"(?:copy|beat) has \d+ figures", "too many numbers"),
     (r"ordinals|write minutes like", "minutes in the wrong format"),
-    (r"numbers not in metrics|does not recompute|not one of the trigger's metrics",
+    (r"numbers not in metrics|matches no cited metric|does not recompute"
+     r"|not one of the trigger's metrics",
      "a number that does not match the match data"),
     (r"evidence", "it cited the wrong match events"),
     (r"characters \(max|words \(max|sentences \(max", "too long"),
@@ -199,6 +204,10 @@ def explain_step(record: AuditRecord) -> str:
             n = sum(len(langs) for langs in per_mode.values()) or len(record.findings)
             return (f"{_plural(n, 'on-screen version')} used pre-written wording "
                     f"(the AI's text had {join(why)}).")  # fmt: skip
+        case "fallback" if record.actor == "story_check":
+            n = sum(len(langs) for langs in versions(record.findings).values())
+            return (f"{_plural(n or len(record.findings), 'story beat')} used pre-written "
+                    f"wording (the AI's text had {join(why)}).")  # fmt: skip
         case "fallback":
             return f"Pre-written wording was used instead of the AI's text{because}."
         case "inject_error":

@@ -18,7 +18,9 @@ from pitch_ledger.agents.contracts import (
     InsightDraft,
     PersonalizeRequest,
     ReviewVerdict,
+    StoryRequest,
     TranslateRequest,
+    TranslateStoryRequest,
 )
 
 
@@ -47,6 +49,11 @@ def respond(payload: dict[str, Any]) -> str:
         values = {**t.metrics, **t.facts.names()}
         texts = {lang: copy.mode_text(t.copy_key, t.mode, lang, values) for lang in t.languages}
         return CopySet(texts=texts).model_dump_json()
+    if task == "story":  # the template beats are the offline story
+        return CopySet(texts=StoryRequest.model_validate(payload).drafts).model_dump_json()
+    if task == "translate_story":
+        drafts = TranslateStoryRequest.model_validate(payload).drafts
+        return CopySet(texts=drafts).model_dump_json()
     if task == "ping":
         return CopyText(text=str(payload.get("reply_with", "ok"))).model_dump_json()
     raise ValueError(f"offline model cannot handle task {task!r}")
