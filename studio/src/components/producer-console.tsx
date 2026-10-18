@@ -217,9 +217,12 @@ export function ProducerConsole() {
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     <span className="font-mono">{minuteLabel(matchMinute(i.period, i.clock_ms))}</span>
                     <span>{i.insight_type.replaceAll("_", " ")}</span>
-                    <Badge tone={status} className="ml-auto">
-                      {STATUS_LABELS[status]}
-                    </Badge>
+                    {/* Aired is the normal state: only flag rows that need a look. */}
+                    {status !== "aired" && (
+                      <Badge tone={status} className="ml-auto">
+                        {STATUS_LABELS[status]}
+                      </Badge>
+                    )}
                   </div>
                   <div className="mt-1 text-sm font-medium">{i.headline}</div>
                 </button>
