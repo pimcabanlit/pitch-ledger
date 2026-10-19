@@ -53,8 +53,8 @@ export default function Home() {
               Where match intelligence meets fan experience.
             </p>
             <p className="mt-3 max-w-md text-sm text-slate-600">
-              Live match insights computed in code, explained by AI agents, checked by an Auditor
-              and approved by a producer, in your style and language.
+              Follow every big moment live, with stats you can trust, explained in plain words, in
+              your style and your language.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Link
