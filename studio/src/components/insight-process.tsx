@@ -2,16 +2,11 @@
 
 import {
   ArrowDown,
-  Calculator,
   CheckCircle2,
   ChevronRight,
   FlaskConical,
   PenLine,
-  Radar,
-  Radio,
   ShieldAlert,
-  ShieldCheck,
-  UserCheck,
   XCircle,
 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
@@ -29,14 +24,6 @@ import {
 } from "@/lib/api";
 import { metricLabel, metricUnit } from "@/lib/metrics";
 
-const STAGE_ICONS: Record<StageKey, typeof Radar> = {
-  detected: Radar,
-  analyzed: Calculator,
-  explained: PenLine,
-  audited: ShieldCheck,
-  approved: UserCheck,
-  published: Radio,
-};
 const MODE_LABELS: Record<string, string> = {
   casual: "Casual fan",
   analyst: "Analyst",
@@ -96,24 +83,20 @@ function Highlighted({ text, numbers }: { text: string; numbers: string[] }) {
 }
 
 /**
- * How one insight was made, as a vertical flow: Detected, Analyzed, Explained, Audited,
- * Approved, Published. Each stage opens to the records behind it: the trigger, the numbers
- * and evidence, the drafts, the agent handoffs, the producer's decision and every on-screen
- * version. Stages start closed so the flow reads as a quick reference.
+ * How one insight was made, as a slim stepper: Detected, Analyzed, Explained, Audited,
+ * Approved, Published. Picking a stage opens the records behind it underneath: the
+ * trigger, the numbers and evidence, the drafts, the agent handoffs, the producer's
+ * decision and every on-screen version. No stage starts open, so the flow reads as a
+ * quick reference.
  */
 export function InsightProcess({ detail, names }: { detail: InsightDetail; names: Record<string, string> }) {
-  const [open, setOpen] = useState<Set<StageKey>>(new Set());
+  const [open, setOpen] = useState<StageKey | null>(null);
   const [technical, setTechnical] = useState(false);
   const process = detail.process;
   if (!process) return null;
   const stages = process.stages;
-  const toggle = (key: StageKey) =>
-    setOpen((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+  const index = stages.findIndex((stage) => stage.key === open);
+  const current = index >= 0 ? stages[index] : null;
 
   const body: Record<StageKey, ReactNode> = {
     detected: <Detected detail={detail} />,
@@ -125,56 +108,48 @@ export function InsightProcess({ detail, names }: { detail: InsightDetail; names
   };
 
   return (
-    <section aria-label="How this insight was made">
-      <h3 className="mb-2 text-sm font-medium">How this insight was made</h3>
-      <ol>
-        {stages.map((stage, i) => {
-          const Icon = STAGE_ICONS[stage.key];
-          const isOpen = open.has(stage.key);
-          const step = delta(stages, i);
-          const id = `stage-${stage.key}`;
+    <section aria-label="How this insight was made" className="space-y-3">
+      <h3 className="text-sm font-medium text-slate-500">How it was made</h3>
+      <ol className="grid grid-cols-3 gap-x-1 gap-y-3 sm:grid-cols-6">
+        {stages.map((stage) => {
+          const isOpen = stage.key === open;
           return (
-            <li key={stage.key} className="relative pb-1">
-              {i < stages.length - 1 && (
-                <span aria-hidden className="absolute top-9 bottom-0 left-[17px] w-px bg-slate-200" />
-              )}
+            <li key={stage.key} className="flex flex-col gap-1.5">
+              <span aria-hidden className={`h-1 rounded-full ${stage.done ? "bg-emerald-500" : "bg-slate-200"}`} />
               <button
-                onClick={() => toggle(stage.key)}
+                onClick={() => setOpen(isOpen ? null : stage.key)}
                 aria-expanded={isOpen}
-                aria-controls={id}
-                className="flex w-full gap-3 rounded-md py-1.5 pr-1 text-left hover:bg-slate-50"
+                aria-controls="stage-records"
+                title={stage.detail}
+                className={`rounded py-0.5 text-left text-sm hover:text-slate-900 ${
+                  isOpen ? "font-semibold text-slate-900" : stage.done ? "text-slate-600" : "text-slate-400"
+                }`}
               >
-                <span
-                  className={`relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-                    stage.done ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-baseline gap-2">
-                    <span className="text-sm font-semibold">{stage.label}</span>
-                    {step && <span className="font-mono text-[11px] text-slate-400">{step}</span>}
-                    {stage.at && (
-                      <span className="ml-auto font-mono text-[11px] text-slate-400">{clock(stage.at)}</span>
-                    )}
-                  </span>
-                  <span className="block text-xs leading-snug text-slate-600">{stage.detail}</span>
-                </span>
-                <ChevronRight
-                  className={`mt-2.5 h-4 w-4 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`}
-                  aria-hidden
-                />
+                {stage.label}
               </button>
-              {isOpen && (
-                <div id={id} className="mb-2 ml-12 space-y-3 rounded-md border border-slate-200 bg-slate-50/60 p-3">
-                  {body[stage.key]}
-                </div>
-              )}
             </li>
           );
         })}
       </ol>
+      {current ? (
+        <div id="stage-records" className="space-y-3 rounded-md bg-slate-50 p-3 sm:p-4">
+          <div className="space-y-0.5">
+            <p className="flex flex-wrap items-baseline gap-x-2 text-sm font-medium">
+              {current.label}
+              {delta(stages, index) && (
+                <span className="font-mono text-[11px] font-normal text-slate-400">{delta(stages, index)}</span>
+              )}
+              {current.at && (
+                <span className="ml-auto font-mono text-[11px] font-normal text-slate-400">{clock(current.at)}</span>
+              )}
+            </p>
+            <p className="text-sm text-slate-600">{current.detail}</p>
+          </div>
+          {body[current.key]}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">Pick a stage to see the records behind it.</p>
+      )}
     </section>
   );
 }

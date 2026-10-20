@@ -505,7 +505,7 @@ Who may act as a producer is one setting (`producerAccess` in `infra/main.bicepp
 
 1. GitHub → the repository → **Settings** → **Secrets and variables** → **Actions** → **Variables**: `API_AUDIENCE` = the API's client ID, `STUDIO_CLIENT_ID` = the Studio's client ID. (Client IDs are not secrets.)
 2. Re-run the **Deploy** workflow (or push to `main`). It sets the API's audience and access mode and the Studio's sign-in settings, which the Studio reads at request time from `/auth-config`.
-3. Open `https://<studio-url>/producer` → **Sign in with Microsoft** → the console loads with "Signed in as …".
+3. Open `https://<studio-url>/producer` → **Sign in with Microsoft** → the console loads with your name next to **Sign out** in the top right.
 
 Local runs: put `STUDIO_ENTRA_CLIENT_ID`, `STUDIO_API_SCOPE=api://<api-client-id>/access_as_producer` (and optionally `STUDIO_ENTRA_AUTHORITY`, `STUDIO_PRODUCER_ACCESS`) in the Studio's environment and run the API with `PITCH_LEDGER_API_AUTH=entra`, `PITCH_LEDGER_API_AUDIENCE=<api-client-id>`, `PITCH_LEDGER_API_PRODUCERS=any_account`. Sign-in needs `https` or `localhost` (the browser's crypto API).
 
