@@ -16,7 +16,37 @@ export function ProducerArea() {
   );
 }
 
+/** The page title, with who is signed in and Sign out on the right. */
+function Header() {
+  const auth = useProducerAuth();
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h1 className="text-xl font-semibold">Producer console</h1>
+      {auth.status === "signed_in" && (
+        <div className="flex items-center gap-3 text-sm text-slate-500">
+          <span>{auth.name}</span>
+          <button
+            onClick={auth.signOut}
+            className="flex items-center gap-1 font-medium text-sky-700 hover:text-sky-900"
+          >
+            <LogOut className="h-3.5 w-3.5" aria-hidden /> Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Gate() {
+  return (
+    <div className="space-y-5">
+      <Header />
+      <Body />
+    </div>
+  );
+}
+
+function Body() {
   const auth = useProducerAuth();
   if (auth.status === "loading") {
     return <Card className="p-6 text-sm text-slate-500">Checking sign-in…</Card>;
@@ -43,20 +73,5 @@ function Gate() {
       </Card>
     );
   }
-  return (
-    <div className="space-y-4">
-      {auth.status === "signed_in" && (
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
-          <ShieldCheck className="h-4 w-4 text-emerald-700" aria-hidden />
-          <span>
-            Signed in as <strong className="font-medium text-slate-900">{auth.name}</strong>
-          </span>
-          <Button variant="outline" size="sm" onClick={auth.signOut}>
-            <LogOut className="h-3.5 w-3.5" aria-hidden /> Sign out
-          </Button>
-        </div>
-      )}
-      <ProducerConsole />
-    </div>
-  );
+  return <ProducerConsole />;
 }

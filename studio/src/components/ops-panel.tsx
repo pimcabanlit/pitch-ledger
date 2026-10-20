@@ -21,11 +21,60 @@ function urgency(a: AlertView) {
   return { label: "FYI", tone: "info", Icon: Info, color: "text-sky-600" } as const;
 }
 
+/** Open alerts that need the producer, and the ones that are only FYI. */
+export function openAlerts(alerts: AlertView[] | null) {
+  const open = (alerts ?? []).filter((a) => !a.acknowledged_by);
+  return {
+    needYou: open.filter((a) => a.needs_action || a.severity === "critical"),
+    fyi: open.filter((a) => !a.needs_action && a.severity !== "critical"),
+  };
+}
+
+/**
+ * One line for the console's toolbar saying whether any ops alert needs the producer;
+ * it opens and closes the alert list.
+ */
+export function OpsSummary({
+  alerts,
+  open,
+  onToggle,
+}: {
+  alerts: AlertView[] | null;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { needYou, fyi } = openAlerts(alerts);
+  const critical = needYou.some((a) => a.severity === "critical");
+  const Icon = critical ? OctagonAlert : needYou.length ? TriangleAlert : CheckCircle2;
+  const color = critical ? "text-rose-600" : needYou.length ? "text-amber-600" : "text-emerald-600";
+  return (
+    <button
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-controls="ops-alerts"
+      className="flex h-9 items-center gap-1.5 rounded-md px-1 text-sm text-slate-500 hover:text-slate-800"
+    >
+      <Icon className={`h-4 w-4 ${color}`} aria-hidden />
+      {alerts === null ? (
+        "Ops: loading…"
+      ) : needYou.length ? (
+        <span className={`font-medium ${critical ? "text-rose-700" : "text-amber-800"}`}>
+          Ops: {needYou.length} need{needYou.length === 1 ? "s" : ""} you
+        </span>
+      ) : (
+        "Ops: nothing needs you"
+      )}
+      {fyi.length > 0 && <span className="text-xs">· {fyi.length} FYI</span>}
+      <ChevronRight className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`} aria-hidden />
+    </button>
+  );
+}
+
 /**
  * Ops alerts for the selected match, newest first: one plain headline per alert (what
  * happened) and what to do about it, with the details and the technical log behind a
- * toggle. Open alerts stay on top until a producer acknowledges them. The panel starts
- * collapsed to its header, whose badges still say whether anything needs the producer.
+ * toggle. Open alerts stay on top until a producer acknowledges them. The console shows
+ * this list only when the producer opens it from the toolbar or something needs them.
  */
 export function OpsPanel({
   alerts,
@@ -36,15 +85,13 @@ export function OpsPanel({
   onAcknowledge: (alertId: string) => Promise<void>;
   onOpenInsight: (insightId: string) => void;
 }) {
-  const [collapsed, setCollapsed] = useState(true); // details on demand; the badges say if anything needs you
   const [showDone, setShowDone] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const open = (alerts ?? []).filter((a) => !a.acknowledged_by);
   const done = (alerts ?? []).filter((a) => a.acknowledged_by);
   const shown = showDone ? [...open, ...done] : open;
-  const needYou = open.filter((a) => a.needs_action || a.severity === "critical");
-  const fyi = open.filter((a) => !a.needs_action && a.severity !== "critical");
+  const { fyi } = openAlerts(alerts);
 
   const acknowledge = async (...alertIds: string[]) => {
     setBusy(alertIds.length > 1 ? "all" : alertIds[0]);
@@ -64,33 +111,9 @@ export function OpsPanel({
     });
 
   return (
-    <Card aria-label="Ops alerts">
-      <CardHeader className={`flex flex-row flex-wrap items-center gap-2 text-sm font-medium ${collapsed ? "border-b-0" : ""}`}>
-        <button
-          onClick={() => setCollapsed((v) => !v)}
-          aria-expanded={!collapsed}
-          className="flex items-center gap-1 hover:text-slate-700"
-        >
-          <ChevronRight className={`h-4 w-4 transition-transform ${collapsed ? "" : "rotate-90"}`} aria-hidden />
-          Ops alerts
-        </button>
-        {alerts !== null &&
-          (needYou.length ? (
-            <Badge tone={needYou.some((a) => a.severity === "critical") ? "critical" : "warning"}>
-              {needYou.length} need{needYou.length === 1 ? "s" : ""} you
-            </Badge>
-          ) : (
-            <Badge tone="aired">Nothing needs you</Badge>
-          ))}
-        {fyi.length > 0 && <span className="text-xs font-normal text-slate-500">{fyi.length} FYI</span>}
-        {collapsed ? (
-          <button
-            onClick={() => setCollapsed(false)}
-            className="ml-auto text-xs font-normal text-sky-700 underline-offset-2 hover:underline"
-          >
-            Show details
-          </button>
-        ) : (
+    <Card id="ops-alerts" aria-label="Ops alerts">
+      <CardHeader className="flex flex-row flex-wrap items-center gap-2 text-sm font-medium">
+        Ops alerts
         <span className="ml-auto flex items-center gap-3">
           {fyi.length > 1 && (
             <button
@@ -110,9 +133,8 @@ export function OpsPanel({
             </button>
           )}
         </span>
-        )}
       </CardHeader>
-      {collapsed ? null : alerts === null ? (
+      {alerts === null ? (
         <p className="px-4 py-3 text-sm text-slate-500">Loading ops alerts…</p>
       ) : shown.length === 0 ? (
         <p className="flex items-center gap-2 px-4 py-3 text-sm text-slate-500">

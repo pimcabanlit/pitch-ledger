@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { InsightProcess } from "@/components/insight-process";
-import { OpsPanel } from "@/components/ops-panel";
+import { OpsPanel, OpsSummary, openAlerts } from "@/components/ops-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import {
   ApiError,
   api,
   type AlertView,
+  type Insight,
   type InsightDetail,
   type InsightStatus,
   type InsightView,
@@ -30,11 +31,16 @@ const STATUS_LABELS: Record<InsightStatus | "all", string> = {
   blocked: "Blocked",
   all: "All",
 };
+const STATUS_COLORS: Record<InsightStatus, string> = {
+  pending: "text-amber-700",
+  aired: "text-emerald-700",
+  blocked: "text-rose-700",
+};
 const AUDIT_LABELS: Record<string, string> = {
-  pending: "Auditor: still checking",
-  approved: "Auditor: passed",
-  corrected: "Auditor: passed after a fix",
-  blocked: "Auditor: blocked",
+  pending: "Auditor still checking",
+  approved: "Auditor passed it",
+  corrected: "Auditor passed it after a fix",
+  blocked: "Auditor blocked it",
 };
 const POLL_MS = 10000; // without push
 
@@ -51,8 +57,9 @@ function signInMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function auditTone(status: string) {
-  return status === "corrected" ? "corrected" : status === "blocked" ? "blocked" : "neutral";
+/** The match minute an insight is about. */
+function minuteOf(i: Insight): number {
+  return matchMinute(i.period, i.clock_ms);
 }
 
 export function ProducerConsole() {
@@ -66,6 +73,7 @@ export function ProducerConsole() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [opsOpen, setOpsOpen] = useState<boolean | null>(null); // null: open only when something needs you
 
   useEffect(() => {
     api.matches().then((rows) => {
@@ -156,16 +164,22 @@ export function ProducerConsole() {
     return () => clearInterval(timer);
   }, [pushed, loadInsights, loadAlerts]);
 
-  const shown = insights.filter((v) => filter === "all" || v.status === filter);
+  // newest first: the latest moment is at the top
+  const shown = insights
+    .filter((v) => filter === "all" || v.status === filter)
+    .reverse()
+    .sort((x, y) => minuteOf(y.insight) - minuteOf(x.insight));
+  const { needYou } = openAlerts(alerts);
+  const opsShown = opsOpen ?? needYou.length > 0; // opens by itself when something needs you
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-xs text-slate-600">
-          Match
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center">
+          <span className="sr-only">Match</span>
           <Select
             value={matchId}
-            onChange={(e) => (setMatchId(e.target.value), setSelected(null), setAlerts(null))}
+            onChange={(e) => (setMatchId(e.target.value), setSelected(null), setAlerts(null), setOpsOpen(null))}
           >
             {matches.map((m) => (
               <option key={m.match_id} value={m.match_id}>
@@ -174,20 +188,29 @@ export function ProducerConsole() {
             ))}
           </Select>
         </label>
-        <span className={`text-xs ${pushed ? "text-emerald-700" : "text-slate-500"}`}>
-          {pushed ? "● live" : `○ updates every ${POLL_MS / 1000} s`}
+        <span className={`flex items-center gap-1.5 text-xs ${pushed ? "text-emerald-700" : "text-slate-500"}`}>
+          <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${pushed ? "bg-emerald-500" : "bg-slate-400"}`} />
+          {pushed ? "live" : `updates every ${POLL_MS / 1000} s`}
         </span>
-        <div className="flex gap-1">
+        <div role="group" aria-label="Show" className="flex gap-0.5 rounded-lg bg-slate-100 p-0.5">
           {FILTERS.map((f) => (
-            <Button
+            <button
               key={f}
-              size="sm"
-              variant={filter === f ? "default" : "outline"}
               onClick={() => setFilter(f)}
+              aria-pressed={filter === f}
+              className={`h-8 rounded-md px-3 text-xs font-medium text-slate-900 ${
+                filter === f ? "bg-white shadow-sm" : "hover:bg-slate-200/60"
+              }`}
             >
-              {STATUS_LABELS[f]} ({f === "all" ? insights.length : insights.filter((v) => v.status === f).length})
-            </Button>
+              {STATUS_LABELS[f]}{" "}
+              <span className="font-normal text-slate-500">
+                {f === "all" ? insights.length : insights.filter((v) => v.status === f).length}
+              </span>
+            </button>
           ))}
+        </div>
+        <div className="ml-auto">
+          <OpsSummary alerts={alerts} open={opsShown} onToggle={() => setOpsOpen(!opsShown)} />
         </div>
       </div>
 
@@ -197,34 +220,34 @@ export function ProducerConsole() {
         </p>
       )}
 
-      <OpsPanel alerts={alerts} onAcknowledge={acknowledge} onOpenInsight={open} />
+      {opsShown && <OpsPanel alerts={alerts} onAcknowledge={acknowledge} onOpenInsight={open} />}
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <Card>
-          <CardHeader className="text-sm font-medium">Insights</CardHeader>
-          <ul className="divide-y divide-slate-100">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <Card aria-label="Insights">
+          <ul className="max-h-[48rem] overflow-y-auto py-1">
             {shown.length === 0 && (
-              <li className="px-4 py-3 text-sm text-slate-500">Nothing here.</li>
+              <li className="px-4 py-6 text-sm text-slate-500">Nothing here.</li>
             )}
             {shown.map(({ insight: i, status }) => (
               <li key={i.insight_id}>
                 <button
                   onClick={() => open(i.insight_id)}
-                  className={`w-full px-4 py-3 text-left hover:bg-slate-50 ${
-                    selected?.insight.insight_id === i.insight_id ? "bg-sky-50" : ""
+                  aria-current={selected?.insight.insight_id === i.insight_id}
+                  className={`flex w-full items-start gap-3 px-4 py-2.5 text-left ${
+                    selected?.insight.insight_id === i.insight_id ? "bg-sky-50" : "hover:bg-slate-50"
                   }`}
                 >
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span className="font-mono">{minuteLabel(matchMinute(i.period, i.clock_ms))}</span>
-                    <span>{i.insight_type.replaceAll("_", " ")}</span>
-                    {/* Aired is the normal state: only flag rows that need a look. */}
-                    {status !== "aired" && (
-                      <Badge tone={status} className="ml-auto">
-                        {STATUS_LABELS[status]}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="mt-1 text-sm font-medium">{i.headline}</div>
+                  <span className="w-9 shrink-0 pt-0.5 font-mono text-xs text-slate-500">
+                    {minuteLabel(minuteOf(i))}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm leading-snug text-slate-900">{i.headline}</span>
+                    <span className="block text-xs text-slate-500 first-letter:uppercase">
+                      {i.insight_type.replaceAll("_", " ")}
+                    </span>
+                  </span>
+                  {/* Aired is the normal state: only flag rows that need a look. */}
+                  {status !== "aired" && <Badge tone={status}>{STATUS_LABELS[status]}</Badge>}
                 </button>
               </li>
             ))}
@@ -266,33 +289,43 @@ function InsightPanel({
   onDecide: (approve: boolean) => void;
 }) {
   const i = detail.insight;
+  const facts = [
+    AUDIT_LABELS[i.audit_status] ?? `Auditor: ${i.audit_status}`,
+    i.approved_by &&
+      (i.approved_by.startsWith("auto-approval rule") ? "Approved automatically (quick stat)" : "Approved by a producer"),
+  ].filter(Boolean);
+  const StatusIcon = detail.status === "aired" ? CheckCircle2 : detail.status === "blocked" ? XCircle : CircleAlert;
   return (
     <Card>
-      <CardHeader className="space-y-1">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span className="font-mono">{minuteLabel(matchMinute(i.period, i.clock_ms))}</span>
-          <span>{i.insight_type.replaceAll("_", " ")}</span>
-          <Badge tone={detail.status}>{STATUS_LABELS[detail.status]}</Badge>
-          <Badge tone={auditTone(i.audit_status)}>{AUDIT_LABELS[i.audit_status] ?? `Auditor: ${i.audit_status}`}</Badge>
-          {i.approved_by && (
-            <span>
-              {i.approved_by.startsWith("auto-approval rule") ? "approved automatically (quick stat)" : "approved by a producer"}
-            </span>
-          )}
+      <CardHeader className="space-y-2.5 px-5 py-5 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm text-slate-500">
+            <span className="font-mono">{minuteLabel(minuteOf(i))}</span>
+            {" · "}
+            <span className="inline-block first-letter:uppercase">{i.insight_type.replaceAll("_", " ")}</span>
+          </span>
           {detail.status === "aired" && (
             <Link
-              href={`/matches/${i.match_id}?t=${matchMinute(i.period, i.clock_ms).toFixed(1)}&story=${i.insight_id}`}
-              className="ml-auto text-sky-700 hover:underline">
-              Open story →
+              href={`/matches/${i.match_id}?t=${minuteOf(i).toFixed(1)}&story=${i.insight_id}`}
+              className="inline-flex h-8 items-center rounded-md border border-slate-200 px-3 text-xs font-medium text-sky-700 hover:bg-slate-50"
+            >
+              Open story
             </Link>
           )}
         </div>
-        <h2 className="text-lg font-semibold">{i.headline}</h2>
-        <p className="text-sm leading-relaxed text-slate-700">{i.explanation}</p>
+        <h2 className="text-xl leading-snug font-semibold">{i.headline}</h2>
+        <p className="max-w-prose text-[15px] leading-relaxed text-slate-700">{i.explanation}</p>
+        <p className="flex items-start gap-2 text-sm text-slate-500">
+          <StatusIcon className={`mt-0.5 h-4 w-4 shrink-0 ${STATUS_COLORS[detail.status]}`} aria-hidden />
+          <span>
+            <span className={`font-medium ${STATUS_COLORS[detail.status]}`}>{STATUS_LABELS[detail.status]}</span>
+            {facts.map((fact) => ` · ${fact}`)}
+          </span>
+        </p>
       </CardHeader>
 
       {detail.status === "pending" && (
-        <CardContent className="flex flex-wrap items-center gap-2 border-b border-slate-100">
+        <CardContent className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 sm:px-6">
           <Button variant="approve" disabled={busy} onClick={() => onDecide(true)}>
             <CheckCircle2 className="h-4 w-4" aria-hidden /> Approve and air
           </Button>
@@ -310,7 +343,7 @@ function InsightPanel({
         </CardContent>
       )}
 
-      <CardContent>
+      <CardContent className="px-5 py-5 sm:px-6">
         <InsightProcess detail={detail} names={names} />
       </CardContent>
     </Card>
