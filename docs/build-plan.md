@@ -89,7 +89,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - every match with its score and aired-insight count;
    - the fan and producer views.
 
-   The match list moved to `/matches`. The judges' instructions link comes with Phase 6.
+   The match list moved to `/matches`.
 2. **UI and UX improvements.** Make the Studio intuitive for a first-time visitor:
    - consistent navigation across pages;
    - clear empty, loading and error states;
@@ -109,7 +109,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - the captioned player's name on the pitch;
    - an `aria-live` caption for screen readers.
 
-   Checked at 1280 px and 390 px. This closed requirements-map gaps 1, 2, 5 and 6 and the chart half of gap 4.
+   Checked at 1280 px and 390 px.
 
    Done 2026-10-11: **On-pitch scoreboard (broadcast score bug).** Move the Match Centre scoreboard from its own card onto the pitch, as a slim bar centred at the bottom of the picture, like a TV score bug:
    - home colour dot and name, the score as of the replay clock, away name and colour dot;
@@ -127,7 +127,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - **Not implemented**, with why (e.g. auto-eventing from video, since the data is synthetic);
    - **Nice to have** or **Beyond the brief** (enterprise controls, Auditor, evaluations).
 
-   Gaps worth closing are fed back into this phase before Phase 6. Done 2026-10-11: [requirements-map.md](requirements-map.md): 22 implemented, 10 partial, 2 not implemented, with seven gaps to close in priority order (favourite player and follow-a-player, choosing the single metric, airing milestones and pass quality, chaos and tempo on screen, names on the pitch, saved preferences, more languages).
+   Gaps worth closing are fed back into this phase. Done 2026-10-11: [requirements-map.md](requirements-map.md): 22 implemented, 10 partial, 2 not implemented, with seven gaps to close in priority order (favourite player and follow-a-player, choosing the single metric, airing milestones and pass quality, chaos and tempo on screen, names on the pitch, saved preferences, more languages).
 4. **Historical data.** Keep each match's results so future games can use them: per-match summaries, team and player match stats, insights and their audit outcomes, scorecard and evaluation results. Store them durably, append-only, keyed by match, season and club. That means extending the ADX event store and the Cosmos ledger rather than a new service.
 
    The engine and agents can then use history in context (e.g. "first hat-trick this season", form over the last five matches). Every historical figure stays computed in code and cited, never recalled by a model. The current "no data on seasons or records" rule in the prompts changes only once that data exists. Lakehouse history stays a stretch goal.
@@ -161,26 +161,6 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - live on M0002 after a Foundry re-run; a full insight now costs 10 model calls, and the per-run budget is 160.
 
 **Done when:** the homepage and UI changes are live, the requirements map is complete with every gap either closed or labelled, match results are stored as history and readable by the engine, and cost per match plus a confirmed budget alert are documented.
-
-### Phase 6 — Polish, video, submission (Oct 24–27)
-
-1. README: problem, architecture diagram, how to run locally, how to test the live demo, enterprise controls, production path, cost, evaluation scorecard, screenshots.
-2. Record the demo video (under 2 minutes, no trademarks, no copyrighted music).
-3. Update the project page description to match what is actually built.
-4. Testing instructions for judges (public link; credentials only if needed).
-5. Oct 26 buffer; submit early on Oct 27.
-6. Done in October: the Azure subscription moved to pay-as-you-go, so the demo stays live until Nov 20.
-
-## Demo script (target 1:50)
-
-1. 0:00 Problem in one line; Pitch Ledger in one line.
-2. 0:10 Synthetic match running live; control-room dashboard.
-3. 0:25 Planted collapse at 60': momentum shift detected; Explainer's draft appears with evidence.
-4. 0:45 Auditor catches an over-reaching number and blocks it; corrected insight passes.
-5. 1:00 Producer approves; overlay fires on screen.
-6. 1:10 Same moment for an analyst (numbers) and a casual fan (one sentence), in English and Filipino or Spanish; "Tell me more" tells it as a three-beat story.
-7. 1:30 Full-time recap with evidence trail; trace and evaluation scorecard.
-8. 1:45 Architecture slide and close.
 
 ## Stretch goals (not built)
 
