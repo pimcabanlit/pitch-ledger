@@ -4,27 +4,30 @@ How the Azure side of Pitch Ledger was set up, how to check it, and what went wr
 
 No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<tenant-id>`.
 
-## Current state (2026-10-10)
+## Current state (2026-10-25)
 
 | Item | Value | Notes |
 | --- | --- | --- |
 | Directory (tenant) | Personal Default Directory | The author's own tenant only (CLAUDE.md non-negotiable 5) |
-| Subscription | Personal subscription | Free credit, then pay-as-you-go in early November (build plan, Phase 6) |
+| Subscription | Personal subscription, pay-as-you-go | Moved from the free credit to pay-as-you-go in October 2026, so the demo stays live until judging ends (Nov 20) |
 | Foundry resource | `inside-the-game` (kind: Foundry / AI Services), East US | Holds the model deployments |
 | Foundry project | `inside-the-game` | Endpoint: `https://inside-the-game.services.ai.azure.com/api/projects/inside-the-game` |
-| Model deployment | `gpt-4.1-mini` | Used for **both** tiers for now: `PITCH_LEDGER_MODEL_STRONG` and `PITCH_LEDGER_MODEL_SMALL` |
-| App registration / service principal | `pitch-ledger-dev` | Signs in with a client secret from local runs and Claude Code cloud sessions |
-| Role on the Foundry resource | **Foundry User** → `pitch-ledger-dev` | Lets it call the models (data plane) |
-| Extra role (to remove) | Azure AI Administrator → `pitch-ledger-dev` | Control plane only; not needed for calling models. Remove it for least privilege |
-| Event Hubs namespace | `pitch-ledger-feed` (Basic) | Live feed; created 2026-10-09; recurring cost, delete after judging |
+| Model deployment | `gpt-4.1-mini` | Used for **both** tiers: `PITCH_LEDGER_MODEL_STRONG` and `PITCH_LEDGER_MODEL_SMALL` |
+| App registration / service principal | `pitch-ledger-dev` | Signs in with a client secret from local runs and Claude Code cloud sessions. Deployed services use the managed identity below instead |
+| Role on the Foundry resource | **Foundry User** → `pitch-ledger-dev` and the managed identity | Lets them call the models (data plane) |
+| Event Hubs namespace | `pitch-ledger-feed` (Basic) | Live feed; created 2026-10-09; fixed monthly cost (about $11) |
 | Event hub | `match-events` | One partition key per match |
-| Roles on the namespace | **Azure Event Hubs Data Sender** and **Data Receiver** → `pitch-ledger-dev` | Verified by a live `stream` + `listen` run (2026-10-09) |
-| Ledger | Cosmos DB for NoSQL `pitch-ledger-cosmos` (free tier, throughput capped), database `pitchledger`, container `ledger` (`/match_id`) | Built-in Data Contributor (data plane) → `pitch-ledger-dev`; `check-ledger` passes (2026-10-09) |
-| Trigger queue | Service Bus `pitch-ledger-bus` (Basic), queue `triggers` (max delivery 3, lock 5 min) | Data Sender and Data Receiver → `pitch-ledger-dev`; `check-queue` passes (2026-10-09) |
-| Live push | Web PubSub `pitch-ledger-push` (Free), hub `studio` | **Web PubSub Service Owner** → `pitch-ledger-dev`; `check-push` and a client round trip pass (2026-10-10) |
-| Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` is **Ingestor** and **Viewer**; tables created from `infra/adx/tables.kql`; `check-store` passes (2026-10-09) |
+| Roles on the namespace | **Azure Event Hubs Data Sender** and **Data Receiver** → `pitch-ledger-dev` and the managed identity | Verified by a live `stream` + `listen` run (2026-10-09) |
+| Ledger | Cosmos DB for NoSQL `pitch-ledger-cosmos` (free tier, throughput capped), database `pitchledger`, container `ledger` (`/match_id`) | Built-in Data Contributor (data plane) → `pitch-ledger-dev` and the managed identity; `check-ledger` passes (2026-10-09) |
+| Trigger queue | Service Bus `pitch-ledger-bus` (Basic), queue `triggers` (max delivery 3, lock 5 min) | Data Sender and Data Receiver → `pitch-ledger-dev` and the managed identity; `check-queue` passes (2026-10-09) |
+| Live push | Web PubSub `pitch-ledger-push` (Free), hub `studio` | **Web PubSub Service Owner** → `pitch-ledger-dev` and the managed identity; `check-push` and a client round trip pass (2026-10-10) |
+| Event store | Azure Data Explorer free cluster (Australia East), database `matchdata` | Located by `ADX_CLUSTER_URI` and `ADX_DATABASE`. `pitch-ledger-dev` and the managed identity are **Ingestor** and **Viewer**; tables created from `infra/adx/tables.kql`; `check-store` passes (2026-10-09) |
+| Hosting | Container Apps environment `pitch-ledger-env` (Consumption, scale to zero): apps `pitch-ledger-studio` (public HTTPS) and `pitch-ledger-api` (internal), jobs `pitch-ledger-live`, `pitch-ledger-feed` and `pitch-ledger-replay` | Deployed from `infra/main.bicep` by the Deploy workflow since 2026-10-10 (see Deployment below). Images on GitHub Container Registry (public) |
+| Managed identity | `pitch-ledger-apps` (user-assigned) | Every app and job signs in with it; data-plane roles only |
+| Monitoring | Log Analytics `pitch-ledger-logs` (0.1 GB daily cap), Application Insights `pitch-ledger-insights` (Entra-only ingestion) | Traces read by Foundry → Tracing (2026-10-11, see Enterprise controls) |
+| Key-less access | Key auth off on Foundry, Cosmos DB, Event Hubs, Service Bus and Web PubSub | `infra/enterprise-controls.sh`, run 2026-10-11; every check passes with Entra ID only |
 
-Being set up (2026-10-10): **Container Apps** from `infra/main.bicep`, deployed by GitHub Actions (see Deployment below). Not needed: Key Vault (every service is reached with a managed identity, so there are no secrets to store). Not yet: Application Insights (container logs go to Log Analytics).
+Not needed: Key Vault (every service is reached with Entra ID, so there are no secrets to store).
 
 Not available: **Microsoft Fabric**. The free trial isn't offered to this account (2026-10-09). The live feed uses Azure Event Hubs, the event store is the Azure Data Explorer free cluster with an ADX dashboard, and ops alerts live in the producer console. Fabric is a documented future upgrade (docs/architecture.md).
 
@@ -642,22 +645,6 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 - These are estimates from tokens and list prices. **The Azure bill (Cost Management) is the
   source of truth.**
 
-**Owner steps (once).**
-1. ADX: re-run `infra/adx/tables.kql` in the query editor on `matchdata`. It adds
-   `RunUsage` and the season-history tables; existing tables are kept. Then add tiles 9 and
-   10 to the dashboard. Neither needs the Match picker.
-2. **Budget with alerts:**
-   - In the portal, search **Cost Management**, then **Budgets**, then **+ Add**. Scope:
-     your subscription.
-   - Name it `pitch-ledger-monthly`, reset period **Monthly**, amount **$25**. Event Hubs
-     alone is about $11 a month, so $15 would alert every month.
-   - **Next**. Add alert conditions **Actual** at 50%, 80% and 100%, and **Forecasted** at
-     100%. Recipient: your email. **Create**.
-3. **Monthly view by resource:**
-   - **Cost Management** → **Cost analysis**. Set the date range to **This month**,
-     **Group by: Resource**, and the chart to **Column (stacked)**.
-   - **Save as** `Pitch Ledger by resource`. Check it weekly until Nov 20.
-
 **Guardrails for judging (to Nov 20).**
 
 | Action | Who can do it | Model calls | Cost |
@@ -666,7 +653,7 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
 | Block an insight | any signed-in producer | none | $0 |
 | Approve a pending insight | any signed-in producer | about 8 | a fraction of a cent. Limited to 10 decisions a minute per producer and 160 calls per API process. M0003's 6 pending insights together cost under 1 cent |
 | Run `pitch-ledger-live` + `pitch-ledger-feed`, or `pitch-ledger-replay` | the owner only (portal, Run now) | about 80–190 per match | a few US cents per run |
-| Event Hubs (Basic) | always on | none | about $11 a month, fixed; delete after Nov 20 |
+| Event Hubs (Basic) | always on | none | about $11 a month, fixed |
 
 Nothing runs on a schedule. Every Foundry call shows up in `RunUsage` and in Foundry →
 Tracing.
@@ -686,8 +673,7 @@ Tracing.
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
 - [x] ADX tables created; `check-store` passes (streaming write readable after 3.5 s); M0002 loaded (`store --store adx`, 129,781 rows in 23 s); live `listen --store adx` verified with test match M0099 (1,343 rows, feed health).
 - [x] Live service in Container Apps with Foundry and the ADX store (2026-10-10): M0002 at 25x, all rows received, 54 triggers, 15 insights aired (225 overlays), planted error caught and corrected, no blocks; feed lag p95 under 5 s after packing tracking rows (it grew to 2 minutes with one row per message). The live job waits 10 idle minutes for the feed and the feed repeats the match reference, so the two jobs can start in either order (see Measured, 2026-10-10).
-- [x] ADX dashboard `Pitch Ledger control room` built from `infra/adx/dashboard.kql` (8 tiles then, Match picker, live refresh; cost tiles 9 and 10 added 2026-10-11, owner step in *Cost monitoring*); verified 2026-10-10 on the live M0002 run and on M0005. The six demo matches are in the event store (M0002 from the live service; the others written with `store`, so their insight, feed-health and ops-alert tiles are empty).
+- [x] ADX dashboard `Pitch Ledger control room` built from `infra/adx/dashboard.kql` (8 tiles then, Match picker, live refresh; cost tiles 9 and 10 added 2026-10-11); verified 2026-10-10 on the live M0002 run and on M0005. The six demo matches are in the event store (M0002 from the live service; the others written with `store`, so their insight, feed-health and ops-alert tiles are empty).
 - [x] ADX test matches (M0099, M0012) cleared (2026-10-10: tables emptied before the final live run).
-- ADX: the event store only appends, so before re-running a live match, empty its rows as database admin (`.execute database script <|` followed by one `.clear table <name> data` line per table, or `.delete table <name> records <| <name> | where match_id == 'M0002'` per table to keep other matches).
 - [x] Live service verified on Azure (2026-10-09): M0012 streamed at 25x through Event Hubs; 56 triggers via Service Bus, 18 insights aired, momentum insight corrected, ledger in Cosmos DB (56 triggers, 18 insights, 70 audits, 270 overlays), rows in ADX; trigger to outcome p50 3.9 s, max 17 s (offline models).
 - [x] Fabric-only pieces replaced (2026-10-09): ADX free cluster (event store), ADX dashboard (control room), producer-console ops alerts. Fabric kept as a future upgrade.

@@ -409,13 +409,14 @@ The analytical copy for KQL queries and the control-room dashboard; Cosmos DB st
 | `Tracking` | tracking sample, as the tracking table | `store`, `listen --store` |
 | `TeamState` | team per whole minute of play: the engine's rolling 5-minute window (possession share, possessions, passes, pass accuracy, passes per possession, turnovers, own-half turnovers, PPDA, tempo, control) | `store` (live engine later) |
 | `Triggers` | detector trigger: rule, subject, metrics, evidence event IDs | `store` |
-| `InsightStatus` | insight status change: audit status, status (`aired`, `pending`, `blocked`), approver, model version | `store` (orchestrator later) |
+| `InsightStatus` | insight status change: audit status, status (`aired`, `pending`, `blocked`), approver, model version | `store`, `live` |
 | `OpsAlerts` | ops alert raised, and again when acknowledged: kind, severity, message, references, raised time, acknowledged by | `live` (feed, validation, worker), `store` (a replay's alerts) |
 | `FeedHealth` | match per wall-clock minute: messages received, p50 / p95 / max send-to-receive latency | `listen --store` |
 | `StoreCheck` | `check-store` test write | `check-store` |
 | `MatchResults` | finished match: competition, season, kick-off, clubs, score, hat-tricks | `store`, `history build --store`, `live` at full time |
 | `TeamMatchStats` | team per finished match: the record's team line | as `MatchResults` |
 | `PlayerMatchStats` | player per finished match: the record's player line | as `MatchResults` |
+| `RunUsage` | model usage per run: kind (replay, live, decision, evaluation), match, provider, model version, calls, input and output tokens, cost in US$, aired insights | `replay --store`, `live`, the API (each producer decision), `evaluate --store` |
 | `EvalRuns` | scorecard run: matches, gates, pass or fail, summary sections | `evaluate --store` |
 
 The season-history tables are append-only. Storing a match again adds identical rows, so a query takes the latest row per key (`arg_max(recorded_at, *) by match_id, team_id` and so on). Insight outcomes per match are in `InsightStatus` (join on `match_id` for the season).

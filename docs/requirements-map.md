@@ -1,6 +1,6 @@
 # Requirements map: the challenge brief against Pitch Ledger
 
-Every point of the hackathon brief (section 4.1, *Hackathon Challenge*) mapped to what Pitch Ledger does, with a status and where to see it. Checked against the code and the live deployment on 2026-10-11. Update a row whenever its status changes.
+Every point of the hackathon brief (section 4.1, *Hackathon Challenge*) mapped to what Pitch Ledger does, with a status and where to see it. Checked against the code on 2026-10-25. Update a row whenever its status changes.
 
 **Statuses**
 
@@ -26,7 +26,7 @@ Every point of the hackathon brief (section 4.1, *Hackathon Challenge*) mapped t
 | Fit: live, studio, broadcast, streaming, any market | 4 | 0 | 0 |
 | **Total** | **31** | **2** | **1** |
 
-What is left: chaos and tempo are on screen and explained, but not yet narrated in insight copy. Auto-eventing from video is out of scope with synthetic data. On 2026-10-11, milestones, pass quality, distance and ball speed went on screen as badges. Viewer choice (favourite clubs and player, follow-a-player, chosen metric, remembered preferences), names on the pitch, and chaos and tempo charts followed the same day, with no model calls; see [Gaps to close in Phase 5](#gaps-to-close-in-phase-5).
+What is not done: chaos and tempo are charted and explained on screen, but insight copy does not mention them (the two *Partial* rows). Auto-eventing from video is not built, because there is no video with synthetic data. Everything else in the brief is built; see [Gaps found in Phase 5](#gaps-found-in-phase-5).
 
 ## (i) One pipeline with five stages
 
@@ -61,7 +61,7 @@ What is left: chaos and tempo are on screen and explained, but not yet narrated 
 | **Pass quality**: distance, accuracy, difficulty rating | **Implemented** | A pass badge for the hardest completed pass so far in the match (difficulty 65+ and 15+ m forward to qualify): difficulty rating (0–100), length, forward distance and ball speed. Pass accuracy against expected for difficulty appears in momentum insights, and a pass-milestone badge gives the first player of each team to 50 completed passes, with their accuracy. The Match Centre also has a pass network | Match Centre captions (*pass badge*, *milestone badge*); `src/pitch_ledger/engine/metrics.py` |
 | **Speed metrics**: shot speed | **Implemented** | Shot speed in badges and in goal context ("with a 100.6 km/h shot") | Speed badges; goal insights |
 | **Speed metrics**: ball speed | **Implemented** | Pass ball speed (from distance and travel time) on the pass badge's analyst line; shot speed as above | Pass badge, analyst mode |
-| **Auto-eventing**: a model over an incoming video feed generates pass and speed metrics | **Not implemented** | There is no video in a synthetic-data challenge. The Match Lab generates events and tracking already labelled, the stage auto-eventing would produce. The feed adapter is where a computer-vision provider's events would plug in (same row schema) | README, production path (Phase 6) |
+| **Auto-eventing**: a model over an incoming video feed generates pass and speed metrics | **Not implemented** | There is no video in a synthetic-data challenge. The Match Lab generates events and tracking already labelled, the stage auto-eventing would produce. The feed adapter is where a computer-vision provider's events would plug in (same row schema) | `src/pitch_ledger/feed/` |
 
 ## (iii) Narrative generation
 
@@ -101,7 +101,7 @@ What is left: chaos and tempo are on screen and explained, but not yet narrated 
 | Responsive enough for live play | **Implemented** | Live service in Azure: feed lag p95 under 5 s at 25x match pace; insights flow while the match streams | docs/azure-setup.md, *Measured* |
 | Clear enough for real-time narratives | **Implemented** | House-style and length limits checked in code (headline ≤ 10 words, overlay ≤ 140 characters, casual ≤ 1 figure, no clichés or unsupported claims) | Scorecard gate *aired copy passes the editorial check* |
 | Suitable for studio, broadcast and streaming | **Implemented** | Studio producer console (approve or block with evidence), fan view for streaming, broadcast package endpoint for a rendering partner | Studio; API |
-| Flexible enough for fans in any market | **Implemented** | Modes × languages × club filter per insight. Partial points (favourite player, chosen metric) are in the (i)(e) rows above | Fan view |
+| Flexible enough for fans in any market | **Implemented** | Modes × languages per insight, plus favourite clubs, a followed player and a chosen metric (the (i)(e) rows above) | Fan view; Match Centre → *Your view* |
 
 ## Beyond the brief
 
@@ -123,17 +123,17 @@ Not asked for, but they make the output trustworthy and operable, the case for *
 | Cost controls: token caps, call budgets, small model for rewrites, speed-badge cap, log caps | **Beyond the brief** | docs/architecture.md, *Cost plan* |
 | Season history: one record per finished match (result, team and player stats, goals) in Cosmos DB and ADX, and scorecard runs in ADX. Audited season facts in insights: the scorer's league goals, the first hat-trick of the season, form over the last five matches, the last meeting | **Beyond the brief** | `pitch-ledger history show`; ADX tables `MatchResults`, `TeamMatchStats`, `PlayerMatchStats`, `EvalRuns`; M0002's hat-trick insight |
 
-## Gaps to close in Phase 5
+## Gaps found in Phase 5
 
-In priority order: what each closes, and whether it needs model calls.
+In priority order: what each closes, and whether it needs model calls. Five are done; two are not.
 
 | # | Gap | Closes | Model calls |
 | --- | --- | --- | --- |
 | 1 | **Done 2026-10-11.** **Favourite player and follow-a-player view**: pick a player (from either squad); their insights first, their stats as of the replay clock, their dot highlighted all match, *player focus* copy for them where it applies | Favourite player(s); player-focused mode throughout the match | None (stats from the engine) |
 | 2 | **Done 2026-10-11.** **Choose the single metric**: the viewer picks the metric (shot speed, xG, possession, pass accuracy, control…); the fan view shows that metric's live value and the insights that carry it | A single performance metric the viewer cares about | None |
 | 3 | **Done 2026-10-11.** Milestones and pass quality air as badges on firsts and new bests (template copy, code audit, auto-approved); brace and hat-trick fold into the goal | Milestones; distance indicators; pass quality; ball speed | None |
-| 4 | **Chart done 2026-10-11** (chaos, tempo and PPDA on the Match Centre chart, with glossary tips). **Open:** chaos and tempo as context signals in momentum copy ("the match got more open") | Control vs chaos; game rhythm patterns | None for the chart; the signals only change what the Explainer is given |
+| 4 | **Chart done 2026-10-11** (chaos, tempo and PPDA on the Match Centre chart, with glossary tips). **Not done:** chaos and tempo as context signals in momentum copy ("the match got more open") | Control vs chaos; game rhythm patterns | None for the chart; the signals only change what the Explainer is given |
 | 5 | **Done 2026-10-11.** **Names on the pitch**: the name shows beside the dot while a caption is about that player (owner's choice: a pitch full of names is hard to read) | Player name tagging | None |
 | 6 | **Done 2026-10-11.** **Remember preferences**: favourite clubs (more than one), player, mode, metric and language, kept in the browser | Favourite club(s), fuller | None |
-| 7 | **More languages** (for example French, Portuguese, Arabic) | Fans in any market, fuller | Translator calls per extra language |
+| 7 | **Not done.** **More languages** (for example French, Portuguese, Arabic) | Fans in any market, fuller | Translator calls per extra language |
 | — | Auto-eventing from video | Out of scope with synthetic data; described as the production path | — |

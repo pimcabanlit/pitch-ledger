@@ -200,7 +200,7 @@ Failure handling: a model error retries once, then falls back to a plain templat
 
 - **Images:** two, built by the Deploy workflow and pushed to GitHub Container Registry (public): `pitch-ledger` (Python: API, live service, Match Lab feed, replay; the six demo matches are generated into the image at build time, so they match the repo's seeds) and `pitch-ledger-studio` (Next.js standalone server). Both run as non-root users.
 - **Apps:** `pitch-ledger-studio` (external HTTPS ingress) forwards `/api/v1/*` to `pitch-ledger-api` by its in-environment name; the API has internal ingress only. Both scale to zero (Consumption plan, inside the free grant; the first request after idle waits for a cold start). The API runs one replica (the decision rate limit is per process).
-- **Jobs (manual):** `pitch-ledger-live` (the live service: Event Hubs → engine → Service Bus → agents → Cosmos DB, ADX and Web PubSub), `pitch-ledger-feed` (streams a match from the image to Event Hubs) and `pitch-ledger-replay`. Started from the portal or `az containerapp job start`; a Studio button to start a replay is a later step.
+- **Jobs (manual):** `pitch-ledger-live` (the live service: Event Hubs → engine → Service Bus → agents → Cosmos DB, ADX and Web PubSub), `pitch-ledger-feed` (streams a match from the image to Event Hubs) and `pitch-ledger-replay`. Started from the portal or `az containerapp job start` (there is no Studio button for them).
 - **Identity:** one user-assigned managed identity for every app and job (created and granted once by the owner with `infra/grant-roles.sh` and `infra/enterprise-controls.sh`; the deploy identity is Contributor only), with the data-plane roles only (Event Hubs Data Sender and Receiver, Service Bus Data Sender and Receiver, Cosmos DB Built-in Data Contributor, Web PubSub Service Owner, Foundry User, Monitoring Metrics Publisher on Application Insights; ADX Ingestor and Viewer by KQL). No keys, connection strings or Key Vault secrets.
 - **Infrastructure as code:** `infra/main.bicep` (Log Analytics with a daily cap, Application Insights on it with Entra-only ingestion, environment, identity, role grants, apps, jobs) references the hand-made data services and never changes them; `infra/modules/data-services.bicep` declares them for a fresh environment (`createDataServices=true`). CI compiles and lints the Bicep on every push.
 - **Pipeline:** CI green on `main` → Deploy workflow: build and push both images (tagged with the commit SHA) → `az deployment group create` signed in by OpenID Connect (a federated credential on a deploy-only app registration with Contributor on the resource group) → smoke test of `/api/v1/health` through the Studio.
@@ -226,8 +226,8 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 
 | Item | Approach |
 | --- | --- |
-| Azure subscription | The author's own Azure free account ($200 credit, 30 days); upgrade to pay-as-you-go before credit expires so the demo stays live until judging ends (Nov 20) |
-| Event Hubs | Basic tier, 1 throughput unit: about $11/month plus about $0.03 per million events (check the pricing page). Created 2026-10-09 (`pitch-ledger-feed`); recurring, delete it after judging (Nov 20) |
+| Azure subscription | The author's own Azure subscription, pay-as-you-go since October 2026 (it started on the free credit), so the demo stays live until judging ends (Nov 20) |
+| Event Hubs | Basic tier, 1 throughput unit: about $11/month plus about $0.03 per million events (check the pricing page). Created 2026-10-09 (`pitch-ledger-feed`); the only fixed monthly cost |
 | Azure Data Explorer | Free cluster: no Azure cost, no SLA |
 | Fabric | Future upgrade (trial not available) |
 | Container Apps | Consumption plan free grant (180k vCPU-s, 360k GiB-s, 2M requests a month); apps scale to zero, jobs run only when started. Always-on replicas would cost about $25–35/month (`minReplicas`) |
@@ -235,20 +235,19 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 | Cosmos DB | Lifetime free tier (1000 RU/s, 25 GB), account throughput capped at the free amount |
 | Service Bus | Basic tier: no base fee, about $0.05 per million operations (check the pricing page); a match is a few hundred operations |
 | Web PubSub | Free tier (20 connections, 20k messages/day) |
-| Container images | GitHub Container Registry, public images (free; the repo stays private) instead of Azure Container Registry |
-| GitHub Actions | 2,000 free minutes a month for a private repo; a deploy is about 8 minutes |
+| Container images | GitHub Container Registry, public images (free) instead of Azure Container Registry |
+| GitHub Actions | Free for a public repository; a deploy is about 8 minutes |
 | Models | Main variable cost; token caps, call budgets, small model for rewrites, develop locally first. Each run's cost is priced from its tokens (`ModelSettings` prices) and kept in the ADX table `RunUsage` (replay, live, producer decisions, evaluations), with cost per match and per aired insight on the ADX dashboard |
-| Guardrail | A $25 monthly budget with alerts at 50%, 80% and 100% (actual) and 100% (forecast); judging-period guardrails in docs/azure-setup.md, *Cost monitoring* |
+| Guardrail | A monthly Cost Management budget with alerts on the subscription; judging-period guardrails in docs/azure-setup.md, *Cost monitoring* |
 
 Only the author's own Azure subscription and GitHub account are used; no other organization's tenant, subscription or credits.
 
 ## Open items
 
-- [x] Live feed (2026-10-09): Fabric trial not available, so the live feed uses Azure Event Hubs behind the feed adapter. First live measurement done from a cloud session (see Live feed); re-measure from Container Apps.
+- [x] Live feed (2026-10-09): Fabric trial not available, so the live feed uses Azure Event Hubs behind the feed adapter. First measured from a cloud session, then from Container Apps on 2026-10-10 (docs/azure-setup.md, *Measured*).
 - [x] Fabric-dependent pieces (2026-10-09): Eventhouse → Azure Data Explorer free cluster, RTI dashboard → ADX dashboard, Activator → ops alerts in the producer console. Fabric kept as a future upgrade.
-- [ ] ADX: confirm the free cluster accepts the service principal as a database ingestor and viewer, and the ingestion delay (set the tables' batching policy to a few seconds, or use streaming ingestion if the free cluster offers it).
+- [x] ADX (2026-10-09): the free cluster accepts the service principal and the managed identity as database Ingestor and Viewer; streaming writes are readable after about 3.5 s.
 - [x] Event-store tables documented in `docs/event-schema.md` (2026-10-09).
-- [ ] Add the full ops-alert record to `docs/event-schema.md` when the alerts are raised in code.
-- [ ] Hosted agents: if time allows, test the orchestrator as a Foundry hosted agent.
-- [ ] Confirm agent-capable models available in the chosen region (one stronger, one small).
+- [x] Ops-alert record documented in `docs/event-schema.md`.
+- [x] Models: one deployment, `gpt-4.1-mini` in East US, serves both tiers (stronger and small). The tiers stay separate settings, so a stronger model can take the first tier by configuration only.
 - [x] Fabric sign-up: the trial is not available for this account (2026-10-09).

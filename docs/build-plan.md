@@ -70,9 +70,9 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - Live service (`pitch-ledger live`, built 2026-10-09): feed -> engine (detector re-run on data so far, settled triggers numbered like a batch run) -> trigger queue -> agents -> ledger, writing the event store as it goes.
 3. FastAPI `/api/v1`: matches, insights, overlays, approvals (built 2026-10-09: public fan endpoints, producer endpoints behind Entra ID with fail-closed sign-in, rate-limited decisions); viewer preferences stay in the Studio for now.
 4. Next.js Studio app: producer console (Entra sign-in, approve/block queue with evidence drill-down) and fan view (match timeline, overlay layer, mode / club / player / metric / language selectors). Built 2026-10-09: fan view (mode, language, club; 5 s refresh) and producer console (queue, audit trail, metrics, evidence, approve/block) against the API in dev auth; ops-alert panel built 2026-10-10; Entra sign-in (MSAL) built 2026-10-10: any Microsoft account for the public demo, the Producer role for production.
-4b. Match Centre (2026-10-10): replay clock, score as of the clock, 2D pitch from tracking, broadcast captions, feed, deep links (step A); control chart, shot map and pass network synced to the clock (step B). Player stats as of the clock to follow (step 3, data depth).
+4b. Match Centre (2026-10-10): replay clock, score as of the clock, 2D pitch from tracking, broadcast captions, feed, deep links (step A); control chart, shot map and pass network synced to the clock (step B). Player stats as of the clock followed in Phase 5 (the followed-player card).
 5. Web PubSub live push (built 2026-10-09: change signals per match group, negotiate endpoints, Studio hook with polling fallback).
-6. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps. Written 2026-10-10: `Dockerfile`, `studio/Dockerfile`, `infra/main.bicep` (+ modules), `.github/workflows/deploy.yml`; first deploy waits on the owner's one-time setup (docs/azure-setup.md, Deployment).
+6. Bicep for all Azure resources; GitHub Actions build to GHCR and deploy to Container Apps. Written 2026-10-10: `Dockerfile`, `studio/Dockerfile`, `infra/main.bicep` (+ modules), `.github/workflows/deploy.yml`; deployed to Container Apps since 2026-10-10 (docs/azure-setup.md, Deployment).
 7. ADX dashboard (control room) over the event store, tile queries kept in the repo; ops-alert records raised by the engine, orchestrator, queue and model manager, shown and acknowledged in the producer console (built 2026-10-10: feed gap and lag, validation at live ingest, blocked insights, dead letters, model fallbacks; `stream --fault-at` stages a fault for the demo).
 8. Managed identities, key auth disabled, content-safety policies, Application Insights and Foundry tracing. Built 2026-10-11: OpenTelemetry tracing (one trace per trigger and producer decision, agent spans nested) to Application Insights with Entra-only ingestion, read by Foundry's Tracing page; content-filter handling and `check-models --safety`; `infra/enterprise-controls.sh` switches key auth off on every service (docs/azure-setup.md, Enterprise controls).
 
@@ -145,26 +145,14 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - the last meeting this season.
 
    They come only from matches that kicked off earlier. The trigger cites those matches, and the Auditor recomputes the facts from the same records. "Season" is allowed in copy only when an insight carries season facts.
-5. **Cost monitoring.** Partly in place today:
+5. **Cost monitoring.** Done 2026-10-11 in code and docs:
    - per-service cost notes and observed model costs (docs/azure-setup.md);
-   - per-run model call and token counts;
-   - token caps and call budgets;
-   - log caps.
-
-   Still to add:
-   - a Cost Management budget with alerts on the subscription, confirmed (still an open checklist item);
-   - cost per match and per insight from token usage (in the run summary, scorecard and ADX), shown in the producer console or ADX dashboard;
-   - a monthly cost view by resource;
-   - documented guardrails for the judging period (what may run, and what it costs).
-
-   Done 2026-10-11 in code and docs:
+   - per-run model call and token counts, token caps, call budgets and log caps;
    - each run's model cost and cost per aired insight, priced from tokens in one config place (`ModelSettings`);
    - printed by `replay` and `live`, kept in `run.json`, the scorecard and the ADX table `RunUsage` (replay and live jobs, producer decisions, evaluations);
    - ADX dashboard tiles for cost per match, per insight and per day;
-   - owner steps for the budget and a saved monthly cost view by resource;
+   - a Cost Management budget with alerts on the subscription;
    - judging guardrails (docs/azure-setup.md, *Cost monitoring*).
-
-   Open (owner): create the budget and the saved view, then tick the follow-up.
 
 6. **Fan story and producer process flow.** Done 2026-10-17 (PRs #7 and #8):
    - "Tell me more" is a three-beat story for fans (the buildup, what just happened, what it could mean) in the reader's audience mode and language: plain words for fans, figures for analysts;
@@ -181,7 +169,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 3. Update the project page description to match what is actually built.
 4. Testing instructions for judges (public link; credentials only if needed).
 5. Oct 26 buffer; submit early on Oct 27.
-6. Early November: upgrade the Azure subscription to pay-as-you-go before the free credit expires so the demo stays live until Nov 20.
+6. Done in October: the Azure subscription moved to pay-as-you-go, so the demo stays live until Nov 20.
 
 ## Demo script (target 1:50)
 
@@ -194,7 +182,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
 7. 1:30 Full-time recap with evidence trail; trace and evaluation scorecard.
 8. 1:45 Architecture slide and close.
 
-## Stretch goals (only after Phase 4 is done)
+## Stretch goals (not built)
 
 - Lakehouse medallion history.
 - Fabric data agent "ask the match" connected to a Foundry agent.
