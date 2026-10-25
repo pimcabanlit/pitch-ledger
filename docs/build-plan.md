@@ -109,7 +109,7 @@ Solo build, 2026-10-09 to 2026-10-27. Build only what appears in the 2-minute de
    - the captioned player's name on the pitch;
    - an `aria-live` caption for screen readers.
 
-   Checked at 1280 px and 390 px. This closed requirements-map gaps 1, 2, 5 and 6 and the chart half of gap 4.
+   Checked at 1280 px and 390 px.
 
    Done 2026-10-11: **On-pitch scoreboard (broadcast score bug).** Move the Match Centre scoreboard from its own card onto the pitch, as a slim bar centred at the bottom of the picture, like a TV score bug:
    - home colour dot and name, the score as of the replay clock, away name and colour dot;

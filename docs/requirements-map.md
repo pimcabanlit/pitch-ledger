@@ -26,7 +26,7 @@ Every point of the hackathon brief (section 4.1, *Hackathon Challenge*) mapped t
 | Fit: live, studio, broadcast, streaming, any market | 4 | 0 | 0 |
 | **Total** | **31** | **2** | **1** |
 
-What is not done: chaos and tempo are charted and explained on screen, but insight copy does not mention them (the two *Partial* rows). Auto-eventing from video is not built, because there is no video with synthetic data. Everything else in the brief is built; see [Gaps found in Phase 5](#gaps-found-in-phase-5).
+What is not done: chaos and tempo are charted and explained on screen, but insight copy does not mention them (the two *Partial* rows). Auto-eventing from video is not built, because there is no video with synthetic data. Everything else in the brief is built.
 
 ## (i) One pipeline with five stages
 
@@ -92,7 +92,7 @@ What is not done: chaos and tempo are charted and explained on screen, but insig
 | Requirement | Status | What Pitch Ledger does | Where to see it |
 | --- | --- | --- | --- |
 | Clear natural-language output in multiple languages for global studio and streaming | **Implemented** | Every aired insight in English, Spanish and Filipino, for all five modes. The Translator keeps every number exactly, and a code check rejects any translation whose numbers do not match; a rejected line falls back to a template. "Tell me more" tells each moment as a three-beat story (the buildup, what just happened, what it could mean) in all three languages, plain for fans and with figures for analysts; the Narrator and Translator write the beats from code-computed facts, and each beat is number- and style-checked or falls back to its template | Fan view *Language* selector; *Tell me more* |
-| More languages | **Nice to have** | Languages are a setting plus one phrase table per language; each extra language adds translator calls per aired insight | (gap 7) |
+| More languages | **Nice to have** | Languages are a setting plus one phrase table per language; each extra language adds translator calls per aired insight | — |
 
 ## Fit with the intended use
 
@@ -122,18 +122,3 @@ Not asked for, but they make the output trustworthy and operable, the case for *
 | Infrastructure as code (Bicep), CI and deploy (GitHub Actions), scale to zero | **Beyond the brief** | `infra/`, `.github/workflows/` |
 | Cost controls: token caps, call budgets, small model for rewrites, speed-badge cap, log caps | **Beyond the brief** | docs/architecture.md, *Cost plan* |
 | Season history: one record per finished match (result, team and player stats, goals) in Cosmos DB and ADX, and scorecard runs in ADX. Audited season facts in insights: the scorer's league goals, the first hat-trick of the season, form over the last five matches, the last meeting | **Beyond the brief** | `pitch-ledger history show`; ADX tables `MatchResults`, `TeamMatchStats`, `PlayerMatchStats`, `EvalRuns`; M0002's hat-trick insight |
-
-## Gaps found in Phase 5
-
-In priority order: what each closes, and whether it needs model calls. Five are done; two are not.
-
-| # | Gap | Closes | Model calls |
-| --- | --- | --- | --- |
-| 1 | **Done 2026-10-11.** **Favourite player and follow-a-player view**: pick a player (from either squad); their insights first, their stats as of the replay clock, their dot highlighted all match, *player focus* copy for them where it applies | Favourite player(s); player-focused mode throughout the match | None (stats from the engine) |
-| 2 | **Done 2026-10-11.** **Choose the single metric**: the viewer picks the metric (shot speed, xG, possession, pass accuracy, control…); the fan view shows that metric's live value and the insights that carry it | A single performance metric the viewer cares about | None |
-| 3 | **Done 2026-10-11.** Milestones and pass quality air as badges on firsts and new bests (template copy, code audit, auto-approved); brace and hat-trick fold into the goal | Milestones; distance indicators; pass quality; ball speed | None |
-| 4 | **Chart done 2026-10-11** (chaos, tempo and PPDA on the Match Centre chart, with glossary tips). **Not done:** chaos and tempo as context signals in momentum copy ("the match got more open") | Control vs chaos; game rhythm patterns | None for the chart; the signals only change what the Explainer is given |
-| 5 | **Done 2026-10-11.** **Names on the pitch**: the name shows beside the dot while a caption is about that player (owner's choice: a pitch full of names is hard to read) | Player name tagging | None |
-| 6 | **Done 2026-10-11.** **Remember preferences**: favourite clubs (more than one), player, mode, metric and language, kept in the browser | Favourite club(s), fuller | None |
-| 7 | **Not done.** **More languages** (for example French, Portuguese, Arabic) | Fans in any market, fuller | Translator calls per extra language |
-| — | Auto-eventing from video | Out of scope with synthetic data; described as the production path | — |
