@@ -241,13 +241,3 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 | Guardrail | A monthly Cost Management budget with alerts on the subscription; judging-period guardrails in docs/azure-setup.md, *Cost monitoring* |
 
 Only the author's own Azure subscription and GitHub account are used; no other organization's tenant, subscription or credits.
-
-## Open items
-
-- [x] Live feed (2026-10-09): Fabric trial not available, so the live feed uses Azure Event Hubs behind the feed adapter. First measured from a cloud session, then from Container Apps on 2026-10-10 (docs/azure-setup.md, *Measured*).
-- [x] Fabric-dependent pieces (2026-10-09): Eventhouse → Azure Data Explorer free cluster, RTI dashboard → ADX dashboard, Activator → ops alerts in the producer console. Fabric kept as a future upgrade.
-- [x] ADX (2026-10-09): the free cluster accepts the service principal and the managed identity as database Ingestor and Viewer; streaming writes are readable after about 3.5 s.
-- [x] Event-store tables documented in `docs/event-schema.md` (2026-10-09).
-- [x] Ops-alert record documented in `docs/event-schema.md`.
-- [x] Models: one deployment, `gpt-4.1-mini` in East US, serves both tiers (stronger and small). The tiers stay separate settings, so a stronger model can take the first tier by configuration only.
-- [x] Fabric sign-up: the trial is not available for this account (2026-10-09).
