@@ -1,33 +1,5 @@
 # Requirements map: the challenge brief against Pitch Ledger
 
-Every point of the hackathon brief (section 4.1, *Hackathon Challenge*) mapped to what Pitch Ledger does, with a status and where to see it. Checked against the code on 2026-10-25. Update a row whenever its status changes.
-
-**Statuses**
-
-| Status | Meaning |
-| --- | --- |
-| **Implemented** | Built, tested, and visible in the live demo or its records |
-| **Partial** | Some of it is built; the row says what is missing |
-| **Not implemented** | Not built; the row says why |
-| **Nice to have** | Not asked for directly; a cheap improvement |
-| **Beyond the brief** | Not asked for; strengthens the entry (mostly enterprise controls) |
-
-**Summary**
-
-| Area | Implemented | Partial | Not implemented |
-| --- | --- | --- | --- |
-| (i) Pipeline: ingest, interpret, explain, render | 4 | 0 | 0 |
-| (i)(e) Personalization | 8 | 0 | 0 |
-| (ii) Real-time match intelligence | 7 | 0 | 1 |
-| (iii) Narrative generation | 4 | 0 | 0 |
-| (iv) Explainability | 2 | 2 | 0 |
-| (v) Data innovation | 1 | 0 | 0 |
-| (vi) Multi-language storytelling | 1 | 0 | 0 |
-| Fit: live, studio, broadcast, streaming, any market | 4 | 0 | 0 |
-| **Total** | **31** | **2** | **1** |
-
-What is not done: chaos and tempo are charted and explained on screen, but insight copy does not mention them (the two *Partial* rows). Auto-eventing from video is not built, because there is no video with synthetic data. Everything else in the brief is built.
-
 ## (i) One pipeline with five stages
 
 | # | Requirement | Status | What Pitch Ledger does | Where to see it |
