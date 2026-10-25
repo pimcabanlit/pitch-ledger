@@ -31,14 +31,14 @@ Target prize category: **Best Enterprise Solution** (plus Grand Prize). Strong m
 2. **All names fictional.** No real clubs, players, leagues, logos or crests. Never use "Premier League" or other trademarks in product names, UI, sample data or demo assets.
 3. **No numbers from a language model.** Every statistic is computed in deterministic Python and reached by agents through read-only tools. Agents explain; they never calculate or invent figures.
 4. **Every insight cites evidence event IDs** and passes the Auditor before air.
-5. **Personal resources only.** Personal GitHub account and personal Azure subscription in the personal Default Directory. Never the former employer's tenant, subscription, credits or code.
+5. **Personal resources only.** The author's own GitHub account and Azure subscription. No other organization's tenant, subscription, credits or code.
 6. **Original work.** Reference architectures and sample repos are for patterns only; do not copy their code bases.
 7. **No secrets in the repo.** Use environment variables locally and managed identities / Key Vault in Azure. Keep `.env` gitignored; commit `.env.example` only.
 8. **Cost discipline.** No hackathon credits. Prefer free tiers, scale to zero, cap tokens. Flag anything that could add recurring cost before adding it.
 
 ## Stack
 
-Defaults follow my personal stack, with challenge-driven overrides marked **(override)**.
+Defaults follow the author's standard stack, with challenge-driven overrides marked **(override)**.
 
 | Layer | Choice |
 | --- | --- |
@@ -145,9 +145,9 @@ Match directory: `match.json` (match, teams, players), `events.jsonl` / `trackin
 - Docs updated when behaviour or commands change.
 - Small, focused commits with clear messages.
 
-## How to work with me (the owner)
+## Working principles
 
-- I'm a data scientist with an accounting background, strong in Python, SQL and analytics, newer to football and to Azure app infrastructure. Explain football and Azure choices briefly when they matter.
+- Explain football and Azure choices briefly when they matter.
 - Keep the demo story in mind: a planted momentum shift is detected, explained, an over-reaching stat is **caught and blocked by the Auditor**, the producer approves, and the same moment appears for an analyst and a casual fan in two languages.
 - Prefer the simplest working version first; stretch goals (lakehouse, Fabric data agent, hosted agents) only after the core demo works end to end.
 - Ask before adding new paid services, new frameworks, or anything that changes the architecture doc.

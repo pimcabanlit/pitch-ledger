@@ -226,7 +226,7 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 
 | Item | Approach |
 | --- | --- |
-| Azure subscription | Personal Azure free account ($200 credit, 30 days) in the personal Default Directory; upgrade to pay-as-you-go before credit expires so the demo stays live until judging ends (Nov 20) |
+| Azure subscription | The author's own Azure free account ($200 credit, 30 days); upgrade to pay-as-you-go before credit expires so the demo stays live until judging ends (Nov 20) |
 | Event Hubs | Basic tier, 1 throughput unit: about $11/month plus about $0.03 per million events (check the pricing page). Created 2026-10-09 (`pitch-ledger-feed`); recurring, delete it after judging (Nov 20) |
 | Azure Data Explorer | Free cluster: no Azure cost, no SLA |
 | Fabric | Future upgrade (trial not available) |
@@ -240,7 +240,7 @@ Private endpoints and a virtual network; Application Gateway with WAF and DDoS P
 | Models | Main variable cost; token caps, call budgets, small model for rewrites, develop locally first. Each run's cost is priced from its tokens (`ModelSettings` prices) and kept in the ADX table `RunUsage` (replay, live, producer decisions, evaluations), with cost per match and per aired insight on the ADX dashboard |
 | Guardrail | A $25 monthly budget with alerts at 50%, 80% and 100% (actual) and 100% (forecast); judging-period guardrails in docs/azure-setup.md, *Cost monitoring* |
 
-**Never** use the former employer's tenant, subscription or credits.
+Only the author's own Azure subscription and GitHub account are used; no other organization's tenant, subscription or credits.
 
 ## Open items
 

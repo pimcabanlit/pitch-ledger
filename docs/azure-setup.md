@@ -8,7 +8,7 @@ No secrets, tenant IDs or client IDs go in this file. Use placeholders like `<te
 
 | Item | Value | Notes |
 | --- | --- | --- |
-| Directory (tenant) | Personal Default Directory | Never the former employer's tenant (CLAUDE.md non-negotiable 5) |
+| Directory (tenant) | Personal Default Directory | The author's own tenant only (CLAUDE.md non-negotiable 5) |
 | Subscription | Personal subscription | Free credit, then pay-as-you-go in early November (build plan, Phase 6) |
 | Foundry resource | `inside-the-game` (kind: Foundry / AI Services), East US | Holds the model deployments |
 | Foundry project | `inside-the-game` | Endpoint: `https://inside-the-game.services.ai.azure.com/api/projects/inside-the-game` |
@@ -291,7 +291,7 @@ az cosmosdb sql role assignment create \
   --account-name pitch-ledger-cosmos \
   --resource-group <resource-group> \
   --scope "/" \
-  --principal-id 93bdbd00-4663-4267-b536-a94dc7b55680 \
+  --principal-id <service-principal-object-id> \
   --role-definition-id 00000000-0000-0000-0000-000000000002
 ```
 
@@ -657,7 +657,6 @@ Calls rejected with 401 or 403 never reach the model and are not billed.
    - **Cost Management** → **Cost analysis**. Set the date range to **This month**,
      **Group by: Resource**, and the chart to **Column (stacked)**.
    - **Save as** `Pitch Ledger by resource`. Check it weekly until Nov 20.
-4. Tick the follow-up "Confirm a budget alert exists on the subscription" below.
 
 **Guardrails for judging (to Nov 20).**
 
@@ -677,15 +676,11 @@ Tracing.
 - [x] Cosmos DB and Service Bus created; `check-ledger` (write, read, delete in 1.2 s) and `check-queue` (send, receive, complete in 4.4 s) pass; full M0002 replay with `--ledger cosmos --queue servicebus` (offline models): 56 triggers through the queue, no dead letters, 18 insights aired, 270 overlays, planted error caught; read back from Cosmos in a new process (56 triggers, 18 insights, 70 audits, 270 overlays) (2026-10-09).
 
 - [x] Enterprise controls (2026-10-11): `infra/enterprise-controls.sh` run (tracing role, key auth off on Foundry, Cosmos DB, Event Hubs, Service Bus and Web PubSub, Azure AI Administrator removed from `pitch-ledger-dev`); every check passes with Entra ID only; content filter blocks the prompt-injection probe; traces visible in Foundry → Tracing (Enterprise controls, Verified).
-- [ ] Put a calendar reminder a week before the client secret expires.
 - [x] Fan story live (2026-10-17): M0002 re-run on Foundry after PR #7 deployed; 17 insights aired, planted error caught and corrected, 10 stories stored, all 120 beats written by the Narrator and Translator and passing their checks (none fell back). Model call budget raised to 160 (PR #8).
 - [x] Copy quality: in the 2026-10-17 run, 8 of 9 ops alerts were on-screen versions that aired as templates (18 of 150 texts) because a casual or single-metric text had more figures than its mode allows, mostly Spanish or Filipino translations of a bare English score like "4-1". Changed: the Translator prompt keeps exactly the English text's numbers, single-metric copy gets a label ("Score: 4-1"), and a failing text is retried up to twice with the rejected text and the reasons (it was retried once, blind). Confirmed by a local Foundry run of M0002 the same day: no fallbacks.
 - [x] The Explainer's momentum drafts in that run failed three times with "no JSON object in reply": the draft echoes up to 98 evidence IDs (about 8 tokens each), so the reply was most likely cut off at the 400-token cap. Changed: the Explainer and Narrator caps are 1,600 tokens, and a reply cut off at the cap is retried with twice the cap. Confirmed by a local Foundry run of M0002 the same day: no fallbacks.
-- [ ] Confirm a budget alert exists on the subscription.
 - [x] Phase 4: deployed services use a **managed identity** (no client secret) with Foundry User, and every resource is in Bicep under `infra/` (verified by the live runs, 2026-10-10). Key auth off: see Enterprise controls.
-- [ ] Optional: deploy a stronger model for the `STRONG` tier (Explainer, Auditor, Narrator) before the demo recording.
 - [x] Event Hubs: namespace `pitch-ledger-feed`, hub `match-events`, Data Sender and Data Receiver roles; verified with `listen` + `stream` (2026-10-09).
-- [ ] Event Hubs: delete the namespace after judging (Nov 20).
 - [x] Web PubSub: `pitch-ledger-push` (Free), Web PubSub Service Owner role, settings; `check-push`, client round trip and Studio live update verified (2026-10-10).
 - [x] Feed settings and `ADX_CLUSTER_URI` / `ADX_DATABASE` in the cloud environment; `listen` + `stream` pass with them (1,341/1,341 messages, p50 2.3 s from the cloud session).
 - [x] ADX: `pitch-ledger-dev` is Ingestor and Viewer on `matchdata`; `*.kusto.windows.net` reachable.
@@ -693,7 +688,6 @@ Tracing.
 - [x] Live service in Container Apps with Foundry and the ADX store (2026-10-10): M0002 at 25x, all rows received, 54 triggers, 15 insights aired (225 overlays), planted error caught and corrected, no blocks; feed lag p95 under 5 s after packing tracking rows (it grew to 2 minutes with one row per message). The live job waits 10 idle minutes for the feed and the feed repeats the match reference, so the two jobs can start in either order (see Measured, 2026-10-10).
 - [x] ADX dashboard `Pitch Ledger control room` built from `infra/adx/dashboard.kql` (8 tiles then, Match picker, live refresh; cost tiles 9 and 10 added 2026-10-11, owner step in *Cost monitoring*); verified 2026-10-10 on the live M0002 run and on M0005. The six demo matches are in the event store (M0002 from the live service; the others written with `store`, so their insight, feed-health and ops-alert tiles are empty).
 - [x] ADX test matches (M0099, M0012) cleared (2026-10-10: tables emptied before the final live run).
-- [ ] ADX: the event store only appends, so before re-running a live match, empty its rows as database admin (`.execute database script <|` followed by one `.clear table <name> data` line per table, or `.delete table <name> records <| <name> | where match_id == 'M0002'` per table to keep other matches).
-- [ ] Service Bus: 16 triggers of test match M0012 sit in the `triggers` dead-letter queue from a run before the send/receive race fix (reason `stale`); harmless (later runs ignore them), clear them in the portal (Service Bus Explorer, dead-letter, receive) if you like.
+- ADX: the event store only appends, so before re-running a live match, empty its rows as database admin (`.execute database script <|` followed by one `.clear table <name> data` line per table, or `.delete table <name> records <| <name> | where match_id == 'M0002'` per table to keep other matches).
 - [x] Live service verified on Azure (2026-10-09): M0012 streamed at 25x through Event Hubs; 56 triggers via Service Bus, 18 insights aired, momentum insight corrected, ledger in Cosmos DB (56 triggers, 18 insights, 70 audits, 270 overlays), rows in ADX; trigger to outcome p50 3.9 s, max 17 s (offline models).
 - [x] Fabric-only pieces replaced (2026-10-09): ADX free cluster (event store), ADX dashboard (control room), producer-console ops alerts. Fabric kept as a future upgrade.
